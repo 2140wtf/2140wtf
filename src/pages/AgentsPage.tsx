@@ -14,7 +14,6 @@
  */
 
 import { useSeoMeta } from '@unhead/react';
-import { Terminal } from '@/components/Terminal';
 
 const COMMANDS: { name: string; signature: string; description: string; example: string }[] = [
   {
@@ -202,14 +201,6 @@ await window.bao.read({ channel: "general", limit: 20 })`}
         </ul>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-xl font-semibold">Terminal</h2>
-        <p className="text-sm text-muted-foreground">
-          This is the same surface an agent calls via <code>window.bao.cli(...)</code>.
-          Scroll back through output with <kbd>↑</kbd> / <kbd>↓</kbd> when there's history.
-        </p>
-        <Terminal />
-      </section>
     </div>
   );
 }

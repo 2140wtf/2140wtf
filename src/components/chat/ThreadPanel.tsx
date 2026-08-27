@@ -30,7 +30,6 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useScopedDisplayName } from "@/hooks/useScopedDisplayName";
-import { isTombstoneRoot } from "@/concord-v2/hooks/useConcord2Threads";
 import { ComposerBoundsProvider, getComposerCollisionPadding, useComposerBoundsRef } from "@/contexts/ComposerBoundsContext";
 import { getAvatarShape } from "@/lib/avatarShape";
 import { shortClockTime } from "@/lib/formatTime";
@@ -440,14 +439,7 @@ export function ThreadPanel({ root, transport, relayUrl, groupId, canWrite, ment
   // tombstone), the reply-count divider, and the loading spinner.
   const listHeader = (
     <>
-      {isTombstoneRoot(root) ? (
-        <div className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground/70">
-          <MessagesSquare className="size-4 shrink-0" />
-          <span className="italic">Original message not loaded — it may be older than the channel window.</span>
-        </div>
-      ) : (
-        <ThreadMessage event={root} reactions={reactionsFor?.(root.id)} zaps={zapsFor?.(root.id)} zapEnabled={zapEnabled} onSendZap={onSendZap} canReact={canWrite} canModerate={canModerate} isRumor={isRumor} onDelete={onDelete} isEditing={editingId === root.id} onEdit={(e) => setEditingId(e.id)} onEditSubmit={handleEditSubmit} onEditCancel={() => setEditingId(undefined)} />
-      )}
+      <ThreadMessage event={root} reactions={reactionsFor?.(root.id)} zaps={zapsFor?.(root.id)} zapEnabled={zapEnabled} onSendZap={onSendZap} canReact={canWrite} canModerate={canModerate} isRumor={isRumor} onDelete={onDelete} isEditing={editingId === root.id} onEdit={(e) => setEditingId(e.id)} onEditSubmit={handleEditSubmit} onEditCancel={() => setEditingId(undefined)} />
       <div className="flex items-center gap-2 px-3 py-1 mt-1">
         <div className="h-px flex-1 bg-border/60" />
         {!isLoading && (

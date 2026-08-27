@@ -1,582 +1,753 @@
-import { Bot, Hash, Loader2, Lock, MessagesSquare, Plus, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+/**
+ * 2140 Social — the bao_chat_protocol v1 scroll client, in-app.
+ *
+ * A React port of the www.2140.social web client (demo/app.ts in
+ * baocommunity/2140.social) on the vendored @bao/community core:
+ * burner-key joins via fat invite links, hash-chained encrypted scroll,
+ * presence roster, @mentions, replies, retry-until-scrolled receipts.
+ * Identity is anonymous by default; an optional npub rides INSIDE the
+ * encrypted envelope payload, never on the wire.
+ */
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
+import { Copy, Hash, Loader2, Plus, Radio, Reply, X } from "lucide-react";
 
-import { JoinButton } from "@/components/auth/JoinButton";
-import { PageHeader } from "@/components/PageHeader";
-import { RelayIdentity } from "@/components/RelayListEditor";
+import {
+  WebRelayConn,
+  RoomSession,
+  joinRoom,
+  parseJoinLink,
+  serializeJoinedRoom,
+  restoreJoinedRoom,
+  dedupKey,
+  getPublicKey,
+  buildPresence,
+  foldRoster,
+  resolveMentions,
+  segmentMentions,
+} from "@/lib/baosocial/browser.js";
+import { npubEncode, nsecEncode } from "nostr-tools/nip19";
+import type { Envelope, JoinedRoom, RosterEntry } from "@/lib/baosocial/browser.js";
+import { BAO_SOCIAL_DIRECTORY, type BaoSocialRoomInfo } from "@/lib/baosocial/rooms";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ChromeDialogContent, Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useCommunityActions2, useCreateRelayCandidates2 } from "@/concord-v2/hooks/useCommunityActions2";
-import { useCommunity2, useLiveCommunities2, useIsExcluded2 } from "@/concord-v2/hooks/useCommunityList2";
-import { useChannels2, useControlFold2 } from "@/concord-v2/hooks/useControlPlane2";
-import { useConcord2Unread } from "@/concord-v2/hooks/useConcord2Unread";
-import { useDecryptedImage2 } from "@/concord-v2/hooks/useDecryptedImage2";
-import type { CommunityListEntry } from "@/concord-v2/lib/communityList";
-import type { RelayDeletionCapability } from "@/concord-v2/lib/relayDeletion";
-import { MAX_COMMUNITY_RELAYS } from "@/concord-v2/lib/types";
-import { useCurrentUser } from "@/hooks/useCurrentUser";
-import { useMutes } from "@/hooks/useMutes";
-import { toast } from "@/hooks/useToast";
-import { normalizeRelayUrl } from "@/lib/platform";
-import { APP_RELAYS as APP_RELAY_METADATA } from "@/lib/appRelays";
-import { STOCK_RELAYS } from "@/concord-v2/lib/invite";
 import { cn } from "@/lib/utils";
 
-/**
- * Interop discovery relays offered in the create dialog. Curated by probing
- * each relay with a Concord-style kind-1059 wrap from a fresh key (what a
- * community genesis actually publishes): PAID relays (nostr.land family,
- * nostr.wine) and relays that categorically reject kind 1059 or unregistered
- * pubkeys (purplepag.es, relay.nostr.info, nostr21.com, relay.nostr.nu,
- * relay.nostrview.com, relay.nostrplebs.com) are excluded — suggesting them
- * strands the create with "No relay accepted the change."
- */
-const DISCOVERY_RELAY_URLS = [
-  "wss://relay.dreamith.to", "wss://relay.primal.net", "wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band",
-  "wss://offchain.pub", "wss://relay.snort.social", "wss://bitcoiner.social", "wss://nostr.bitcoiner.social", "wss://nostr.jcloud.es",
-  "wss://relay.mostr.pub", "wss://relay.nsecbunker.com", "wss://nostr-relay.psfoundation.info", "wss://nostr.swiss-enigma.ch", "wss://jskitty.com/nostr",
-  "wss://asia.vectorapp.io/nostr", "wss://relay.notoshi.io", "wss://nostr.slothy.win", "wss://relay.nostr.ro",
-  "wss://relay.nostr.bg", "wss://relay.nostrati.com",
-  "wss://relay.nostr.net", "wss://nostr.mom", "wss://nostr.oxtr.dev", "wss://relay.orangepill.dev", "wss://relay.f7z.io",
-  "wss://relay.nostrified.org", "wss://nostr-relay.app",
-  "wss://nostr-relay.wlvs.dev", "wss://nostr.mutinywallet.com", "wss://relay.nostrverse.com",
-  "wss://nostr-relay.dtonon.com", "wss://nostr.azzamo.net", "wss://nostr.privex.io",
-  "wss://nostr-relay.schnitzel.world", "wss://relay.nostr.express", "wss://relay.nostr.au", "wss://nostr-relay.online", "wss://nostr.21.co",
-  "wss://relay.nostr.place", "wss://nostr-relay.einundzwanzig.space", "wss://relay.nostr.guru", "wss://nostr-relay.damus.io",
-];
+// ── Persistence (demo parity: the app decides its own custody policy) ───────
 
-/**
- * One community row: decrypted icon + name (the fold's metadata wins over the
- * join-material name), per-channel unread rollup, and an excluded marker when
- * a moderator rotated the keys without us.
- */
-function CommunityRow({ entry }: { entry: CommunityListEntry }) {
-  const community = useCommunity2(entry.community_id);
-  const { data: folded } = useControlFold2(community, false);
-  const iconUrl = useDecryptedImage2(folded?.metadata?.icon);
-  const channels = useChannels2(community, false);
-  const { byChannel } = useConcord2Unread(channels);
-  const { isConcordChannelMuted } = useMutes();
-  const excluded = useIsExcluded2(entry.community_id);
+const SESSIONS_KEY = "2140:bao-social-sessions-v1";
+const NAME_KEY = "2140:bao-social-name-v1";
+const NPUB_KEY = "2140:bao-social-npub-v1";
+const ADDED_KEY = "2140:bao-social-rooms-v1";
 
-  const name = folded?.metadata?.name || entry.current.name || "Encrypted community";
-  const initial = name.trim().charAt(0).toUpperCase() || "#";
+type SerializedSession = ReturnType<typeof serializeJoinedRoom>;
 
-  const unreadCount = useMemo(
-    () =>
-      Object.entries(byChannel).filter(
-        ([channelId, u]) => !u.mention && !isConcordChannelMuted("c2", entry.community_id, channelId),
-      ).length,
-    [byChannel, entry.community_id, isConcordChannelMuted],
-  );
-  const mentionCount = useMemo(
-    () =>
-      Object.entries(byChannel).filter(
-        ([channelId, u]) => u.mention && !isConcordChannelMuted("c2", entry.community_id, channelId),
-      ).length,
-    [byChannel, entry.community_id, isConcordChannelMuted],
-  );
-
-  return (
-    <Link
-      to={`/bao/c/${encodeURIComponent(entry.community_id)}`}
-      className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/60 transition-colors"
-    >
-      <span className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-muted text-muted-foreground">
-        {iconUrl ? (
-          <img src={iconUrl} alt="" className="size-full object-cover" />
-        ) : (
-          <span className="text-base font-semibold">{initial}</span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{name}</span>
-        <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="size-3 shrink-0 text-success" />
-          {excluded ? (
-            <span>Removed — read-only</span>
-          ) : (
-            <span>
-              {channels.length} {channels.length === 1 ? "channel" : "channels"}
-            </span>
-          )}
-        </span>
-      </span>
-      {mentionCount > 0 ? (
-        <span
-          className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground"
-          aria-label="You were mentioned"
-        >
-          @
-        </span>
-      ) : unreadCount > 0 ? (
-        <span className="size-2.5 shrink-0 rounded-full bg-primary" aria-label="Unread messages" />
-      ) : null}
-    </Link>
-  );
+function loadStored(): Record<string, SerializedSession> {
+  try {
+    return JSON.parse(localStorage.getItem(SESSIONS_KEY) ?? "{}") as Record<string, SerializedSession>;
+  } catch {
+    return {};
+  }
 }
 
-/**
- * Word the create-time relay exclusions by their actual reason: only a relay
- * whose NIP-11 document was READABLE and lacked NIP-09 is "without verified
- * NIP-09 deletion support"; a relay whose document could not be fetched at
- * all (offline, CORS-blocked) merely could not be verified.
- */
-function describeExcludedRelays(excluded: RelayDeletionCapability[]): string {
-  const unadvertised = excluded.filter((relay) => relay.reason === "nip-09-not-advertised").map((relay) => relay.url);
-  const unverifiable = excluded.filter((relay) => relay.reason !== "nip-09-not-advertised").map((relay) => relay.url);
-  const parts: string[] = [];
-  if (unadvertised.length > 0) {
-    parts.push(`Removed relays without verified NIP-09 deletion support: ${unadvertised.join(", ")}`);
-  }
-  if (unverifiable.length > 0) {
-    parts.push(`Removed relays whose NIP-09 deletion support could not be verified: ${unverifiable.join(", ")}`);
-  }
-  return parts.join(". ");
+interface AddedRoom {
+  roomId: string;
+  joinLink: string;
+  name?: string;
 }
 
-/** Minimal create-community dialog: a name, then straight into the community. */
-function CreateCommunityDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const [name, setName] = useState("");
-  const [agentOnly, setAgentOnly] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const { create } = useCommunityActions2();
-  const navigate = useNavigate();
+function loadAddedRooms(): AddedRoom[] {
+  try {
+    return JSON.parse(localStorage.getItem(ADDED_KEY) ?? "[]") as AddedRoom[];
+  } catch {
+    return [];
+  }
+}
 
-  // Relay picks are EXPLICIT and start EMPTY: nothing is pre-ticked, and the
-  // Create button stays disabled until at least one relay is chosen. Choosing
-  // is the user's confirmation that they've seen the reach-vs-privacy
-  // tradeoff explained above the list — a pre-selected "everything" default
-  // let a privacy-sensitive creator mint a community onto the full feed relay
-  // set without ever looking at this section.
-  const [picked, setPicked] = useState<string[]>([]);
-  const [showMoreRelays, setShowMoreRelays] = useState(false);
-  const [relaySearch, setRelaySearch] = useState("");
-  const { data: candidates } = useCreateRelayCandidates2(open);
-  // Rows = candidates ∪ picked — a custom-added relay is simply a picked
-  // relay the candidates don't know about, so unticking it drops it from the
-  // list again.
-  const starterCandidates = useMemo(() => {
-    const neutral = (candidates ?? []).filter((candidate) => !candidate.url.includes("relay.ditto.pub"));
-    const preferred = DISCOVERY_RELAY_URLS
-      .map(normalizeRelayUrl)
-      .filter((url): url is string => Boolean(url))
-      .filter((url) => !neutral.some((candidate) => candidate.url === url))
-      .slice(0, 5 - neutral.length)
-      .map((url) => ({ url, source: "fallback" as const }));
-    return [...neutral, ...preferred].slice(0, 5);
-  }, [candidates]);
-  const relayRows = useMemo(() => {
-    const rows = new Map<string, "dm" | "app" | "fallback" | "custom">();
-    for (const candidate of starterCandidates) rows.set(candidate.url, candidate.source);
-    for (const url of picked) {
-      if (!rows.has(url)) rows.set(url, "custom");
-    }
-    return [...rows].map(([url, source]) => ({ url, source }));
-  }, [starterCandidates, picked]);
-  const allSuggestedRelaysPicked = Boolean(
-    starterCandidates.length > 0 && starterCandidates.every((candidate) => picked.includes(candidate.url)),
-  );
-  const discoveryRelays = useMemo(() => {
-    const known = new Set(relayRows.map((row) => row.url));
-    const urls = [
-      ...DISCOVERY_RELAY_URLS,
-      ...APP_RELAY_METADATA.relays.map((relay) => relay.url),
-      ...STOCK_RELAYS,
-    ];
-    return [...new Set(urls.map(normalizeRelayUrl).filter((url): url is string => Boolean(url)))]
-      .filter((url) => !known.has(url) && !url.includes("relay.ditto.pub"));
-  }, [relayRows]);
-  const filteredDiscoveryRelays = useMemo(() => {
-    const query = relaySearch.trim().toLowerCase();
-    return query ? discoveryRelays.filter((url) => url.toLowerCase().includes(query)) : discoveryRelays;
-  }, [discoveryRelays, relaySearch]);
-
-  const toggleRelay = (url: string, on: boolean) =>
-    setPicked((cur) => (on ? (cur.includes(url) ? cur : [...cur, url]) : cur.filter((u) => u !== url)));
-
-  const [newRelayUrl, setNewRelayUrl] = useState("");
-  const addCustomRelay = () => {
-    const normalized = normalizeRelayUrl(newRelayUrl);
-    if (!normalized) {
-      toast({ title: "Invalid relay URL", description: "Enter a ws:// or wss:// URL.", variant: "destructive" });
-      return;
-    }
-    if (picked.includes(normalized)) {
-      toast({ title: "Already picked", description: normalized });
-      return;
-    }
-    setPicked([...picked, normalized]);
-    setNewRelayUrl("");
-  };
-
-  const handleCreate = async () => {
-    const trimmed = name.trim();
-    if (!trimmed || picked.length === 0) return;
-    setBusy(true);
+/** Validate npub1… or 64-hex → npub. null when empty/invalid. */
+function validateNpub(raw: string): string | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  if (/^npub1[0-9a-z]{58,62}$/.test(v)) return v;
+  if (/^[0-9a-f]{64}$/.test(v)) {
     try {
-      const { communityId, name: createdName, excludedRelays } = await create({ name: trimmed, relays: picked, agentOnly });
-      toast({
-        title: "Community created",
-        description: excludedRelays.length > 0
-          ? `${createdName}. ${describeExcludedRelays(excludedRelays)}`
-          : createdName,
-      });
-      onOpenChange(false);
-      setName("");
-      setAgentOnly(false);
-      setPicked([]);
-      navigate(`/bao/c/${encodeURIComponent(communityId)}`);
-    } catch (e) {
-      toast({
-        title: "Couldn't create the community",
-        description: e instanceof Error ? e.message : "Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setBusy(false);
+      return npubEncode(v);
+    } catch {
+      return null;
     }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* The whole dialog scrolls (max height + overflow) with generous bottom
-          padding: the candidate relay list can be long, and without this the
-          tail of the module was unreachable unless the browser went
-          fullscreen. */}
-      <ChromeDialogContent
-        title="New encrypted community"
-        contentClassName="max-h-[85dvh] overflow-y-auto overscroll-contain pb-24"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Lock className="size-5 text-primary" />
-            <h2 className="chrome-dialog-title font-bold tracking-tight">New encrypted community</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            End-to-end encrypted. Only members can read it — not even the relays.
-          </p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void handleCreate();
-            }}
-            className="space-y-4"
-          >
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Community name"
-              maxLength={80}
-              autoFocus
-            />
-            <div className="rounded-lg border p-3">
-              <label className="flex cursor-pointer items-start gap-3">
-                <Checkbox
-                  checked={agentOnly}
-                  onCheckedChange={(v) => setAgentOnly(v === true)}
-                  disabled={busy}
-                  className="mt-0.5"
-                />
-                <span className="flex items-center gap-1.5 text-sm font-medium">
-                  <Bot className="size-4 text-primary" />
-                  Block humans from entering this ₿AO
-                </span>
-              </label>
-              <details className="ml-7 mt-2 text-xs text-muted-foreground">
-                <summary className="cursor-pointer select-none text-foreground/80 hover:text-foreground">
-                  How agent-only access works
-                </summary>
-                <p className="mt-2 leading-relaxed">
-                  Joining requires a small proof-of-work that agent tooling can clear automatically.
-                  Agents discover the gate from the community metadata (<code>agent_gate</code>).
-                  This is not identity proof — a determined human with scripts could still compute it.
-                </p>
-              </details>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Where this community lives. Members read and write here, so pick
-                relays that accept your writes and advertise NIP-09 deletion support.
-                Relays without verifiable deletion support are removed before creation.
-                An auth-only or DM-only relay can reject the genesis and strand the create. A community lives on up
-                to {MAX_COMMUNITY_RELAYS} relays — only the first {MAX_COMMUNITY_RELAYS} picks are used.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Privacy tip:</span>{" "}
-                Messages, members, and community details are encrypted — relays only
-                store ciphertext. What a relay can still see is how active your
-                community is and the public event metadata needed to route it. The
-                default relays are fine for most groups. Want maximum privacy? Pick a
-                single relay you control and share invitation links. Nothing is
-                pre-selected — your choice is yours.
-              </p>
-
-              <div className="max-h-64 space-y-1.5 overflow-y-auto overscroll-contain pr-1 pt-1">
-                {relayRows.map(({ url, source }, index) => {
-                  const checkboxId = `community-relay-${index}`;
-                  return (
-                  <div
-                    key={url}
-                    className="flex cursor-pointer items-center gap-3 rounded-md bg-background/40 px-3 py-2.5"
-                  >
-                    <Checkbox
-                      id={checkboxId}
-                      checked={picked.includes(url)}
-                      onCheckedChange={(v) => toggleRelay(url, v === true)}
-                      disabled={busy}
-                      aria-label={`Use relay ${url}`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor={checkboxId} className="block cursor-pointer">
-                        <RelayIdentity url={url} />
-                      </label>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {source === "dm" ? "Your DM relay · not yet tested for community writes" : source === "app" ? "App relay" : source === "fallback" ? "Interop fallback" : "Custom relay"}
-                      </span>
-                    </div>
-                  </div>
-                  );
-                })}
-                {relayRows.length === 0 && (
-                  <p className="text-sm text-muted-foreground py-1">Loading relay suggestions…</p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={busy || !name.trim() || picked.length === 0}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-                </Button>
-              </div>
-
-              {discoveryRelays.length > 0 && (
-                <div className="pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full justify-between border-primary/40 bg-background/40 text-xs text-foreground hover:bg-primary/10"
-                    onClick={() => setShowMoreRelays((open) => !open)}
-                    aria-expanded={showMoreRelays}
-                  >
-                    {showMoreRelays ? "Hide additional relays" : "Discover more relays"}
-                  </Button>
-                  {showMoreRelays && (
-                    <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-border/60 bg-background/30 p-1.5">
-                      <Input
-                        value={relaySearch}
-                        onChange={(event) => setRelaySearch(event.target.value)}
-                        placeholder="Search relays…"
-                        aria-label="Search additional relays"
-                        className="h-8 bg-background/60 text-xs"
-                      />
-                      {filteredDiscoveryRelays.map((url, index) => {
-                        const checkboxId = `community-discovery-relay-${index}`;
-                        return (
-                          <div key={url} className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-background/60">
-                            <Checkbox
-                              id={checkboxId}
-                              checked={picked.includes(url)}
-                              onCheckedChange={(checked) => toggleRelay(url, checked === true)}
-                              disabled={busy || (!picked.includes(url) && picked.length >= MAX_COMMUNITY_RELAYS)}
-                              aria-label={`Use relay ${url}`}
-                            />
-                            <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer text-xs">
-                              <span className="block truncate">{url}</span>
-                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Discovery relay</span>
-                            </label>
-                          </div>
-                        );
-                      })}
-                      {filteredDiscoveryRelays.length === 0 && (
-                        <p className="px-2 py-3 text-xs text-muted-foreground">No relays match that search.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Not a <form>: nested forms are invalid HTML — the browser drops
-                  the inner one and "Add" would submit the parent. */}
-              <div className="flex gap-2 pt-1">
-                <Input
-                  value={newRelayUrl}
-                  onChange={(e) => setNewRelayUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addCustomRelay();
-                    }
-                  }}
-                  placeholder="wss://relay.example.com"
-                  aria-label="Add relay"
-                  autoComplete="off"
-                  className="text-base md:text-sm bg-background/40 border-transparent"
-                />
-                <Button type="button" disabled={!newRelayUrl.trim()} className="clip-corner-lg shrink-0" onClick={addCustomRelay}>
-                  <Plus className="size-4 mr-1.5" /> Add
-                </Button>
-              </div>
-
-              <div className="flex min-w-0 flex-nowrap items-center justify-between gap-2 pt-1">
-                <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                  {picked.length === 0
-                    ? "Pick a relay"
-                    : `${picked.length} relay${picked.length === 1 ? "" : "s"} picked`}
-                </p>
-                <div className="flex shrink-0 flex-nowrap items-center gap-1">
-                  {starterCandidates.length > 0 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="px-2 text-xs text-muted-foreground"
-                      disabled={busy}
-                      onClick={() => {
-                        if (allSuggestedRelaysPicked) {
-                          setPicked([]);
-                        } else {
-                          setPicked((cur) => [...new Set([...cur, ...starterCandidates.map((candidate) => candidate.url)])]);
-                        }
-                      }}
-                    >
-                      {allSuggestedRelaysPicked ? "Deselect all" : "Select all"}
-                    </Button>
-                  )}
-                  <Button type="button" variant="ghost" size="sm" className="px-2 text-xs" onClick={() => onOpenChange(false)} disabled={busy}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" size="sm" className="px-3" disabled={busy || !name.trim() || picked.length === 0}>
-                    {busy ? <Loader2 className="size-4 animate-spin" /> : "Create"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </form>
-        </div>
-      </ChromeDialogContent>
-    </Dialog>
-  );
+  }
+  return null;
 }
 
-/**
- * `/bao/community` — the ₿AO communities list: every Concord V2 community the user
- * holds keys for, with unread/mention rollups. This replaces Armada's
- * ServerRail: cross-community navigation starts here, and each community's
- * channel sidebar lives inside the community page.
- */
+// ── Payload conventions (application-level, inside the encrypted envelope) ──
+
+interface ReplyRef {
+  author: string;
+  msg_id: string;
+}
+
+interface ChatPayload {
+  text?: string;
+  reply?: ReplyRef;
+  identity?: { npub: string };
+  to?: string[];
+  presence?: { name?: string };
+  epochAdvance?: { epoch?: number };
+}
+
+function replyOf(env: Envelope): ReplyRef | null {
+  const p = env.payload as ChatPayload | null;
+  if (!p || typeof p.reply !== "object" || p.reply === null) return null;
+  const r = p.reply as unknown as Record<string, unknown>;
+  if (typeof r.author !== "string" || !/^[0-9a-f]{64}$/.test(r.author)) return null;
+  if (typeof r.msg_id !== "string" || !/^[0-9a-f]{32}$/.test(r.msg_id)) return null;
+  return { author: r.author, msg_id: r.msg_id };
+}
+
+function isPresenceFrame(env: Envelope): boolean {
+  const p = env.payload as ChatPayload | null;
+  return !!p?.presence?.name && typeof p.text !== "string";
+}
+
+function isEpochFrame(env: Envelope): boolean {
+  const p = env.payload as ChatPayload | null;
+  return !!p?.epochAdvance && typeof p.text !== "string";
+}
+
+function previewText(env: Envelope): string {
+  const p = env.payload as ChatPayload | null;
+  const s = p && typeof p.text === "string" ? p.text : "";
+  return s.length > 200 ? `${s.slice(0, 200)}…` : s;
+}
+
+// ── Imperative per-room session state (mirrors the demo's RoomState) ───────
+
+type Receipt = "pending" | "scrolled" | "dropped";
+
+interface RoomRow {
+  key: string;
+  env: Envelope;
+  mine: boolean;
+  receipt: Receipt;
+}
+
+interface RoomRuntime {
+  info: BaoSocialRoomInfo;
+  conn: WebRelayConn | null;
+  session: RoomSession | null;
+  myAuthor: string;
+  joinPhase: "idle" | "joining" | "ready" | "error";
+  joinError?: string;
+  rows: RoomRow[];
+  known: Map<string, Envelope>;
+  outbox: Map<string, { env: Envelope; lastSentMs: number; attempts: number }>;
+  roster: Map<string, RosterEntry>;
+  presencePosted: boolean;
+  unsubscribe: (() => void) | null;
+  refreshTimer: ReturnType<typeof setInterval> | null;
+  relayUrl: string;
+}
+
+function newRuntime(info: BaoSocialRoomInfo, relayUrl: string): RoomRuntime {
+  return {
+    info,
+    conn: null,
+    session: null,
+    myAuthor: "",
+    joinPhase: "idle",
+    rows: [],
+    known: new Map(),
+    outbox: new Map(),
+    roster: new Map(),
+    presencePosted: false,
+    unsubscribe: null,
+    refreshTimer: null,
+    relayUrl,
+  };
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export function BaoCommunitiesPage() {
-  useSeoMeta({ title: "₿AO Community — 2140.wtf" });
-  const { user } = useCurrentUser();
-  const entries = useLiveCommunities2();
-  const [createOpen, setCreateOpen] = useState(false);
+  useSeoMeta({
+    title: "2140 Social",
+    description: "2140 Social — encrypted community scroll on Nostr, inside 2140.",
+  });
+
+  const [, rerender] = useReducer((x: number) => x + 1, 0);
+  const runtimes = useRef(new Map<string, RoomRuntime>());
+  const stored = useRef<Record<string, SerializedSession>>(loadStored());
+  const currentId = useRef<string | null>(null);
+
+  const [roomInfos, setRoomInfos] = useState<BaoSocialRoomInfo[]>(() => {
+    const added = loadAddedRooms()
+      .map((added) => {
+        try {
+          const parts = parseJoinLink(added.joinLink);
+          return {
+            roomId: parts.roomId,
+            name: added.name ?? `room-${parts.roomId.slice(0, 6)}`,
+            topic: "joined via invite link",
+            joinLink: added.joinLink,
+            agentLink: "",
+            welcomerPub: parts.welcomerPub ?? "",
+            routingId: parts.routingId ?? "",
+            flushDeadlineMs: 4000,
+          } satisfies BaoSocialRoomInfo;
+        } catch {
+          return null;
+        }
+      })
+      .filter((info): info is BaoSocialRoomInfo => info !== null);
+    return [...BAO_SOCIAL_DIRECTORY.rooms, ...added];
+  });
+
+  const [logLines, setLogLines] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [replyDraft, setReplyDraft] = useState<{ author: string; msgId: string; preview: string } | null>(null);
+  const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
+  const [npubInput, setNpubInput] = useState(() => localStorage.getItem(NPUB_KEY) ?? "");
+  const [joinLinkInput, setJoinLinkInput] = useState("");
+  const [showIdentity, setShowIdentity] = useState(false);
+
+  const log = useCallback((msg: string) => {
+    setLogLines((lines) => [...lines.slice(-80), `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  }, []);
+
+  // ── Scroll read: backfill, receipts, retries, roster fold ────────────────
+
+  const refreshScroll = useCallback(async (roomId: string) => {
+    const r = runtimes.current.get(roomId);
+    if (!r?.session) return;
+    try {
+      const result = await r.session.read();
+      // Re-serialize after possible epoch ratchet so reloads stay members.
+      const serialized = serializeJoinedRoom(r.session.joined);
+      if (JSON.stringify(serialized) !== JSON.stringify(stored.current[roomId])) {
+        stored.current[roomId] = serialized;
+        try {
+          localStorage.setItem(SESSIONS_KEY, JSON.stringify(stored.current));
+        } catch {
+          /* best-effort */
+        }
+      }
+      const scrolled = new Set(result.messages.map((m) => dedupKey(m.envelope)));
+      for (const m of result.messages) {
+        const key = dedupKey(m.envelope);
+        if (isPresenceFrame(m.envelope) || isEpochFrame(m.envelope)) continue;
+        const existing = r.rows.find((row) => row.key === key);
+        if (existing) {
+          if (existing.receipt !== "scrolled") existing.receipt = "scrolled";
+        } else {
+          r.rows.push({ key, env: m.envelope, mine: m.envelope.author === r.myAuthor, receipt: "scrolled" });
+        }
+        r.known.set(key, m.envelope);
+        r.outbox.delete(key);
+      }
+      // Retry-until-scrolled (§3): republish unconfirmed sends, cap 8.
+      const timeoutMs = 3 * r.info.flushDeadlineMs;
+      for (const [key, item] of r.outbox) {
+        if (scrolled.has(key)) continue;
+        const age = Date.now() - item.lastSentMs;
+        const row = r.rows.find((entry) => entry.key === key);
+        if (item.attempts >= 8) {
+          if (row) row.receipt = "dropped";
+          r.outbox.delete(key);
+          continue;
+        }
+        if (age >= timeoutMs) {
+          item.attempts++;
+          item.lastSentMs = Date.now();
+          await r.session.republish(item.env);
+          log(`#${r.info.name}: republishing unconfirmed message (attempt ${item.attempts})`);
+        }
+      }
+      // Fold roster + repaint bylines.
+      r.roster = foldRoster(result.messages);
+      if (result.chainWarnings.length) log(`⚠ chain: ${result.chainWarnings.join("; ")}`);
+      rerender();
+    } catch (err) {
+      log(`scroll read error: ${(err as Error).message}`);
+    }
+  }, [log]);
+
+  // ── Presence: claim the in-room @handle (encrypted, never the wire) ──────
+
+  const postPresence = useCallback(async (roomId: string) => {
+    const r = runtimes.current.get(roomId);
+    const trimmed = name.trim();
+    if (!r?.session || !trimmed || r.presencePosted) return;
+    r.presencePosted = true;
+    try {
+      await r.session.post(buildPresence(trimmed));
+      void refreshScroll(roomId);
+    } catch {
+      r.presencePosted = false;
+    }
+  }, [name, refreshScroll]);
+
+  // ── Join (restore-first, then burner dance) ──────────────────────────────
+
+  const ensureJoined = useCallback(async (roomId: string) => {
+    const r = runtimes.current.get(roomId);
+    if (!r || r.session || r.joinPhase === "joining") return;
+    r.joinPhase = "joining";
+    rerender();
+    try {
+      if (stored.current[roomId]) {
+        r.conn = r.conn ?? new WebRelayConn(r.relayUrl);
+        r.session = new RoomSession(r.conn, restoreJoinedRoom(stored.current[roomId]));
+        log(`#${r.info.name}: rejoined from local membership`);
+      } else {
+        const t0 = Date.now();
+        log(`#${r.info.name}: burner join…`);
+        // Join runs on a throwaway connection, closed immediately after —
+        // the session gets a fresh one (spec §6, unlinkability).
+        const joinConn = new WebRelayConn(r.relayUrl);
+        const joined: JoinedRoom = await joinRoom(
+          joinConn,
+          r.info.joinLink,
+          { welcomerPub: r.info.welcomerPub, routingId: r.info.routingId },
+          { joinTimeoutMs: 25_000 },
+        );
+        joinConn.close();
+        r.conn = r.conn ?? new WebRelayConn(r.relayUrl);
+        r.session = new RoomSession(r.conn, joined);
+        stored.current[roomId] = serializeJoinedRoom(joined);
+        try {
+          localStorage.setItem(SESSIONS_KEY, JSON.stringify(stored.current));
+        } catch {
+          /* best-effort */
+        }
+        log(`#${r.info.name}: wrap received, burner discarded — joined in ${Date.now() - t0}ms`);
+      }
+      r.myAuthor = getPublicKey(r.session.joined.authorSecretKey);
+      r.unsubscribe = r.session.subscribeLive((env: Envelope) => {
+        if (!isPresenceFrame(env) && !isEpochFrame(env)) {
+          const key = dedupKey(env);
+          if (!r.rows.some((row) => row.key === key)) {
+            r.rows.push({ key, env, mine: env.author === r.myAuthor, receipt: "pending" });
+            r.known.set(key, env);
+          }
+        }
+        void refreshScroll(roomId);
+      });
+      r.refreshTimer = setInterval(() => void refreshScroll(roomId), Math.max(1500, r.info.flushDeadlineMs / 2));
+      r.joinPhase = "ready";
+    } catch (err) {
+      r.joinPhase = "error";
+      r.joinError = (err as Error).message;
+      log(`#${r.info.name}: join failed: ${(err as Error).message}`);
+    }
+    rerender();
+  }, [log, refreshScroll]);
+
+  // ── Room selection ───────────────────────────────────────────────────────
+
+  const selectRoom = useCallback(async (roomId: string) => {
+    const r = runtimes.current.get(roomId);
+    if (!r) return;
+    currentId.current = roomId;
+    setReplyDraft(null);
+    setDraft("");
+    rerender();
+    await ensureJoined(roomId);
+    if (r.joinPhase === "ready") {
+      void postPresence(roomId);
+      await refreshScroll(roomId);
+    }
+  }, [ensureJoined, postPresence, refreshScroll]);
+
+  // Boot: create runtimes, open the default room (#general or first).
+  useEffect(() => {
+    let cancelled = false;
+    for (const info of roomInfos) {
+      if (!runtimes.current.has(info.roomId)) {
+        // The production site connects to its attached relay endpoint
+        // (wss://<host>/ws); the fragment's direct-relay hint is the fallback.
+        let relayUrl = BAO_SOCIAL_DIRECTORY.relayUrl;
+        if (!relayUrl) {
+          try {
+            const parts = parseJoinLink(info.joinLink);
+            relayUrl = parts.relay ?? "";
+          } catch {
+            relayUrl = "";
+          }
+        }
+        runtimes.current.set(info.roomId, newRuntime(info, relayUrl));
+      }
+    }
+    const first =
+      roomInfos.find((info) => info.name.toLowerCase() === "general") ?? roomInfos[0];
+    if (first && !currentId.current && !cancelled) {
+      void selectRoom(first.roomId);
+    }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Unmount cleanup: stop timers/subscriptions, close sockets.
+  useEffect(() => {
+    const runtimesMap = runtimes.current;
+    return () => {
+      for (const r of runtimesMap.values()) {
+        if (r.refreshTimer) clearInterval(r.refreshTimer);
+        r.unsubscribe?.();
+        r.conn?.close();
+      }
+    };
+  }, []);
+
+  // ── Send ─────────────────────────────────────────────────────────────────
+
+  const send = useCallback(async () => {
+    const roomId = currentId.current;
+    const r = roomId ? runtimes.current.get(roomId) : undefined;
+    if (!roomId || !r?.session) return;
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    setReplyDraft(null);
+    const payload: ChatPayload = { text };
+    if (replyDraft) {
+      payload.reply = { author: replyDraft.author, msg_id: replyDraft.msgId };
+    }
+    const exposed = validateNpub(npubInput);
+    if (exposed) payload.identity = { npub: exposed };
+    const to = resolveMentions(text, r.roster);
+    if (to.length > 0) payload.to = to;
+    try {
+      const env = await r.session.post(payload);
+      const key = dedupKey(env);
+      // Register BEFORE the live echo can arrive — no duplicates, ever.
+      r.rows.push({ key, env, mine: true, receipt: "pending" });
+      r.known.set(key, env);
+      r.outbox.set(key, { env, lastSentMs: Date.now(), attempts: 0 });
+      rerender();
+      void refreshScroll(roomId);
+    } catch (err) {
+      // Publish failed (relay unreachable / OK timeout / rejection): the outbox
+      // was never armed, so without this the message is silently lost. Give
+      // the text (and reply target) back so the member can simply retry.
+      setDraft(text);
+      if (replyDraft) setReplyDraft(replyDraft);
+      log(`#${r.info.name}: post failed — draft restored: ${(err as Error).message}`);
+    }
+  }, [draft, replyDraft, npubInput, refreshScroll, log]);
+
+  // ── Join by invite link ──────────────────────────────────────────────────
+
+  const addRoomFromLink = useCallback(() => {
+    const link = joinLinkInput.trim();
+    if (!link) return;
+    try {
+      const parts = parseJoinLink(link);
+      if (runtimes.current.has(parts.roomId)) {
+        log("already in the directory — selecting it");
+        setJoinLinkInput("");
+        void selectRoom(parts.roomId);
+        return;
+      }
+      const info: BaoSocialRoomInfo = {
+        roomId: parts.roomId,
+        name: `room-${parts.roomId.slice(0, 6)}`,
+        topic: "joined via invite link",
+        joinLink: link,
+        agentLink: "",
+        welcomerPub: parts.welcomerPub ?? "",
+        routingId: parts.routingId ?? "",
+        flushDeadlineMs: 4000,
+      };
+      const relayUrl = parts.relay ?? BAO_SOCIAL_DIRECTORY.relayUrl;
+      runtimes.current.set(parts.roomId, newRuntime(info, relayUrl));
+      setRoomInfos((infos) => [...infos, info]);
+      const added = [...loadAddedRooms(), { roomId: parts.roomId, joinLink: link } satisfies AddedRoom];
+      try {
+        localStorage.setItem(ADDED_KEY, JSON.stringify(added));
+      } catch {
+        /* best-effort */
+      }
+      setJoinLinkInput("");
+      log(`#${info.name} added from invite link`);
+      void selectRoom(parts.roomId);
+    } catch {
+      log("invite link not recognized");
+    }
+  }, [joinLinkInput, log, selectRoom]);
+
+  const copy = useCallback((text: string, what: string) => {
+    void navigator.clipboard.writeText(text);
+    log(`${what} copied`);
+  }, [log]);
+
+  // ── Derived render data ──────────────────────────────────────────────────
+
+  const current = currentId.current ? runtimes.current.get(currentId.current) : undefined;
+  const npubValid = validateNpub(npubInput);
+
+  const handleFor = useCallback(
+    (r: RoomRuntime, author: string) => r.roster.get(author)?.handle ?? `${author.slice(0, 8)}…`,
+    [],
+  );
+
+  const roomKey = useMemo(() => current?.info.roomId ?? "none", [current]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHeader
-        title="₿AO Community"
-        icon={<MessagesSquare className="size-6 text-primary" />}
-      >
-        {user && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto"
-            aria-label="New encrypted community"
-            onClick={() => setCreateOpen(true)}
-          >
-            <Plus className="size-5" />
-          </Button>
-        )}
-      </PageHeader>
-
-      <div className="flex-1 overflow-y-auto pb-overscroll">
-        {!user ? (
-          <div className="px-4 pb-16 pt-16 sm:px-6">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <Lock className="size-10 text-muted-foreground" />
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold">End-to-end encrypted communities</h2>
-                <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-                  ₿AO communities are sealed for their members — not even the relays can read them.
-                  Sign in to see yours.
-                </p>
-              </div>
-              <JoinButton className="clip-corner-lg font-medium" />
-            </div>
-
-            <figure className="mx-auto mt-20 grid max-w-6xl overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm sm:mt-24 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-              <div className="aspect-[3/2] overflow-hidden bg-muted lg:aspect-auto lg:min-h-72">
-                <img
-                  src="/david-chaum.webp"
-                  alt="David Chaum speaking on stage"
-                  className="size-full object-cover grayscale"
-                />
-              </div>
-              <figcaption className="flex flex-col justify-center px-6 py-8 sm:px-8 sm:py-10 lg:px-12">
-                <blockquote className="font-serif text-xl italic leading-relaxed text-foreground sm:text-2xl lg:text-3xl">
-                  “In one direction lies unprecedented scrutiny and control of people&apos;s lives; in
-                  the other, secure parity between individuals and organizations. The shape of
-                  society in the next century may depend on which approach predominates.”
-                </blockquote>
-                <cite className="mt-6 text-base not-italic text-muted-foreground sm:text-lg">
-                  — David Chaum <time dateTime="1992">1992</time>
-                </cite>
-              </figcaption>
-            </figure>
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-            <Hash className="size-10 text-muted-foreground" />
-            <div className="space-y-1">
-              <h2 className="text-lg font-semibold">No communities yet</h2>
-              <p className="mx-auto max-w-sm text-sm text-muted-foreground">
-                Create one, or open an invite link (<code>/invite/…</code>) someone shared with you.
-              </p>
-            </div>
-            <Button onClick={() => setCreateOpen(true)} className={cn("clip-corner-lg")}>
-              <Plus className="size-4" />
-              New encrypted community
+    <div className="flex h-full min-h-0 overflow-hidden" data-room={roomKey}>
+      {/* Rooms sidebar */}
+      <aside className="flex w-52 shrink-0 flex-col border-r bg-muted/30 max-sm:w-40">
+        <div className="flex items-center justify-between px-3 py-2.5">
+          <span className="text-[11px] font-semibold tracking-widest text-muted-foreground">ROOMS</span>
+        </div>
+        <div className="flex-1 space-y-0.5 overflow-y-auto px-2">
+          {roomInfos.map((info) => {
+            const r = runtimes.current.get(info.roomId);
+            const active = info.roomId === currentId.current;
+            return (
+              <button
+                key={info.roomId}
+                type="button"
+                onClick={() => void selectRoom(info.roomId)}
+                className={cn(
+                  "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                  active ? "bg-primary/10 font-medium text-primary" : "text-foreground/80 hover:bg-secondary/60",
+                )}
+              >
+                <Hash className="size-3.5 shrink-0 opacity-60" />
+                <span className="truncate">{info.name}</span>
+                {r?.joinPhase === "joining" && <Loader2 className="ml-auto size-3 animate-spin opacity-60" />}
+              </button>
+            );
+          })}
+        </div>
+        <div className="space-y-2 border-t p-2">
+          <div className="flex gap-1">
+            <Input
+              value={joinLinkInput}
+              onChange={(event) => setJoinLinkInput(event.target.value)}
+              placeholder="Paste invite link…"
+              className="h-7 text-xs"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") addRoomFromLink();
+              }}
+            />
+            <Button variant="outline" size="icon" className="size-7 shrink-0" aria-label="Join room from invite link" onClick={addRoomFromLink}>
+              <Plus className="size-3.5" />
             </Button>
           </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {entries.map((entry) => (
-              <CommunityRow key={entry.community_id} entry={entry} />
+          <p className="text-[10px] leading-tight text-muted-foreground">
+            Create rooms at www.2140.social, then paste the join link here.
+          </p>
+        </div>
+      </aside>
+
+      {/* Room column */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-semibold">
+              # {current?.info.name ?? "…"}
+            </h2>
+            <p className="truncate text-xs text-muted-foreground">{current?.info.topic ?? ""}</p>
+          </div>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden">
+            <Radio className={cn("size-3.5", current?.joinPhase === "ready" ? "text-success" : "text-muted-foreground/50")} />
+            {current?.joinPhase === "ready" ? "relay live" : current?.joinPhase === "joining" ? "joining…" : "idle"}
+          </span>
+          {current?.joinPhase === "ready" && (
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => copy(current.info.joinLink, "Invite link")}>
+              <Copy className="mr-1 size-3" /> invite link
+            </Button>
+          )}
+        </div>
+
+        {/* Scroll */}
+        <div className="flex-1 space-y-0.5 overflow-y-auto px-4 py-3" data-scroll={current?.rows.length ?? 0}>
+          {!current || current.rows.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              {current?.joinPhase === "joining"
+                ? "Joining — the welcomer is wrapping your room key…"
+                : current?.joinPhase === "error"
+                  ? `Join failed: ${current.joinError}`
+                  : "No messages yet. Say something."}
+            </p>
+          ) : (
+            current.rows.map((row) => {
+              const reply = replyOf(row.env);
+              const target = reply ? current.known.get(`${reply.author}:${reply.msg_id}`) : undefined;
+              const segments = segmentMentions(previewText(row.env), current.roster);
+              return (
+                <div key={row.key} className="group rounded-md px-2 py-1 hover:bg-secondary/40">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-semibold text-primary/90" title={row.env.author}>
+                      {handleFor(current, row.env.author)}
+                    </span>
+                    {row.mine && (
+                      <span className="rounded border border-primary/40 px-1 text-[9px] font-bold tracking-wider text-primary">
+                        YOU
+                      </span>
+                    )}
+                    <span
+                      className={cn(
+                        "ml-auto text-[10px] italic",
+                        row.receipt === "scrolled" && "text-muted-foreground/60",
+                        row.receipt === "pending" && "text-muted-foreground/50",
+                        row.receipt === "dropped" && "text-destructive",
+                      )}
+                    >
+                      {row.receipt === "scrolled" ? "scrolled ✓" : row.receipt === "pending" ? "awaiting scroll…" : "dropped ✗ (scribe unreachable)"}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Reply to message"
+                      className="opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => {
+                        setReplyDraft({ author: row.env.author, msgId: row.env.msg_id, preview: previewText(row.env) });
+                      }}
+                    >
+                      <Reply className="size-3.5 text-muted-foreground" />
+                    </button>
+                  </div>
+                  {reply && (
+                    <div className="mb-0.5 border-l-2 border-border pl-2 text-[11px] italic text-muted-foreground">
+                      ↩ in reply to {reply.author.slice(0, 8)}…: {target ? previewText(target) : "(message not in this view)"}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words text-sm">
+                    {segments.map((seg, index) =>
+                      seg.kind === "text" ? (
+                        <span key={index}>{seg.text}</span>
+                      ) : (
+                        <span key={index} className="font-medium text-primary" title={seg.entry?.author ?? ""}>
+                          {seg.text}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Composer */}
+        <div className="border-t px-4 py-3">
+          {replyDraft && (
+            <div className="mb-2 flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
+              <span className="truncate">
+                Replying to {replyDraft.author.slice(0, 8)}…: {replyDraft.preview}
+              </span>
+              <button type="button" aria-label="Cancel reply" className="ml-auto" onClick={() => setReplyDraft(null)}>
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="mb-2 flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              className="rounded-md border px-2 py-0.5 text-muted-foreground hover:bg-secondary/60"
+              onClick={() => setShowIdentity((value) => !value)}
+            >
+              🪪 {name.trim() || (npubValid ? "named npub" : "anonymous")} {showIdentity ? "▾" : "▸"}
+            </button>
+            {showIdentity && (
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <Input
+                  value={name}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    try {
+                      localStorage.setItem(NAME_KEY, event.target.value);
+                    } catch {
+                      /* best-effort */
+                    }
+                    const r = currentId.current ? runtimes.current.get(currentId.current) : undefined;
+                    if (r) r.presencePosted = false;
+                  }}
+                  placeholder="display name (optional — @handle for mentions)"
+                  className="h-7 max-w-56 text-xs"
+                  maxLength={40}
+                />
+                <Input
+                  value={npubInput}
+                  onChange={(event) => {
+                    setNpubInput(event.target.value);
+                    try {
+                      localStorage.setItem(NPUB_KEY, event.target.value);
+                    } catch {
+                      /* best-effort */
+                    }
+                  }}
+                  placeholder="npub1… (optional — expose your identity)"
+                  className="h-7 max-w-64 text-xs"
+                />
+                <span className={cn("text-[11px]", npubValid ? "text-success" : "text-muted-foreground")}>
+                  {npubInput.trim()
+                    ? npubValid
+                      ? `✓ visible as ${npubValid.slice(0, 12)}…`
+                      : "✗ invalid npub — stays anonymous"
+                    : "anonymous"}
+                </span>
+                {current?.session && (
+                  <span className="text-[10px] text-muted-foreground" title={getPublicKey(current.session.joined.authorSecretKey)}>
+                    room key: {getPublicKey(current.session.joined.authorSecretKey).slice(0, 12)}…
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex items-end gap-2">
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+              disabled={!current || current.joinPhase !== "ready"}
+              placeholder={
+                !current || current.joinPhase !== "ready"
+                  ? current?.joinPhase === "joining"
+                    ? "Joining…"
+                    : "Join a room to write."
+                  : "Write to the scroll…"
+              }
+              rows={1}
+              className="max-h-40 min-h-10 flex-1 resize-y rounded-lg border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <Button size="sm" className="h-10 px-5" disabled={!current || current.joinPhase !== "ready" || !draft.trim()} onClick={() => void send()}>
+              POST
+            </Button>
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Encrypted scroll — the relay stores only fixed-size ciphertext segments.
+            {current?.session && (() => {
+              try {
+                const sk = current.session.joined.authorSecretKey;
+                return ` Burner key: ${nsecEncode(sk).slice(0, 10)}…`;
+              } catch {
+                return "";
+              }
+            })()}
+          </p>
+        </div>
+
+        {/* Status log (site parity) */}
+        {logLines.length > 0 && (
+          <div className="max-h-20 overflow-y-auto border-t bg-muted/20 px-4 py-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {logLines.slice(-6).map((line, index) => (
+              <div key={`${index}-${line.slice(0, 12)}`} className="truncate">
+                {line}
+              </div>
             ))}
           </div>
         )}
       </div>
-
-      <CreateCommunityDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }
-
-/** Skeleton placeholder used while the list decrypts on first paint. */
-export function BaoCommunitiesSkeleton() {
-  return (
-    <div className="space-y-1 p-2">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="flex items-center gap-3 px-2 py-3">
-          <Skeleton className="size-11 rounded-xl" />
-          <div className="flex-1 space-y-1.5">
-            <Skeleton className="h-4 w-1/2" />
-            <Skeleton className="h-3 w-1/4" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export default BaoCommunitiesPage;

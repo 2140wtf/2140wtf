@@ -12,8 +12,6 @@ import { CenterColumnContext, DrawerContext, LayoutStore, LayoutStoreContext, Na
 import { NsitePlayerContext, type NsitePlayerState } from '@/contexts/NsitePlayerContext';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useScrollDirection } from '@/hooks/useScrollDirection';
-import { DirectInvitesPrompt2 } from '@/concord-v2/components/DirectInvitesPrompt2';
-import { useForegroundNotifications } from '@/hooks/useForegroundNotifications';
 import { cn } from '@/lib/utils';
 import { RoutePreloader } from '@/components/RoutePreloader';
 
@@ -48,12 +46,13 @@ function MainLayoutInner() {
   const location = useLocation();
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const autoCollapseLeft = ['/bao/markets', '/videos', '/groups'].some((p) => location.pathname.startsWith(p));
+  const autoCollapseLeft = ['/bao/markets', '/bao/community', '/videos', '/groups'].some((p) => location.pathname.startsWith(p));
   useEffect(() => {
     setLeftCollapsed(autoCollapseLeft);
   }, [autoCollapseLeft]);
 
-  const autoCollapseRight = location.pathname.startsWith('/bao/markets');
+  const autoCollapseRight = location.pathname.startsWith('/bao/markets')
+    || location.pathname.startsWith('/bao/community');
   const [rightCollapsed, setRightCollapsed] = useState(autoCollapseRight);
   useEffect(() => {
     setRightCollapsed(autoCollapseRight);
@@ -65,7 +64,6 @@ function MainLayoutInner() {
 
   // ₿AO chat: toast incoming Concord V2 messages while the app is open,
   // gated on the per-channel/community notification levels.
-  useForegroundNotifications();
 
   return (
     <CenterColumnContext.Provider value={centerColumnEl}>
@@ -151,10 +149,6 @@ function MainLayoutInner() {
 
       {/* Mobile bottom nav - only on small screens, slides out on scroll */}
       {!hideBottomNav && <MobileBottomNav />}
-
-      {/* ₿AO chat: gift-wrapped direct invites arrive anywhere; the prompt is
-          global like Armada's MainLayout mount. */}
-      <DirectInvitesPrompt2 />
 
       {/* Mobile FAB — fixed to viewport, hidden on desktop where the
           in-column sticky FAB (above) takes over. Mirrors bottom nav

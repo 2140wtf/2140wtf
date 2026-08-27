@@ -56,9 +56,6 @@ const exactRoutes: Record<string, RouteLoader> = {
 
 const prefixRoutes: Array<[string, RouteLoader]> = [
   ['/messages/', () => import('@/pages/MessageThreadPage')],
-  ['/bao/c/', () => import('@/concord-v2/pages/ConcordV2Page')],
-  ['/bao/invite/', () => import('@/concord-v2/pages/InviteV2Page')],
-  ['/invite/', () => import('@/concord-v2/pages/InviteV2Page')],
   ['/articles/new', () => import('@/pages/ArticleEditorPage')],
   ['/articles/edit/', () => import('@/pages/ArticleEditorPage')],
   ['/t/', () => import('@/pages/HashtagPage')],

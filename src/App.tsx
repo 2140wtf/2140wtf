@@ -10,8 +10,6 @@ import { sunsetPreset } from "@/themes";
 import { NativeNotifications } from "@/components/NativeNotifications";
 import NostrProvider from "@/components/NostrProvider";
 import { NostrSync } from "@/components/NostrSync";
-import { WindowBaoMount } from "@/hooks/useWindowBao";
-import { GlobalTerminal } from "@/components/GlobalCommandPalette";
 import { PlausibleProvider } from "@/components/PlausibleProvider";
 import { SentryProvider } from "@/components/SentryProvider";
 
@@ -33,8 +31,6 @@ import { APP_RELAYS } from "@/lib/platform";
 import { DEFAULT_SIDEBAR_WIDGETS, SIDEBAR_WIDGETS_VERSION } from "@/lib/sidebarWidgets";
 import { EmotionDevProvider } from "@/pets/dev/EmotionDevContext";
 import { RemoteBattleProvider } from "@/pets/battle";
-import { WireSync } from "@/wire/WireSync";
-import { ControlPlaneSync } from "@/components/ControlPlaneSync";
 import { DecryptConsentDialog } from "@/components/DecryptConsentDialog";
 import AppRouter from "./AppRouter";
 
@@ -167,7 +163,10 @@ const hardcodedConfig: AppConfig = {
     "feed",
     "notifications",
     "messages",
-    "bao-chat",
+    "2140-social",
+    "bao-fund",
+    "prediction-markets",
+    "court",
     "market",
     "polls",
     "media",
@@ -176,7 +175,7 @@ const hardcodedConfig: AppConfig = {
     "events",
     "btcmap",
   ],
-  sidebarOrderVersion: 12,
+  sidebarOrderVersion: 13,
   themeDefaultVersion: 3,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",
@@ -266,30 +265,15 @@ export function App() {
                 <NostrProvider>
                   <NostrSync />
                   <NativeNotifications />
-                  {/* Mounts window.bao — the in-page agent terminal API. The
-                      dispatcher reuses this NostrProvider's pool, so terminal
-                      commands share the app's relay connections. */}
-                  <WindowBaoMount />
-                  {/* Global human Terminal — works outside any ₿AO, so
-                      identity and community actions stay one keystroke away. */}
-                  <GlobalTerminal />
-
                     <NWCProvider>
                       <EmotionDevProvider>
                         <TooltipProvider>
                           <DmInboxProvider>
                             <CashuWalletProvider>
-                              <RemoteBattleProvider>
-                                <GroupChatProvider>
-                                  <AppRouter />
-                                </GroupChatProvider>
-                                {/* ₿AO chat (Concord V2) wire: one standing REQ per
-                                    community relay + parked-wrap drain. Renders null;
-                                    no UI of its own (the chat UI lands in phase 2). */}
-                                <WireSync />
-                                {/* ₿AO chat: sweep every community's control plane on
-                                    pageload (renders null). */}
-                                <ControlPlaneSync />
+                                <RemoteBattleProvider>
+                                  <GroupChatProvider>
+                                    <AppRouter />
+                                  </GroupChatProvider>
                                 {/* ₿AO chat: the one-time bulk-decrypt consent prompt,
                                     mounted app-wide so any surface can trigger it. */}
                                 <DecryptConsentDialog />

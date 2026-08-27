@@ -1,11 +1,54 @@
 import { useState } from 'react';
 import { nip19 } from 'nostr-tools';
+import { getEventHash } from 'nostr-tools/pure';
 import { Bot, Hammer, Loader2, ShieldX, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { grindJoinRumor, DEFAULT_AGENT_GATE_DIFFICULTY } from '@/concord-v2/lib/agentGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
+
+/** Default NIP-13-style leading-zero-bit difficulty for the local gate. */
+const AGENT_GATE_DIFFICULTY = 20;
+
+/** Attempt budget scales with difficulty: 16x the expected work. */
+function powAttemptBudget(difficulty: number): number {
+  return 16 * 2 ** difficulty;
+}
+
+function countLeadingZeroBits(idHex: string): number {
+  let bits = 0;
+  for (const char of idHex) {
+    const value = parseInt(char, 16);
+    if (value === 0) {
+      bits += 4;
+      continue;
+    }
+    bits += Math.clz32(value) - 28;
+    break;
+  }
+  return bits;
+}
+
+/**
+ * Grind a NIP-13-style commitment until its event id carries the required
+ * leading zero bits. The result is never published — it exists only as
+ * local UI friction, so a plain unsigned event template is enough.
+ */
+function grindLocalPow(pubkey: string, ms: number, difficulty: number): string {
+  for (let counter = 0; ; counter++) {
+    if (counter > powAttemptBudget(difficulty)) {
+      throw new Error(`proof-of-work grind exhausted the attempt budget at difficulty ${difficulty}`);
+    }
+    const id = getEventHash({
+      kind: 1,
+      content: 'join',
+      tags: [['nonce', String(counter), String(difficulty)]],
+      pubkey,
+      created_at: Math.floor(ms / 1000),
+    });
+    if (countLeadingZeroBits(id) >= difficulty) return id;
+  }
+}
 
 /** The 2140 operator account — the only one offered a dev bypass. */
 const DEV_NPUB = 'npub1lwsmhk9t2le9see32l006khunnk6qpxxs30enke3d8lykcd6wstqegy86j';
@@ -88,7 +131,7 @@ export function AgentGateCheck({ children, title = 'Client-side agent check', de
     // Yield once so the busy state paints before the CPU-bound grind begins.
     await new Promise((resolve) => setTimeout(resolve, 50));
     try {
-      grindJoinRumor(user.pubkey, Date.now(), DEFAULT_AGENT_GATE_DIFFICULTY);
+      grindLocalPow(user.pubkey, Date.now(), AGENT_GATE_DIFFICULTY);
       markPassed();
     } catch (error) {
       toast({

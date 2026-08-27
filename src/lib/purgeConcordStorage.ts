@@ -1,24 +1,12 @@
-import { closeInviteInbox } from "@/concord-v2/lib/inviteInbox";
-import { closeRumorStores } from "@/concord-v2/lib/rumorStore";
-import { closeFoldedCache } from "@/lib/foldedCache";
 import { resetDecryptConsent } from "@/lib/decryptConsent";
 import type { QueryClient } from "@tanstack/react-query";
 
 /**
- * Purge the decrypted-at-rest ₿AO chat (Concord V2) stores on final logout.
+ * Purge the legacy ₿AO chat (Concord V2) stores on final logout.
  *
- * The Concord caches hold DECRYPTED content and secret key material at rest —
- * channel rumors (plaintext messages), the fold cache (control-fold snapshots
- * the stream keys rehydrate from), pending wraps, the invite inbox, decrypted
- * image bytes, and the community root keys inside them. Anyone with local
- * storage access holds the same device trust, but a logout must not leave
- * another identity's decrypted data (or the keys that mint it) readable by
- * the NEXT account on this device.
- *
- * Scope is deliberately narrow — this is not Armada's scorched-earth
- * purgeClientStorage. 2140's own caches (the public-event store, theme, feed
- * prefs) are public data or per-account already and survive logout as they
- * always have. What is wiped:
+ * Concord V2 has been removed from the app; this purge remains so a device
+ * that ran the old build has its decrypted-at-rest leftovers wiped on the
+ * next final logout. What is wiped:
  *
  * - IndexedDB: `2140-concord-cache`, `2140-concord-rumors`,
  *   `2140-concord-pending`, `2140-concord-invites`.
@@ -26,10 +14,6 @@ import type { QueryClient } from "@tanstack/react-query";
  * - localStorage: every `2140:wire-cursor:*` resume cursor, the
  *   `2140:decrypt-consent` record (consent is per-person, not per-device),
  *   and `concord2:read-cut-pending:*` moderation markers.
- *
- * Wire cursors are keyed per account (`2140:wire-cursor:<pubkey>:<relay>`)
- * but purged wholesale on final logout — a fresh login replays from the
- * lookback floor and re-derives its cursors.
  */
 
 /** Concord V2 IndexedDB databases holding decrypted content / key material. */
@@ -69,19 +53,6 @@ function purgeLocalStorage(): void {
   }
 }
 
-/**
- * Close the module-level store connections first: an open connection blocks
- * `deleteDatabase` (the request stalls in `onblocked`), which would silently
- * leave the decrypted DBs alive for the next login in the same tab.
- */
-async function closeConcordStores(): Promise<void> {
-  await Promise.all([
-    closeRumorStores().catch(() => undefined),
-    closeInviteInbox().catch(() => undefined),
-    closeFoldedCache().catch(() => undefined),
-  ]);
-}
-
 async function purgeIndexedDB(): Promise<void> {
   if (typeof indexedDB === "undefined") return;
   await Promise.all(
@@ -118,7 +89,6 @@ async function purgeCacheStorage(): Promise<void> {
 export async function purgeConcordStorage(): Promise<void> {
   resetDecryptConsent();
   purgeLocalStorage();
-  await closeConcordStores();
   await Promise.all([purgeIndexedDB(), purgeCacheStorage()]);
 }
 

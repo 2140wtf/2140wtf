@@ -383,29 +383,6 @@ export function SidebarNavList({
               />
             );
           }
-          if (id === 'bao-chat') {
-            return (
-              <SidebarGroup
-                key={id}
-                id={id}
-                active={isActive(id)}
-                editing={editing}
-                onRemove={(removeId) => onRemove(removeId, i)}
-                onClick={getOnClick?.(id)}
-                compact={compact}
-                minimal={minimal}
-                children={[
-                  { id: 'bao-chat', label: '2140 Social', path: 'https://2140.social' },
-                  { id: 'bao-fund', label: 'Fund my ₿AO', path: '/bao/fund' },
-                  { id: 'prediction-markets', label: '₿AO MARKETS', path: '/bao/markets' },
-                  { id: 'court', label: '₿AO Court', path: '/court' },
-                ]}
-              />
-            );
-          }
-          // These destinations are rendered as children of the ₿AOs group.
-          if (id === 'bao-fund' || id === 'prediction-markets' || id === 'court') return null;
-
           if (id === 'media') {
             return (
               <SidebarGroup

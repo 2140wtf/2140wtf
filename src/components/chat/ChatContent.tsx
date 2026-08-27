@@ -5,7 +5,6 @@ import { BlurhashCanvas } from "@/components/BlurhashCanvas";
 import { AudioMessage } from "@/components/chat/AudioMessage";
 import { emojify } from "@/components/chat/emojify";
 import { EmbeddedNaddr, EmbeddedNote } from "@/components/chat/EmbeddedNote";
-import { InviteEmbed } from "@/components/chat/InviteEmbed";
 import { Lightbox } from "@/components/chat/Lightbox";
 import { LinkEmbed } from "@/components/chat/LinkEmbed";
 import { CodeBlock, InlineCode } from "@/components/chat/Markdown";
@@ -22,7 +21,6 @@ import { writeClipboardText } from "@/lib/clipboard";
 import { appHashtagUrl, appNip19Url } from "@/lib/dittoUrl";
 import { getDisplayName } from "@/lib/getDisplayName";
 import { HASHTAG_PATTERN } from "@/lib/hashtag";
-import { isInviteUrl } from "@/concord-v2/lib/invite";
 import { parseFileMessageTags, parseImetaMap } from "@/lib/imeta";
 import { KIND_DM_FILE } from "@/components/chat/messageHelpers";
 import { splitInlineCode, splitMarkdownBlocks } from "@/lib/markdown";
@@ -92,7 +90,6 @@ type ContentToken =
   | { type: "image-gallery"; urls: ImageRef[] }
   | { type: "media-embed"; url: string; encryption?: ImetaEncryption; mime?: string }
   | { type: "link-embed"; url: string }
-  | { type: "invite-embed"; url: string }
   | { type: "inline-link"; url: string }
   | { type: "mention"; pubkey: string }
   | { type: "text-mention"; pubkey: string; raw: string }
@@ -430,14 +427,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
           const isEndOfLine = lineSuffix.trim() === "";
 
           const naddrFromUrl = extractNaddrFromUrl(url);
-          const isInvite = isInviteUrl(url);
-          if (isEndOfLine && isInvite) {
-            out.push({ type: "invite-embed", url });
-          } else if (isInvite) {
-            // A mid-sentence invite link stays a plain link — never a generic
-            // naddr card (the invite bundle's naddr points at encrypted content).
-            out.push({ type: "inline-link", url });
-          } else if (naddrFromUrl) {
+          if (naddrFromUrl) {
             out.push({ type: "naddr-embed", addr: naddrFromUrl, url });
           } else if (isEndOfLine) {
             out.push({ type: "link-embed", url });
@@ -573,8 +563,7 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
         || token.type === "nevent-embed"
         || (token.type === "naddr-embed" && (!token.url || token.addr.kind === 30030))
         || token.type === "lightning-invoice"
-        || token.type === "code-block" || token.type === "quote"
-        || token.type === "invite-embed";
+        || token.type === "code-block" || token.type === "quote";
 
       if (isBlock) {
         if (i > 0) {
@@ -802,9 +791,6 @@ export function ChatContent({ event, className, disableNoteEmbeds = false, highl
       case "link-embed":
         if (inQuote) return inlineLink(key, token.url);
         return <LinkEmbed key={key} url={token.url} className="my-1.5" />;
-      case "invite-embed":
-        if (inQuote) return inlineLink(key, token.url);
-        return <InviteEmbed key={key} url={token.url} className="my-1.5" />;
       case "inline-link":
         return inlineLink(key, token.url);
       case "media-embed": {

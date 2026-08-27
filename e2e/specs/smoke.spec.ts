@@ -63,10 +63,14 @@ test.describe('smoke', () => {
     await expect(drawer).toBeVisible({ timeout: DEFAULT_TIMEOUT });
 
     // Spot-check default sidebar items (scoped to the drawer to avoid duplicates
-    // from the desktop sidebar and mobile bottom nav). BAO destinations are a
-    // collapsible group, while Merchants remains a standalone destination.
+    // from the desktop sidebar and mobile bottom nav). The legacy ₿AOs
+    // collapsible group was split by the 2140 Social migration: 2140 Social is
+    // now a standalone destination and the three ₿AO links render flat, so each
+    // is a link rather than a group trigger.
     await expect(drawer.getByRole('link', { name: 'Feed' })).toBeVisible();
-    await expect(drawer.getByRole('button', { name: '₿AOs' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: '2140 Social' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: '₿AO MARKETS' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: 'Fund my ₿AO' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Polls' })).toBeVisible();
 

@@ -256,7 +256,11 @@ export function PredictionMarketsPage(): React.JSX.Element {
   // more as the user scrolls. This keeps first paint fast (images, sparklines
   // and odds load only for the visible batch) instead of mounting the whole
   // grid — and firing hundreds of sub-requests — at once.
-  const [visibleCount, setVisibleCount] = useState(8);
+  // Progressive load: paint the first 6 markets immediately, then grow by 6
+  // as the sentinel scrolls into view. Smaller than the old 8/8 so the first
+  // paint is cheaper and the grid fills faster on slow connections.
+  const INITIAL_VISIBLE = 6;
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const gridSentinelRef = useRef<HTMLDivElement | null>(null);
   const [selectedMarket, setSelectedMarket] = useState<BaoMarket | null>(null);
   const [initialOutcome, setInitialOutcome] = useState<string | null>(null);
@@ -389,7 +393,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   // Grow the rendered batch as the sentinel approaches the viewport. Reset
   // whenever the list/shape changes (new search, category, sort, status).
   useEffect(() => {
-    setVisibleCount(8);
+    setVisibleCount(INITIAL_VISIBLE);
   }, [search, category, sort, showResolved]);
 
   useEffect(() => {
@@ -398,7 +402,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setVisibleCount((c) => Math.min(c + 8, filteredAndSorted.length));
+          setVisibleCount((c) => Math.min(c + INITIAL_VISIBLE, filteredAndSorted.length));
         }
       },
       { rootMargin: "800px" },
@@ -409,7 +413,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
 
   const gridItems = useMemo(() => {
     if (isLoading) {
-      return Array.from({ length: 8 }).map((_, i) => (
+      return Array.from({ length: INITIAL_VISIBLE }).map((_, i) => (
         <Card key={i}>
           <CardHeader>
             <Skeleton className="h-5 w-3/4" />
