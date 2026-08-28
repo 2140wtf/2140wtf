@@ -381,7 +381,8 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
     const first =
       roomInfos.find((info) => info.name.toLowerCase() === "general") ?? roomInfos[0];
     if (first && !currentId.current && !cancelled) {
-      void selectRoom(first.roomId);
+      // Load app framework first (paint layout), then connect content.
+      window.setTimeout(() => void selectRoom(first.roomId), 50);
     }
     return () => {
       cancelled = true;
@@ -604,7 +605,9 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
                 ? "Joining — the welcomer is wrapping your room key…"
                 : current?.joinPhase === "error"
                   ? `Join failed: ${current.joinError}`
-                  : "No messages yet. Say something."}
+                  : current?.joinPhase === "idle"
+                    ? "Loading scroll — connecting to relay…"
+                    : "No messages yet. Say something."}
             </p>
           ) : (
             current.rows.map((row) => {
