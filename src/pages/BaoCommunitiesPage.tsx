@@ -145,7 +145,6 @@ interface RoomRuntime {
   presencePosted: boolean;
   unsubscribe: (() => void) | null;
   refreshTimer: ReturnType<typeof setInterval> | null;
-  rerenderTimer: ReturnType<typeof setTimeout> | null;
   relayUrl: string;
 }
 
@@ -163,7 +162,6 @@ function newRuntime(info: BaoSocialRoomInfo, relayUrl: string): RoomRuntime {
     presencePosted: false,
     unsubscribe: null,
     refreshTimer: null,
-    rerenderTimer: null,
     relayUrl,
   };
 }
@@ -333,10 +331,7 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
             r.known.set(key, env);
           }
         }
-        // Batch rerenders: throttle full component repaint to 150ms so rapid
-        // live-message bursts don't jank mobile (slow load / high CPU).
-        clearTimeout(r.rerenderTimer);
-        r.rerenderTimer = window.setTimeout(() => void refreshScroll(roomId), 150);
+        void refreshScroll(roomId);
       });
       r.refreshTimer = setInterval(() => void refreshScroll(roomId), Math.max(1500, r.info.flushDeadlineMs / 2));
       r.joinPhase = "ready";
