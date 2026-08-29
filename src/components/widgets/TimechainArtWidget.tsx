@@ -92,11 +92,18 @@ function extractImagesFromEvent(event: NostrEvent): ArtImage[] {
   const images: ArtImage[] = [];
   const seen = new Set<string>();
 
+  // Bare (non-`image/`-prefixed) MIME types seen in the wild — e.g. Timechain
+  // Art Magazine publishes `m jpeg` instead of `m image/jpeg`.
+  const IMAGE_MIMES = new Set([
+    'jpeg', 'jpg', 'png', 'gif', 'webp', 'svg', 'avif', 'heic', 'heif', 'bmp',
+  ]);
+
   // 1) imeta-tagged media: keep entries whose MIME is an image (or whose URL
   //    looks like an image). imeta is preferred because it carries metadata.
   for (const [, entry] of imeta) {
-    const isImage = entry.mime
-      ? entry.mime.startsWith('image/')
+    const mime = entry.mime?.toLowerCase();
+    const isImage = mime
+      ? mime.startsWith('image/') || IMAGE_MIMES.has(mime)
       : IMAGE_URL_REGEX.test(entry.url);
     if (!isImage) continue;
     const url = sanitizeUrl(entry.url);
@@ -126,7 +133,7 @@ function extractImagesFromEvent(event: NostrEvent): ArtImage[] {
       eventId: event.id,
       createdAt: event.created_at,
     });
-    }
+  }
 
   return images;
 }
