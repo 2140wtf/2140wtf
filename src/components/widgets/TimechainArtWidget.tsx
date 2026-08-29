@@ -153,16 +153,6 @@ export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
 /** Max time to wait for an image before swapping to a fallback Blossom server. */
 const LOAD_TIMEOUT_MS = 8_000;
 
-/** Parse an imeta `dim` value like "1038.0x1015.0" into integer dimensions. */
-function parseDim(dim?: string): { w: number; h: number } | null {
-  if (!dim) return null;
-  const m = dim.match(/^([\d.]+)x([\d.]+)$/);
-  if (!m) return null;
-  const w = Math.round(parseFloat(m[1]));
-  const h = Math.round(parseFloat(m[2]));
-  return w > 0 && h > 0 ? { w, h } : null;
-}
-
 /**
  * Compact art gallery widget.
  *
@@ -404,13 +394,14 @@ function ArtTile({
   // Only set once `src` has been verified to return a real image response.
   const [verifiedSrc, setVerifiedSrc] = useState<string | null>(null);
 
-  // Some Blossom hosts answer missing blobs with a 404 status whose body is
-  // still a decodable placeholder JPEG ("image not found" from nostr.build),
-  // and others (blossom.primal.net from some networks) accept the TCP
-  // connection but never respond — in both cases `<img>` fires onLoad/onError
-  // uselessly and the tile shows junk or stays blank. So preflight each URL
-  // with fetch and only render the <img> once the server returned a real
-  // 2xx image response; anything else advances to the next fallback server.
+  // Missing blobs are served by nostr.build as a fixed, always-64096-byte
+  // "image not found" placeholder (and blossom.primal.net from some networks
+  // accepts TCP but never responds). Both make `<img>` fire onLoad/onError
+  // uselessly, so preflight each URL with fetch and only render the <img>
+  // once the server returns a genuine non-placeholder image response. Real
+  // images are re-encoded by nostr.build (e.g. to 512x512), so dimension
+  // checks would wrongly reject them — only the exact placeholder byte size
+  // is treated as a miss.
   useEffect(() => {
     let cancelled = false;
     setVerifiedSrc(null);
@@ -488,19 +479,7 @@ function ArtTile({
           src={verifiedSrc}
           alt={img.alt ?? 'Art'}
           loading="lazy"
-          onLoad={(e) => {
-            // Placeholder detection: nostr.build serves missing blobs as a
-            // 512x512 thumbnail of the original stamped with "image not
-            // found". If the served size doesn't match the imeta `dim`, it's
-            // a placeholder — skip to the next fallback server.
-            const expected = parseDim(img.dim);
-            const { naturalWidth, naturalHeight } = e.currentTarget;
-            if (expected && (naturalWidth !== expected.w || naturalHeight !== expected.h)) {
-              onError();
-              return;
-            }
-            setLoaded(true);
-          }}
+          onLoad={() => setLoaded(true)}
           onError={() => onError()}
           className={cn(
             'absolute inset-0 h-full w-full transition-opacity duration-200',
