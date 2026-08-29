@@ -505,25 +505,31 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
         // behind the fixed top bar and bottom nav. Same tool class
         // LiveStreamPage uses successfully.
         "max-lg:livestream-height",
-        // When the rooms sidebar is collapsed on mobile, the chat column
-        // should take the full width instead of leaving a blank gap.
-        roomsCollapsed && "max-lg:pl-0",
       )}
       data-room={roomKey}
     >
-      {/* Rooms sidebar — collapsible on mobile so chat can go full-width */}
+      {/* Rooms sidebar — collapses to a slim rail (expand button) at every
+          breakpoint so it can always be toggled back open. */}
       <aside
         className={cn(
           "flex shrink-0 flex-col border-r bg-muted/30 transition-all",
-          roomsCollapsed ? "max-lg:w-0 max-lg:border-r-0" : "max-lg:w-40",
+          roomsCollapsed ? "w-10" : "w-40",
         )}
       >
-        <div className="flex items-center justify-between px-3 py-2.5">
-          <span className="text-[11px] font-semibold tracking-widest text-muted-foreground">ROOMS</span>
+        <div
+          className={cn(
+            "flex w-full items-center py-2.5",
+            roomsCollapsed ? "justify-center px-0" : "justify-between px-3",
+          )}
+        >
+          {!roomsCollapsed && (
+            <span className="text-[11px] font-semibold tracking-widest text-muted-foreground">ROOMS</span>
+          )}
           <button
             type="button"
             onClick={() => setRoomsCollapsed((v) => !v)}
             aria-label={roomsCollapsed ? "Expand rooms" : "Collapse rooms"}
+            aria-expanded={!roomsCollapsed}
             title={roomsCollapsed ? "Expand rooms" : "Collapse rooms"}
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
           >
@@ -534,46 +540,50 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
             )}
           </button>
         </div>
-        <div className="flex-1 space-y-0.5 overflow-y-auto px-2">
-          {roomInfos.map((info) => {
-            const r = runtimes.current.get(info.roomId);
-            const active = info.roomId === currentId.current;
-            return (
-              <button
-                key={info.roomId}
-                type="button"
-                onClick={() => void selectRoom(info.roomId)}
-                className={cn(
-                  "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                  active ? "bg-primary/10 font-medium text-primary" : "text-foreground/80 hover:bg-secondary/60",
-                )}
-              >
-                <Hash className="size-3.5 shrink-0 opacity-60" />
-                <span className="truncate">{info.name}</span>
-                {r?.joinPhase === "joining" && <Loader2 className="ml-auto size-3 animate-spin opacity-60" />}
-              </button>
-            );
-          })}
-        </div>
-        <div className="space-y-2 border-t p-2">
-          <div className="flex gap-1">
-            <Input
-              value={joinLinkInput}
-              onChange={(event) => setJoinLinkInput(event.target.value)}
-              placeholder="Paste invite link…"
-              className="h-7 text-xs"
-              onKeyDown={(event) => {
-                if (event.key === "Enter") addRoomFromLink();
-              }}
-            />
-            <Button variant="outline" size="icon" className="size-7 shrink-0" aria-label="Join room from invite link" onClick={addRoomFromLink}>
-              <Plus className="size-3.5" />
-            </Button>
-          </div>
-          <p className="text-[10px] leading-tight text-muted-foreground">
-            Create rooms at www.2140.social, then paste the join link here.
-          </p>
-        </div>
+        {!roomsCollapsed && (
+          <>
+            <div className="flex-1 space-y-0.5 overflow-y-auto px-2">
+              {roomInfos.map((info) => {
+                const r = runtimes.current.get(info.roomId);
+                const active = info.roomId === currentId.current;
+                return (
+                  <button
+                    key={info.roomId}
+                    type="button"
+                    onClick={() => void selectRoom(info.roomId)}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      active ? "bg-primary/10 font-medium text-primary" : "text-foreground/80 hover:bg-secondary/60",
+                    )}
+                  >
+                    <Hash className="size-3.5 shrink-0 opacity-60" />
+                    <span className="truncate">{info.name}</span>
+                    {r?.joinPhase === "joining" && <Loader2 className="ml-auto size-3 animate-spin opacity-60" />}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="space-y-2 border-t p-2">
+              <div className="flex gap-1">
+                <Input
+                  value={joinLinkInput}
+                  onChange={(event) => setJoinLinkInput(event.target.value)}
+                  placeholder="Paste invite link…"
+                  className="h-7 text-xs"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") addRoomFromLink();
+                  }}
+                />
+                <Button variant="outline" size="icon" className="size-7 shrink-0" aria-label="Join room from invite link" onClick={addRoomFromLink}>
+                  <Plus className="size-3.5" />
+                </Button>
+              </div>
+              <p className="text-[10px] leading-tight text-muted-foreground">
+                Create rooms at www.2140.social, then paste the join link here.
+              </p>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* Room column */}
