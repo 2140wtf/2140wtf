@@ -370,6 +370,7 @@ export function TimechainArtWidget({
 function ArtTile({
   img,
   revealBlurred,
+  fill = false,
   onClick,
 }: {
   img: ArtImage;
