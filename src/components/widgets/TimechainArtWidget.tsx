@@ -34,7 +34,7 @@ import { IMAGE_URL_REGEX } from '@/lib/mediaUrls';
 import { parseImetaMap } from '@/lib/imeta';
 import { getContentWarning } from '@/lib/contentWarning';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react';
+import { ChevronRight, ExternalLink, ImageOff, ShieldAlert } from 'lucide-react';
 
 /** The Timechain Art Magazine npub, embedded in the widget's source URL. */
 export const TIMELCHAIN_ART_NPUB =
@@ -152,6 +152,16 @@ export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
 
 /** Max time to wait for an image before swapping to a fallback Blossom server. */
 const LOAD_TIMEOUT_MS = 8_000;
+
+/** Parse an imeta `dim` value like "1038.0x1015.0" into integer dimensions. */
+function parseDim(dim?: string): { w: number; h: number } | null {
+  if (!dim) return null;
+  const m = dim.match(/^([\d.]+)x([\d.]+)$/);
+  if (!m) return null;
+  const w = Math.round(parseFloat(m[1]));
+  const h = Math.round(parseFloat(m[2]));
+  return w > 0 && h > 0 ? { w, h } : null;
+}
 
 /**
  * Compact art gallery widget.
@@ -478,7 +488,19 @@ function ArtTile({
           src={verifiedSrc}
           alt={img.alt ?? 'Art'}
           loading="lazy"
-          onLoad={() => setLoaded(true)}
+          onLoad={(e) => {
+            // Placeholder detection: nostr.build serves missing blobs as a
+            // 512x512 thumbnail of the original stamped with "image not
+            // found". If the served size doesn't match the imeta `dim`, it's
+            // a placeholder — skip to the next fallback server.
+            const expected = parseDim(img.dim);
+            const { naturalWidth, naturalHeight } = e.currentTarget;
+            if (expected && (naturalWidth !== expected.w || naturalHeight !== expected.h)) {
+              onError();
+              return;
+            }
+            setLoaded(true);
+          }}
           onError={() => onError()}
           className={cn(
             'absolute inset-0 h-full w-full transition-opacity duration-200',
@@ -486,6 +508,15 @@ function ArtTile({
             loaded ? 'opacity-100' : 'opacity-0',
           )}
         />
+      )}
+      {failed && !verifiedSrc && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/60"
+          aria-label="Artwork unavailable"
+        >
+          <ImageOff className="size-5" />
+          <span className="text-[10px] uppercase tracking-wider">Unavailable</span>
+        </div>
       )}
     </button>
   );
