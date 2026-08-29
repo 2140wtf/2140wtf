@@ -150,6 +150,9 @@ interface TimechainArtWidgetProps {
 /** How often the gallery rotates to the next image (21 min 40 s). */
 export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
 
+/** Max time to wait for an image before swapping to a fallback Blossom server. */
+const LOAD_TIMEOUT_MS = 8_000;
+
 /**
  * Compact art gallery widget.
  *
@@ -388,6 +391,17 @@ function ArtTile({
 }) {
   const { src, onError, failed } = useBlossomFallback(img.url);
   const [loaded, setLoaded] = useState(false);
+
+  // Some Blossom hosts (e.g. blossom.primal.net from some networks) accept the
+  // TCP connection but never respond, so `onError` never fires and the tile
+  // stays blank. If the image hasn't loaded within 8 s, treat it as failed and
+  // advance to the next fallback server. The timer resets whenever `src`
+  // changes (i.e. after each fallback swap).
+  useEffect(() => {
+    if (loaded) return;
+    const id = setTimeout(onError, LOAD_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [src, loaded, onError]);
 
   // Once every fallback server has 404'd, there's no point holding an empty tile.
   if (failed && !loaded) return null;

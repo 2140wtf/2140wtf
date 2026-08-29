@@ -29,6 +29,7 @@ export const APP_BLOSSOM_SERVERS: BlossomServerMetadata = {
   servers: [
     "https://blossom.ditto.pub/",
     "https://blossom.primal.net/",
+    "https://cdn.nostr.build/",
   ],
   updatedAt: 0,
 };
