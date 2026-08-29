@@ -17,7 +17,7 @@
  * `javascript:` or `http://localhost` URIs can never render.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -34,7 +34,7 @@ import { IMAGE_URL_REGEX } from '@/lib/mediaUrls';
 import { parseImetaMap } from '@/lib/imeta';
 import { getContentWarning } from '@/lib/contentWarning';
 import { cn } from '@/lib/utils';
-import { ExternalLink, ShieldAlert } from 'lucide-react';
+import { ChevronRight, ExternalLink, ShieldAlert } from 'lucide-react';
 
 /** The Timechain Art Magazine npub, embedded in the widget's source URL. */
 export const TIMELCHAIN_ART_NPUB =
@@ -140,13 +140,18 @@ interface TimechainArtWidgetProps {
   className?: string;
 }
 
+/** How often the gallery rotates to the next image (21 min 40 s). */
+export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
+
 /**
  * Compact art gallery widget.
  *
  * Fetches kind-1 notes from the given (default: Timechain Art Magazine) pubkey,
- * harvests every image, and lays them out in a responsive grid. Clicking a tile
- * opens the shared full-screen `Lightbox` with arrow navigation, a counter, and
- * a bottom bar showing the note caption and a link to the source post.
+ * harvests every image, and shows ONE image at a time — rotating automatically
+ * down the history (newest → oldest) every 21 min 40 s. A next/skip button
+ * lets the user advance manually. Clicking the image opens the shared
+ * full-screen `Lightbox` with arrow navigation, a counter, and a bottom bar
+ * showing the note caption and a link to the source post.
  */
 export function TimechainArtWidget({
   npub = TIMELCHAIN_ART_NPUB,
@@ -206,6 +211,26 @@ export function TimechainArtWidget({
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Index of the currently displayed image in the rotating gallery. Starts at
+  // the newest image and advances down the history on an interval.
+  const [displayIndex, setDisplayIndex] = useState(0);
+  const current = images[Math.min(displayIndex, images.length - 1)];
+
+  // Auto-rotate every 21 min 40 s. The interval always calls the functional
+  // updater, so a manual skip simply moves the pointer and the timer keeps
+  // stepping from wherever it landed. Clamped modulo in case `images` shrinks.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setDisplayIndex((i) => (images.length ? (i + 1) % images.length : 0));
+    }, ROTATE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [images.length]);
+
+  // Reset to the newest image whenever the image list itself changes.
+  useEffect(() => {
+    setDisplayIndex(0);
+  }, [images]);
+
   // Author lookup + derived values. These hooks MUST run before the early
   // returns below (React rules-of-hooks): `useAuthor` is a no-op query when
   // `pubkey` is undefined — it is internally `enabled: !!pubkey`.
@@ -214,15 +239,14 @@ export function TimechainArtWidget({
   const displayName =
     metadata?.name || metadata?.display_name || 'Timechain Art';
 
-  // Link to the source note of the newest image (lightbox bottom bar + attribution).
-  // Only computed when there's at least one image — safe no-op otherwise.
-  const sourceNote = useMemo(
-    () =>
-      images.length && pubkey
-        ? nip19.neventEncode({ id: images[0].eventId, author: pubkey })
-        : undefined,
-    [images, pubkey],
-  );
+  // Link to the source note of the currently displayed image (lightbox bottom
+  // bar + attribution). Only computed when there's an image — safe no-op otherwise.
+  const sourceNote = useMemo(() => {
+    const img = images[Math.min(displayIndex, images.length - 1)];
+    return img && pubkey
+      ? nip19.neventEncode({ id: img.eventId, author: pubkey })
+      : undefined;
+  }, [images, displayIndex, pubkey]);
 
   // Per-image imeta metadata for the lightbox (no-op when the grid is empty).
   const mediaMeta = useMemo(
@@ -240,10 +264,8 @@ export function TimechainArtWidget({
 
   if (isPending) {
     return (
-      <div className={cn('grid grid-cols-2 gap-1 p-1', className)}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="aspect-square w-full rounded-lg" />
-        ))}
+      <div className={cn('p-1', className)}>
+        <Skeleton className="w-full h-48 rounded-lg" />
       </div>
     );
   }
@@ -260,20 +282,39 @@ export function TimechainArtWidget({
 
   return (
     <>
-      <div className={cn('grid grid-cols-2 gap-1', className)}>
-        {images.map((img, i) => {
-          const revealBlurred =
-            img.contentWarning !== undefined &&
-            config.contentWarningPolicy === 'blur';
-          return (
-            <ArtTile
-              key={img.url + img.eventId}
-              img={img}
-              revealBlurred={revealBlurred}
-              onClick={() => setLightboxIndex(i)}
-            />
-          );
-        })}
+      <div className={cn('flex flex-col', className)}>
+        {/* Single rotating image. Click opens the lightbox at this position. */}
+        <ArtTile
+          img={current}
+          revealBlurred={
+            current.contentWarning !== undefined &&
+            config.contentWarningPolicy === 'blur'
+          }
+          fill
+          onClick={() => setLightboxIndex(displayIndex)}
+        />
+
+        {/* Controls: position indicator + skip-to-next button. */}
+        <div className="flex items-center justify-between px-1 pt-1.5">
+          <span
+            className="text-xs text-muted-foreground tabular-nums"
+            aria-live="polite"
+          >
+            {displayIndex + 1} / {images.length}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setDisplayIndex((i) => (i + 1) % images.length)
+            }
+            aria-label="Next artwork"
+            title="Next artwork"
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Next
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Attribution strip: artist name + a link to the source note. */}
@@ -286,7 +327,7 @@ export function TimechainArtWidget({
           onClick={(e) => e.stopPropagation()}
           className="flex items-center gap-1 hover:text-foreground hover:underline"
         >
-          Latest note
+          Source note
           <ExternalLink className="size-3" />
         </Link>
       </div>
@@ -333,6 +374,8 @@ function ArtTile({
 }: {
   img: ArtImage;
   revealBlurred: boolean;
+  /** Fill mode: full-width, flexible height (rotating gallery) instead of a square tile. */
+  fill?: boolean;
   onClick: () => void;
 }) {
   const { src, onError, failed } = useBlossomFallback(img.url);
@@ -346,7 +389,10 @@ function ArtTile({
       type="button"
       onClick={onClick}
       aria-label="View artwork"
-      className="relative aspect-square w-full rounded-lg overflow-hidden bg-secondary/30 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        'relative w-full rounded-lg overflow-hidden bg-secondary/30 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        fill ? 'h-full min-h-40' : 'aspect-square',
+      )}
     >
       {revealBlurred && (
         <div className="absolute inset-0 flex items-center justify-center z-10 rounded-lg">
@@ -364,7 +410,8 @@ function ArtTile({
         onLoad={() => setLoaded(true)}
         onError={() => onError()}
         className={cn(
-          'absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
+          'absolute inset-0 h-full w-full transition-opacity duration-200',
+          fill ? 'object-contain' : 'object-cover',
           loaded ? 'opacity-100' : 'opacity-0',
         )}
       />
