@@ -154,6 +154,12 @@ export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
 const LOAD_TIMEOUT_MS = 8_000;
 
 /**
+ * Exact byte size of nostr.build's "image not found" placeholder JPEG that it
+ * serves (with HTTP 200) for missing blobs. Real images never match this size.
+ */
+const PLACEHOLDER_SIZE = '64096';
+
+/**
  * Compact art gallery widget.
  *
  * Fetches kind-1 notes from the given (default: Timechain Art Magazine) pubkey,
@@ -389,71 +395,94 @@ function ArtTile({
   fill?: boolean;
   onClick: () => void;
 }) {
-  const { src, onError, failed } = useBlossomFallback(img.url);
+  const { candidates } = useBlossomFallback(img.url);
   const [loaded, setLoaded] = useState(false);
-  // Only set once `src` has been verified to return a real image response.
+  // Only set once a mirror has been verified to return a real image response.
   const [verifiedSrc, setVerifiedSrc] = useState<string | null>(null);
+  const [allFailed, setAllFailed] = useState(false);
 
   // Missing blobs are served by nostr.build as a fixed, always-64096-byte
-  // "image not found" placeholder (and blossom.primal.net from some networks
-  // accepts TCP but never responds). Both make `<img>` fire onLoad/onError
-  // uselessly, so preflight each URL with fetch and only render the <img>
-  // once the server returns a genuine non-placeholder image response. Real
-  // images are re-encoded by nostr.build (e.g. to 512x512), so dimension
-  // checks would wrongly reject them — only the exact placeholder byte size
-  // is treated as a miss.
+  // "image not found" placeholder, and blossom.primal.net (where the account's
+  // originals live) accepts TCP but never responds from some networks — both
+  // make <img> fire onLoad/onError uselessly. So preflight each candidate URL
+  // with fetch and only render the <img> for a genuine non-placeholder image.
+  //
+  // Crucially the mirrors are probed IN PARALLEL: the first mirror that returns
+  // a real image (usually cdn.nostr.build, ~150ms) wins immediately, while the
+  // hung primal request burns its own 8s timeout in the background and is
+  // aborted once a winner is found. Serial probing (the previous behavior)
+  // forced every image to wait out primal's full timeout before the working
+  // mirror was even tried, leaving the gallery blank for 8+ seconds.
   useEffect(() => {
     let cancelled = false;
     setVerifiedSrc(null);
     setLoaded(false);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), LOAD_TIMEOUT_MS);
+    setAllFailed(false);
+
+    const controllers: AbortController[] = [];
+    const probe = (url: string): Promise<boolean> =>
+      new Promise((resolve) => {
+        const ac = new AbortController();
+        controllers.push(ac);
+        const timer = setTimeout(() => ac.abort(), LOAD_TIMEOUT_MS);
+        fetch(url, { signal: ac.signal })
+          .then(async (res) => {
+            clearTimeout(timer);
+            if (!res.ok) return resolve(false);
+            // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
+            // "image not found" placeholder JPEG that is always exactly 64096
+            // bytes. Detect by content length (header when present, body size
+            // otherwise) and treat it as a miss. Real images are re-encoded by
+            // nostr.build (e.g. to 512x512), so dimension checks would wrongly
+            // reject them — only the exact placeholder byte size is a miss.
+            const length = res.headers.get('content-length');
+            if (length === PLACEHOLDER_SIZE) return resolve(false);
+            if (length === null) {
+              const blob = await res.blob();
+              return resolve(blob.size !== Number(PLACEHOLDER_SIZE));
+            }
+            return resolve(true);
+          })
+          .catch(() => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+      });
+
     void (async () => {
-      try {
-        const res = await fetch(src, { signal: controller.signal });
-        if (cancelled) return;
-        if (!res.ok) {
-          onError();
-          return;
-        }
-        // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
-        // "image not found" placeholder JPEG that is always exactly 64096
-        // bytes. Detect it by content length (header when present, body
-        // size otherwise) and treat it as a miss.
-        const PLACEHOLDER_SIZE = '64096';
-        if (res.headers.get('content-length') === PLACEHOLDER_SIZE) {
-          onError();
-          return;
-        }
-        if (res.headers.get('content-length') === null) {
-          const blob = await res.blob();
-          if (blob.size === Number(PLACEHOLDER_SIZE)) {
-            onError();
-            return;
-          }
-        }
-        setVerifiedSrc(src);
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          // Hung connection — skip to the next fallback server.
-          onError();
-        } else {
-          // CORS or network-level failure: we can't preflight this host, so
-          // let <img> try anyway (it may render fine without CORS).
-          setVerifiedSrc(src);
-        }
+      const winner = await new Promise<number | null>((resolve) => {
+        let settled = 0;
+        let done = false;
+        candidates.forEach((url, index) => {
+          probe(url)
+            .then((ok) => {
+              if (done) return;
+              if (ok) {
+                done = true;
+                resolve(index);
+                return;
+              }
+              settled += 1;
+              if (settled === candidates.length) resolve(null);
+            });
+        });
+      });
+      // A winner (or total failure) is known — cancel any probes still in
+      // flight, e.g. the hung primal request.
+      controllers.forEach((ac) => ac.abort());
+      if (cancelled) return;
+      if (winner === null) {
+        setAllFailed(true);
+        return;
       }
+      setVerifiedSrc(candidates[winner]);
     })();
+
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      controllers.forEach((ac) => ac.abort());
     };
-  }, [src, onError]);
-
-  // Once every fallback server has been exhausted, there's no point holding
-  // an empty tile.
-  if (failed && !verifiedSrc) return null;
+  }, [candidates]);
 
   return (
     <button
@@ -471,7 +500,7 @@ function ArtTile({
           <ShieldAlert className="relative size-5 text-muted-foreground" />
         </div>
       )}
-      {!loaded && (
+      {!loaded && !allFailed && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-lg" />
       )}
       {verifiedSrc && (
@@ -480,7 +509,10 @@ function ArtTile({
           alt={img.alt ?? 'Art'}
           loading="lazy"
           onLoad={() => setLoaded(true)}
-          onError={() => onError()}
+          onError={() => {
+            setVerifiedSrc(null);
+            setAllFailed(true);
+          }}
           className={cn(
             'absolute inset-0 h-full w-full transition-opacity duration-200',
             fill ? 'object-contain' : 'object-cover',
@@ -488,7 +520,7 @@ function ArtTile({
           )}
         />
       )}
-      {failed && !verifiedSrc && (
+      {allFailed && !verifiedSrc && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/60"
           aria-label="Artwork unavailable"
