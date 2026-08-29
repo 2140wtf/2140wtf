@@ -68,5 +68,18 @@ export function useBlossomFallback(originalUrl: string) {
     });
   }, [alternatives]);
 
-  return { src, onError, failed: failedRef.current && fallbackIndex >= alternatives.length - 1 };
+  // All candidate URLs (the original plus every mirror Blossom server), used
+  // by callers that want to probe mirrors concurrently instead of stepping
+  // through them serially via onError. Memoized so components can depend on it.
+  const candidates = useMemo(
+    () => [originalUrl, ...alternatives],
+    [originalUrl, alternatives],
+  );
+
+  return {
+    src,
+    onError,
+    failed: failedRef.current && fallbackIndex >= alternatives.length - 1,
+    candidates,
+  };
 }

@@ -11,6 +11,7 @@ import {
   Cat,
   Navigation,
   Newspaper,
+  Images,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 import type { WidgetConfig } from '@/contexts/AppContext';
@@ -48,6 +49,17 @@ export interface WidgetDefinition {
 /** All available widget definitions. */
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   // Discovery
+  {
+    id: 'timechain-art',
+    label: 'Timechain Art',
+    description: 'Latest artwork from Timechain Art Magazine',
+    icon: Images,
+    defaultHeight: 400,
+    minHeight: 260,
+    maxHeight: 700,
+    category: 'discovery',
+    href: 'https://2140.wtf/npub1zrclffvv67nlda0ds8kw755lzm8yy9eavxta54qn4g8wegxzzv3q8amvxc',
+  },
   {
     id: 'trends',
     label: 'Trending',
@@ -205,16 +217,17 @@ export function getWidgetDefinition(id: string): WidgetDefinition | undefined {
   return WIDGET_MAP.get(id);
 }
 
-/** Default widgets shown in the right sidebar for new users. */
+/** Default widgets shown in the sidebar, in presentation order. */
 export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
   { id: 'stacker-news' },
-  { id: 'pets' },
+  { id: 'timechain-art' },
   { id: 'prediction-markets' },
+  { id: 'pets' },
   { id: 'trends' },
 ];
 
 /** Bump this to reset existing users' right-sidebar widgets to the default. */
-export const SIDEBAR_WIDGETS_VERSION = 6;
+export const SIDEBAR_WIDGETS_VERSION = 7;
 
 /** Category labels for display in the picker. */
 export const WIDGET_CATEGORIES: Record<string, string> = {
