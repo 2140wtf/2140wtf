@@ -391,20 +391,68 @@ function ArtTile({
 }) {
   const { src, onError, failed } = useBlossomFallback(img.url);
   const [loaded, setLoaded] = useState(false);
+  // Only set once `src` has been verified to return a real image response.
+  const [verifiedSrc, setVerifiedSrc] = useState<string | null>(null);
 
-  // Some Blossom hosts (e.g. blossom.primal.net from some networks) accept the
-  // TCP connection but never respond, so `onError` never fires and the tile
-  // stays blank. If the image hasn't loaded within 8 s, treat it as failed and
-  // advance to the next fallback server. The timer resets whenever `src`
-  // changes (i.e. after each fallback swap).
+  // Some Blossom hosts answer missing blobs with a 404 status whose body is
+  // still a decodable placeholder JPEG ("image not found" from nostr.build),
+  // and others (blossom.primal.net from some networks) accept the TCP
+  // connection but never respond — in both cases `<img>` fires onLoad/onError
+  // uselessly and the tile shows junk or stays blank. So preflight each URL
+  // with fetch and only render the <img> once the server returned a real
+  // 2xx image response; anything else advances to the next fallback server.
   useEffect(() => {
-    if (loaded) return;
-    const id = setTimeout(onError, LOAD_TIMEOUT_MS);
-    return () => clearTimeout(id);
-  }, [src, loaded, onError]);
+    let cancelled = false;
+    setVerifiedSrc(null);
+    setLoaded(false);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LOAD_TIMEOUT_MS);
+    void (async () => {
+      try {
+        const res = await fetch(src, { signal: controller.signal });
+        if (cancelled) return;
+        if (!res.ok) {
+          onError();
+          return;
+        }
+        // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
+        // "image not found" placeholder JPEG that is always exactly 64096
+        // bytes. Detect it by content length (header when present, body
+        // size otherwise) and treat it as a miss.
+        const PLACEHOLDER_SIZE = '64096';
+        if (res.headers.get('content-length') === PLACEHOLDER_SIZE) {
+          onError();
+          return;
+        }
+        if (res.headers.get('content-length') === null) {
+          const blob = await res.blob();
+          if (blob.size === Number(PLACEHOLDER_SIZE)) {
+            onError();
+            return;
+          }
+        }
+        setVerifiedSrc(src);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          // Hung connection — skip to the next fallback server.
+          onError();
+        } else {
+          // CORS or network-level failure: we can't preflight this host, so
+          // let <img> try anyway (it may render fine without CORS).
+          setVerifiedSrc(src);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [src, onError]);
 
-  // Once every fallback server has 404'd, there's no point holding an empty tile.
-  if (failed && !loaded) return null;
+  // Once every fallback server has been exhausted, there's no point holding
+  // an empty tile.
+  if (failed && !verifiedSrc) return null;
 
   return (
     <button
@@ -425,18 +473,20 @@ function ArtTile({
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-lg" />
       )}
-      <img
-        src={src}
-        alt={img.alt ?? 'Art'}
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        onError={() => onError()}
-        className={cn(
-          'absolute inset-0 h-full w-full transition-opacity duration-200',
-          fill ? 'object-contain' : 'object-cover',
-          loaded ? 'opacity-100' : 'opacity-0',
-        )}
-      />
+      {verifiedSrc && (
+        <img
+          src={verifiedSrc}
+          alt={img.alt ?? 'Art'}
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => onError()}
+          className={cn(
+            'absolute inset-0 h-full w-full transition-opacity duration-200',
+            fill ? 'object-contain' : 'object-cover',
+            loaded ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+      )}
     </button>
   );
 }
