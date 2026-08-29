@@ -242,7 +242,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
-  const [columns, setColumns] = useState<4 | 3 | 2 | 1>(() => {
+  const [columns, setColumns] = useState<3 | 2 | 1>(() => {
     if (typeof window === "undefined") return 2;
     return window.innerWidth < 768 ? 1 : 2;
   });
@@ -585,13 +585,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
             type="single"
             value={String(columns)}
             onValueChange={(v) => {
-              if (v) setColumns(Number(v) as 1 | 2 | 3 | 4);
+              if (v) setColumns(Number(v) as 1 | 2 | 3);
             }}
             variant="outline"
             size="sm"
             className="shrink-0"
           >
-            <ToggleGroupItem value="4" aria-label="4 columns">4</ToggleGroupItem>
             <ToggleGroupItem value="3" aria-label="3 columns">3</ToggleGroupItem>
             <ToggleGroupItem value="2" aria-label="2 columns">2</ToggleGroupItem>
             <ToggleGroupItem value="1" aria-label="1 column">1</ToggleGroupItem>
@@ -635,7 +634,6 @@ export function PredictionMarketsPage(): React.JSX.Element {
             columns === 1 && "grid-cols-1",
             columns === 2 && "grid-cols-2",
             columns === 3 && "grid-cols-3",
-            columns === 4 && "grid-cols-4",
           )}
         >
           {gridItems}
