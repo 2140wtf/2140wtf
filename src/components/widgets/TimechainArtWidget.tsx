@@ -204,7 +204,7 @@ export function TimechainArtWidget({
   // Flatten, de-duplicate globally, drop CW images per policy, cap the grid.
   const images = useMemo(() => {
     const seen = new Set<string>();
-    const all = (events ?? [])
+    return (events ?? [])
       .flatMap((ev) => {
         const cw = getContentWarning(ev);
         const imgs = extractImagesFromEvent(ev);
@@ -219,10 +219,9 @@ export function TimechainArtWidget({
         if (seen.has(img.url)) return false;
         seen.add(img.url);
         return true;
-      });
-    // Newest first so the freshest art tops the grid.
-    all.sort((a, b) => b.createdAt - a.createdAt);
-    return all.slice(0, MAX_IMAGES);
+      })
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, MAX_IMAGES);
   }, [events, config.contentWarningPolicy]);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -336,12 +335,15 @@ export function TimechainArtWidget({
       {/* Attribution strip: artist name + a link to the source note. */}
       <div className="flex items-center justify-between px-1 py-1.5 text-xs text-muted-foreground">
         <Link to={`/${npub}`} className="hover:text-foreground hover:underline">
-          @ {displayName}
+          @{displayName}
         </Link>
         <Link
-          to={`/${sourceNote}`}
+          to={sourceNote ? `/${sourceNote}` : '#'}
           onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1 hover:text-foreground hover:underline"
+          className={cn(
+            'flex items-center gap-1 hover:text-foreground hover:underline',
+            !sourceNote && 'pointer-events-none opacity-50',
+          )}
         >
           Source note
           <ExternalLink className="size-3" />
@@ -402,7 +404,7 @@ function ArtTile({
   const [allFailed, setAllFailed] = useState(false);
 
   // Missing blobs are served by nostr.build as a fixed, always-64096-byte
-  // "image not found" placeholder, and blossom.primal.net (where the account's
+  // "image not found" placeholder JPEG, and blossom.primal.net (where the account's
   // originals live) accepts TCP but never responds from some networks — both
   // make <img> fire onLoad/onError uselessly. So preflight each candidate URL
   // with fetch and only render the <img> for a genuine non-placeholder image.
@@ -558,5 +560,3 @@ function ArtLightboxBottomBar({
     </Link>
   );
 }
-
-
