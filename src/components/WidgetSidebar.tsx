@@ -43,6 +43,8 @@ const RoadstrWidget = lazy(() => import('@/components/widgets/RoadstrWidget').th
 const PhotoWidget = lazy(() => import('@/components/widgets/PhotoWidget').then((m) => ({ default: m.PhotoWidget })));
 const MusicWidget = lazy(() => import('@/components/widgets/MusicWidget').then((m) => ({ default: m.MusicWidget })));
 const FeedWidget = lazy(() => import('@/components/widgets/FeedWidget').then((m) => ({ default: m.FeedWidget })));
+const TimechainArtWidget = lazy(() => import('@/components/widgets/TimechainArtWidget').then((m) => ({ default: m.TimechainArtWidget })));
+
 
 const WidgetPickerDialog = lazy(() => import('@/components/WidgetPickerDialog').then((m) => ({ default: m.WidgetPickerDialog })));
 
@@ -76,6 +78,8 @@ function WidgetContent({ id }: { id: string }) {
       return <FeedWidget kinds={[30023]} feedPath="/articles" feedLabel="View all articles" />;
     case 'feed:events':
       return <FeedWidget kinds={[31922, 31923]} feedPath="/events" feedLabel="View all events" />;
+    case 'timechain-art':
+      return <TimechainArtWidget />;
 
     default:
       return <p className="text-xs text-muted-foreground p-1">Unknown widget.</p>;

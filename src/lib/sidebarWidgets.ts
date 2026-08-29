@@ -11,6 +11,7 @@ import {
   Cat,
   Navigation,
   Newspaper,
+  Images,
 } from 'lucide-react';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 import type { WidgetConfig } from '@/contexts/AppContext';
@@ -48,6 +49,17 @@ export interface WidgetDefinition {
 /** All available widget definitions. */
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   // Discovery
+  {
+    id: 'timechain-art',
+    label: 'Timechain Art',
+    description: 'Latest artwork from Timechain Art Magazine',
+    icon: Images,
+    defaultHeight: 400,
+    minHeight: 260,
+    maxHeight: 700,
+    category: 'discovery',
+    href: 'https://2140.wtf/npub1zrclffvv67nlda0ds8kw755lzm8yy9eavxta54qn4g8wegxzzv3q8amvxc',
+  },
   {
     id: 'trends',
     label: 'Trending',
