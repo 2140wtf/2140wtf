@@ -235,8 +235,11 @@ export async function deriveEncryptionKey(seedPhrase: string): Promise<CryptoKey
   const seed = deriveMasterKey(seedPhrase);
   try {
     const keyBytes = hkdf(sha256, seed, new Uint8Array(0), new TextEncoder().encode(PROOF_ENCRYPTION_INFO), 32);
-    const keyBuf = keyBytes.buffer.slice(keyBytes.byteOffset, keyBytes.byteOffset + keyBytes.byteLength) as ArrayBuffer;
-    return await importAesKey(keyBuf);
+    // Pass the Uint8Array view, not a sliced ArrayBuffer: Node's webcrypto
+    // brand-checks raw ArrayBuffers against its own vm realm, which rejects
+    // buffers created in other realms (e.g. inside vitest/jsdom). Typed-array
+    // views are accepted regardless of realm.
+    return await importAesKey(keyBytes);
   } finally {
     secureZero(seed);
   }
