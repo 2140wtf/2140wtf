@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Gavel, Loader2, X } from 'lucide-react';
+import { useState } from 'react';
+import { Gavel, Loader2 } from 'lucide-react';
 
 import {
   Dialog,

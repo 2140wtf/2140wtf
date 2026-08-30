@@ -8,7 +8,6 @@ import {
   auctionAddress,
   dedupeAuctionListings,
   parseAuctionBid,
-  parseAuctionListing,
   summarizeBids,
   type AuctionBid,
   type AuctionListing,
