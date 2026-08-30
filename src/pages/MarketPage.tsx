@@ -15,6 +15,8 @@ import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
 import { AuctionCard } from '@/components/marketplace/AuctionCard';
 import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
 import { ProductListingComposeDialog } from '@/components/marketplace/ProductListingComposeDialog';
+import LoginDialog from '@/components/auth/LoginDialog';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthors, type AuthorData } from '@/hooks/useAuthors';
@@ -81,6 +83,8 @@ export function MarketPage(): React.JSX.Element {
   });
 
   const { user } = useCurrentUser();
+  const { startSignup } = useOnboarding();
+  const [loginOpen, setLoginOpen] = useState(false);
   const [category, setCategory] = useState<ListingCategoryValue | 'all'>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortValue>('newest');
@@ -321,22 +325,27 @@ export function MarketPage(): React.JSX.Element {
             <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
+          {/* Design auction — visible to everyone; prompts login when logged out. */}
+          <Button
+            className="h-9 shrink-0 rounded-full px-3"
+            variant="outline"
+            onClick={() => {
+              if (!user) {
+                setLoginOpen(true);
+                return;
+              }
+              setAuctionOpen(true);
+            }}
+            aria-label="Design auction"
+          >
+            <Gavel className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Design auction</span>
+          </Button>
           {user && (
-            <>
-              <Button
-                className="h-9 shrink-0 rounded-full px-3"
-                variant="outline"
-                onClick={() => setAuctionOpen(true)}
-                aria-label="Design auction"
-              >
-                <Gavel className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Design auction</span>
-              </Button>
-              <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
-                <Plus className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">List product</span>
-              </Button>
-            </>
+            <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
+              <Plus className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">List product</span>
+            </Button>
           )}
         </div>
 
@@ -369,6 +378,16 @@ export function MarketPage(): React.JSX.Element {
         onSuccess={() => {
           setView('auctions');
           refetchAuctions();
+        }}
+      />
+
+      <LoginDialog
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={() => setLoginOpen(false)}
+        onSignupClick={() => {
+          setLoginOpen(false);
+          startSignup();
         }}
       />
     </main>
