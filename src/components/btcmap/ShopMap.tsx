@@ -149,7 +149,7 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
-  const prevShopCount = useRef(0);
+  const initialFitDoneRef = useRef(false);
   const prevSelected = useRef<string | null>(null);
   const prevRadius = useRef<number | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -423,22 +423,29 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
       }
     }
 
-    // Fit bounds when filter changes (shop count changes significantly).
-    // Skip when a country is selected — the country effect handles zooming.
-    if (countryFilter === 'all' && shops.length > 0 && Math.abs(shops.length - prevShopCount.current) > 5) {
-      // Make sure the map knows its real size BEFORE fitting: a fit computed
-      // against a still-settling (0-size) container produces a view that looks
-      // blank/unloaded until the user hits Reset. If the size isn't in yet we
-      // skip the fit entirely and keep the sane initial world view — the
-      // deferred invalidateSize() timers in the init effect will re-render it.
+    // Fit bounds ONCE on the initial load of the full (worldwide) dataset.
+    // This must NOT fire on viewport-driven changes: getShops already trims
+    // visibleShops to the current viewportBbox, so a pan/zoom changes the
+    // filtered count by thousands. Re-running fitBounds on that creates a
+    // feedback loop (refit moves the viewport -> bounds change event -> refit)
+    // that fights the user's zoom and constantly snaps the map back to the
+    // global view. Country view resets are handled by the country-filter
+    // effect above; the Reset button and the initial center+zoom=2 cover the
+    // rest. Only "all" gets an initial fit here (it's skipped per-country).
+    if (countryFilter === 'all' && !initialFitDoneRef.current && shops.length > 0) {
+      // Invalidate first so a fit against a still-settling (0-size) container
+      // is never produced. If the size isn't in yet we skip the fit but leave
+      // initialFitDoneRef false so this retries on the next shops change (which
+      // happens naturally once the layout-settle invalidateSize timers and the
+      // initial bounds report land) and on the ResizeObserver callback.
       map.invalidateSize();
       const size = map.getSize();
       if (size.x > 0 && size.y > 0) {
         const bounds = L.latLngBounds(shops.map(s => [s.lat, s.lon]));
         map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+        initialFitDoneRef.current = true;
       }
     }
-    prevShopCount.current = shops.length;
   }, [shops, userLocation, theme, countryFilter]);
 
   // Pan + zoom when a specific shop is selected from the list
