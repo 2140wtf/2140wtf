@@ -195,8 +195,13 @@ export function buildAuctionEvent(input: {
   categories?: string[];
   startingSats: number;
   buyNowSats?: number;
-  /** Auction duration in hours (clamped to [1, 720]). */
+  /** Auction duration in hours (clamped to [1, 720]). Ignored when closesAt is set. */
   durationHours: number;
+  /**
+   * Exact close time in unix seconds (minute precision from the UI). When set,
+   * it overrides durationHours; must be in the future and within the 30-day cap.
+   */
+  closesAt?: number;
   /** Unix seconds when the auction is created. */
   now: number;
 }): {
@@ -205,11 +210,18 @@ export function buildAuctionEvent(input: {
   tags: string[][];
   created_at: number;
 } {
-  const duration = Math.max(
-    1,
-    Math.min(MAX_AUCTION_DURATION_HOURS, Math.round(input.durationHours)),
-  );
-  const closesAt = input.now + duration * 3600;
+  const now = input.now;
+  let closesAt: number;
+  if (input.closesAt !== undefined) {
+    // Exact end time wins; clamp into [now + 1min, now + 30d].
+    closesAt = Math.max(now + 60, Math.min(now + MAX_AUCTION_DURATION_HOURS * 3600, Math.round(input.closesAt)));
+  } else {
+    const duration = Math.max(
+      1,
+      Math.min(MAX_AUCTION_DURATION_HOURS, Math.round(input.durationHours)),
+    );
+    closesAt = now + duration * 3600;
+  }
 
   const tags: string[][] = [
     ['d', input.dTag],

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Gavel, Loader2 } from 'lucide-react';
 
 import {
@@ -36,6 +36,36 @@ const DURATION_OPTIONS = [
   { value: 168, label: '7 days' },
 ];
 
+/** Format the exact close time for the live preview line. */
+const CLOSE_FMT = new Intl.DateTimeFormat(undefined, {
+  weekday: 'short',
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZoneName: 'short',
+});
+
+/** Local-time offset of a date relative to UTC, e.g. "+02:00" (for datetime-local). */
+function localIsoOffset(d: Date): string {
+  const pad = (n: number) => String(Math.abs(n)).padStart(2, '0');
+  const sign = d.getTimezoneOffset() <= 0 ? '+' : '-';
+  return `${sign}${pad(Math.floor(Math.abs(d.getTimezoneOffset()) / 60))}:${pad(Math.abs(d.getTimezoneOffset()) % 60)}`;
+}
+
+/** Unix seconds → "YYYY-MM-DDTHH:mm" in local time (for <input type=datetime-local>). */
+function toLocalInputValue(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** "YYYY-MM-DDTHH:mm" (local) → unix seconds. */
+function fromLocalInputValue(value: string): number {
+  return Math.floor(new Date(value).getTime() / 1000);
+}
+
 /**
  * Seller-facing "Design auction" dialog.
  *
@@ -64,6 +94,15 @@ export function CreateAuctionDialog({
   const [startingSats, setStartingSats] = useState('');
   const [buyNowSats, setBuyNowSats] = useState('');
   const [durationHours, setDurationHours] = useState<number>(DEFAULT_AUCTION_DURATION_HOURS);
+  // Exact close time (local input value "YYYY-MM-DDTHH:mm"). Empty = use duration preset.
+  const [closeAtInput, setCloseAtInput] = useState('');
+  // Ticks every second so the countdown preview stays exact.
+  const [nowTick, setNowTick] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    if (!open) return;
+    const id = setInterval(() => setNowTick(Math.floor(Date.now() / 1000)), 1_000);
+    return () => clearInterval(id);
+  }, [open]);
 
   // Re-apply prefill each time the dialog opens (deep-link/entry-point support).
   const [wasOpen, setWasOpen] = useState(false);
@@ -75,17 +114,24 @@ export function CreateAuctionDialog({
     setStartingSats('');
     setBuyNowSats('');
     setDurationHours(DEFAULT_AUCTION_DURATION_HOURS);
+    setCloseAtInput(toLocalInputValue(Math.floor(Date.now() / 1000) + DEFAULT_AUCTION_DURATION_HOURS * 3600));
   } else if (!open && wasOpen) {
     setWasOpen(false);
   }
 
   const starting = Number(startingSats.replace(/,/g, ''));
   const buyNow = buyNowSats ? Number(buyNowSats.replace(/,/g, '')) : NaN;
+  // Exact close time wins when set; falls back to the duration preset.
+  const exactCloseSats = closeAtInput ? fromLocalInputValue(closeAtInput) : NaN;
+  const closesAt = Number.isSafeInteger(exactCloseSats) && exactCloseSats > nowTick
+    ? exactCloseSats
+    : nowTick + Math.max(1, Math.round(durationHours)) * 3600;
   const formValid =
     title.trim().length > 0 &&
     Number.isSafeInteger(starting) &&
     starting >= 0 &&
-    (buyNowSats === '' || (Number.isSafeInteger(buyNow) && buyNow > starting));
+    (buyNowSats === '' || (Number.isSafeInteger(buyNow) && buyNow > starting)) &&
+    (!closeAtInput || (Number.isSafeInteger(exactCloseSats) && exactCloseSats > nowTick));
 
   const canPublish = !!user && formValid && !isPublishing;
 
@@ -103,6 +149,7 @@ export function CreateAuctionDialog({
         startingSats: starting,
         buyNowSats: Number.isSafeInteger(buyNow) ? buyNow : undefined,
         durationHours,
+        closesAt: closeAtInput ? closesAt : undefined,
         now: Math.floor(Date.now() / 1000),
       });
 
@@ -194,14 +241,49 @@ export function CreateAuctionDialog({
                 <Button
                   key={opt.value}
                   type="button"
-                  variant={durationHours === opt.value ? 'default' : 'outline'}
+                  variant={!closeAtInput && durationHours === opt.value ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => setDurationHours(opt.value)}
+                  onClick={() => {
+                    setDurationHours(opt.value);
+                    setCloseAtInput(toLocalInputValue(Math.floor(Date.now() / 1000) + opt.value * 3600));
+                  }}
                 >
                   {opt.label}
                 </Button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="auction-close">Exact end (date &amp; time, to the minute)</Label>
+            <Input
+              id="auction-close"
+              type="datetime-local"
+              step={60}
+              value={closeAtInput}
+              min={toLocalInputValue(nowTick + 60)}
+              max={toLocalInputValue(nowTick + 30 * 24 * 3600)}
+              onChange={(e) => setCloseAtInput(e.target.value)}
+            />
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {closeAtInput && Number.isSafeInteger(exactCloseSats) && exactCloseSats > nowTick ? (
+                <>
+                  Ends exactly:{' '}
+                  <span className="font-medium text-foreground">{CLOSE_FMT.format(new Date(closesAt * 1000))}</span>
+                  {' — '}
+                  {(() => {
+                    const s = closesAt - nowTick;
+                    const d = Math.floor(s / 86400);
+                    const h = Math.floor((s % 86400) / 3600);
+                    const m = Math.floor((s % 3600) / 60);
+                    const sec = s % 60;
+                    return d > 0 ? `${d}d ${h}h ${m}m ${sec}s left` : h > 0 ? `${h}h ${m}m ${sec}s left` : `${m}m ${sec}s left`;
+                  })()}
+                </>
+              ) : (
+                'Pick an exact end time, or use a duration preset above.'
+              )}
+            </p>
           </div>
 
           <p className="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
