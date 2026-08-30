@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPin, ShoppingCart, Tag, User, MessageCircle, Box, Truck, Download, ImageOff } from 'lucide-react';
+import { MapPin, ShoppingCart, Tag, User, MessageCircle, Box, Truck, Download, ImageOff, Gavel } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
@@ -24,6 +24,7 @@ import { useOnboarding } from '@/hooks/useOnboarding';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { CreateOrderDialog } from '@/components/CreateOrderDialog';
+import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
 import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, type Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +69,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
   const { toast } = useToast();
   const [detailOpen, setDetailOpen] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
+  const [auctionOpen, setAuctionOpen] = useState(false);
 
   const metadata = author?.metadata;
   const displayName = metadata?.display_name || metadata?.name || `${listing.pubkey.slice(0, 8)}…`;
@@ -356,6 +358,16 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   {markSold.isPending ? 'Updating…' : 'Mark as sold'}
                 </Button>
               )}
+              {isSeller && listing.status === 'active' && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setAuctionOpen(true)}
+                >
+                  <Gavel className="w-4 h-4 mr-2" />
+                  Design auction
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -367,6 +379,18 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
           open={buyOpen}
           onOpenChange={setBuyOpen}
           onCreated={handleCreated}
+        />
+      )}
+
+      {isSeller && (
+        <CreateAuctionDialog
+          open={auctionOpen}
+          onOpenChange={setAuctionOpen}
+          initialTitle={listing.title}
+          initialSummary={listing.summary || undefined}
+          initialContent={listing.content || undefined}
+          initialImages={listing.images}
+          initialCategories={listing.categories}
         />
       )}
 
