@@ -141,17 +141,45 @@ function previewText(env: Envelope): string {
 //                salted sha256 — linkable across messages, not to the key
 //   - "anon"   : pure burner (protocol default)
 
+// Identity preferences are scoped PER ACCOUNT (the app supports multiple
+// stored logins): `2140:bao-social-identity-mode-v1:<pubkey>` and
+// `2140:bao-social-npub-v1:<pubkey>`. The legacy unscoped keys are read once
+// for migration and then retired, so a second account can never inherit the
+// first one's identity preferences.
 const IDENTITY_MODE_KEY = "2140:bao-social-identity-mode-v1";
 type IdentityMode = "nip05" | "hashed" | "anon";
 
-function loadIdentityMode(): IdentityMode {
+function isIdentityMode(v: string | null): v is IdentityMode {
+  return v === "nip05" || v === "hashed" || v === "anon";
+}
+
+/** Account-scoped identity mode; falls back to the legacy browser-wide key. */
+function loadIdentityModeFor(pubkey: string | undefined): IdentityMode {
   try {
-    const v = localStorage.getItem(IDENTITY_MODE_KEY);
-    if (v === "nip05" || v === "hashed" || v === "anon") return v;
+    if (pubkey) {
+      const scoped = localStorage.getItem(`${IDENTITY_MODE_KEY}:${pubkey}`);
+      if (isIdentityMode(scoped)) return scoped;
+    }
+    const legacy = localStorage.getItem(IDENTITY_MODE_KEY);
+    if (isIdentityMode(legacy)) return legacy;
   } catch {
     /* best-effort */
   }
   return "hashed";
+}
+
+/** Account-scoped manual npub; falls back to the legacy browser-wide key. */
+function loadNpubFor(pubkey: string | undefined): string {
+  try {
+    if (pubkey) {
+      const scoped = localStorage.getItem(`${NPUB_KEY}:${pubkey}`);
+      if (scoped !== null) return scoped;
+    }
+    return localStorage.getItem(NPUB_KEY) ?? "";
+  } catch {
+    /* best-effort */
+  }
+  return "";
 }
 
 /** Stable pseudonym from the account pubkey via a salted sha256 — linkable
@@ -273,6 +301,8 @@ export function BaoCommunitiesPage() {
 /** The chat client itself — mounted only for authed users. */
 function BaoSocialChatClient() {
   const { user, metadata } = useCurrentUser();
+  // Identity preferences are scoped to this account (see loadIdentityModeFor).
+  const accountPubkey = user?.pubkey;
   const nip05 = typeof metadata?.nip05 === "string" && metadata.nip05.trim() !== "" ? metadata.nip05 : undefined;
   const { data: nip05Verified } = useNip05Verify(nip05, user?.pubkey);
 
@@ -312,20 +342,44 @@ function BaoSocialChatClient() {
     // The manual npub is anon-mode-scoped: only seed the persisted value when
     // the persisted mode is actually "anon", so a previously typed npub can
     // never silently re-attach in hashed/nip05 mode (privacy).
-    if (loadIdentityMode() !== "anon") return "";
-    return localStorage.getItem(NPUB_KEY) ?? "";
+    if (loadIdentityModeFor(accountPubkey) !== "anon") return "";
+    return loadNpubFor(accountPubkey);
   });
   const [joinLinkInput, setJoinLinkInput] = useState("");
   const [showIdentity, setShowIdentity] = useState(false);
-  const [identityMode, setIdentityMode] = useState<IdentityMode>(loadIdentityMode);
+  const [identityMode, setIdentityMode] = useState<IdentityMode>(() => loadIdentityModeFor(accountPubkey));
   const [roomsCollapsed, setRoomsCollapsed] = useState(false);
 
   // ── Identity module (shown on EVERY entry, 2140.social parity) ────────────
   // Default per session: the hashed pseudonym. The npubInput used on the wire
   // is DERIVED from the mode — manual npub entry is folded into the module.
+
+  // One-time per-account migration: copy the legacy browser-wide identity
+  // preferences into this account's scope, then retire the unscoped keys.
+  useEffect(() => {
+    if (!accountPubkey) return;
+    try {
+      const modeKey = `${IDENTITY_MODE_KEY}:${accountPubkey}`;
+      const npubKey = `${NPUB_KEY}:${accountPubkey}`;
+      if (localStorage.getItem(modeKey) === null) {
+        const legacy = localStorage.getItem(IDENTITY_MODE_KEY);
+        if (legacy !== null) localStorage.setItem(modeKey, legacy);
+      }
+      if (localStorage.getItem(npubKey) === null) {
+        const legacyNpub = localStorage.getItem(NPUB_KEY);
+        if (legacyNpub !== null) localStorage.setItem(npubKey, legacyNpub);
+      }
+      localStorage.removeItem(IDENTITY_MODE_KEY);
+      localStorage.removeItem(NPUB_KEY);
+    } catch {
+      /* best-effort */
+    }
+  }, [accountPubkey]);
+
   useEffect(() => {
     try {
-      localStorage.setItem(IDENTITY_MODE_KEY, identityMode);
+      const modeKey = accountPubkey ? `${IDENTITY_MODE_KEY}:${accountPubkey}` : IDENTITY_MODE_KEY;
+      localStorage.setItem(modeKey, identityMode);
     } catch {
       /* best-effort */
     }
@@ -336,12 +390,13 @@ function BaoSocialChatClient() {
     if (identityMode !== "anon") {
       setNpubInput("");
       try {
-        localStorage.removeItem(NPUB_KEY);
+        const npubKey = accountPubkey ? `${NPUB_KEY}:${accountPubkey}` : NPUB_KEY;
+        localStorage.removeItem(npubKey);
       } catch {
         /* best-effort */
       }
     }
-  }, [identityMode]);
+  }, [identityMode, accountPubkey]);
 
   /** What actually rides the envelope for the current mode. `undefined` =
    *  anonymous — nothing is attached. nip05 mode only attaches a VERIFIED
@@ -915,7 +970,8 @@ function BaoSocialChatClient() {
                       onChange={(event) => {
                         setNpubInput(event.target.value);
                         try {
-                          localStorage.setItem(NPUB_KEY, event.target.value);
+                          const npubKey = accountPubkey ? `${NPUB_KEY}:${accountPubkey}` : NPUB_KEY;
+                          localStorage.setItem(npubKey, event.target.value);
                         } catch {
                           /* best-effort */
                         }
