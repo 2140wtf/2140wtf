@@ -4,6 +4,9 @@
 //
 // Generates an ephemeral seller keypair and publishes a demo auction. Safe:
 // it's a throwaway keypair, so nobody "owns" it afterward.
+//
+// Demo values are kept minimal (1 sat start, 21 sats buy-now) so people can
+// actually participate with tiny Cashu amounts during testing.
 import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 import { SimplePool } from 'nostr-tools';
 
@@ -27,13 +30,11 @@ const eventTemplate = {
     ['d', 'demo-auction-' + now],
     ['title', 'Demo Auction — Vintage Bitcoin Poster'],
     ['summary', 'Rare 2013 poster from the Berlin Bitcoin Kiez. Cashu escrow only.'],
-    ['t', 'marketplace'],
     ['t', 'auction'],
     ['auction', 'auction'],
-    ['price', '21000', 'sat'],
-    ['buy-now', '210000', 'sat'],
+    ['price', '1', 'sat'],
+    ['buy_now', '21'],
     ['close', String(closesAt)],
-    ['buy_now', '210000'],
     ['image', 'https://cdn.nostr.build/p/demo-auction-1.jpg'],
   ],
   content: 'Rare 2013 poster from the Berlin Bitcoin Kiez.\n\nCashu escrow only — bids lock real sats via NUT-11 P2PK. Losing bids refund automatically.',
