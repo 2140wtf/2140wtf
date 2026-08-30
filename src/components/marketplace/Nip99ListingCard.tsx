@@ -221,12 +221,50 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
               </Avatar>
               <span className="text-xs text-muted-foreground truncate">{displayName}</span>
             </div>
-            {listing.location && (
-              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                <MapPin className="w-3 h-3" />
-                <span className="truncate max-w-[80px]">{listing.location}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {listing.location && (
+                <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                  <MapPin className="w-3 h-3" />
+                  <span className="truncate max-w-[80px]">{listing.location}</span>
+                </div>
+              )}
+              {listing.status === 'active' && (
+                <button
+                  type="button"
+                  aria-label={`Design auction for ${listing.title}`}
+                  title={
+                    user
+                      ? isSeller
+                        ? 'Design auction from this listing'
+                        : 'Log in as the seller to design an auction for this item'
+                      : 'Log in to design an auction'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!user) {
+                      toast({
+                        title: 'Log in required',
+                        description: 'You need to log in to design an auction for this item.',
+                      });
+                      setLoginOpen(true);
+                      return;
+                    }
+                    if (isSeller) {
+                      setAuctionOpen(true);
+                    } else {
+                      toast({
+                        title: 'Not your listing',
+                        description: 'Only the seller of this item can design an auction for it.',
+                      });
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-500"
+                >
+                  <Gavel className="size-3" />
+                  Auction
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
