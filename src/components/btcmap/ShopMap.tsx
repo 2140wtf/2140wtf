@@ -177,6 +177,11 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
       zoomControl: false,
       attributionControl: false,
       preferCanvas: true,
+      // Native zoom (pinch-to-zoom) is enabled by default on Leaflet 1.x for
+      // touch devices via the built-in TouchZoom handler. We don't disable it,
+      // so two-finger gestures work out of the box on iOS/Android once the
+      // viewport meta and touch-action CSS permit them (see index.html &
+      // the <style> block below).
     });
 
     const tileUrl = tileUrlFor(theme);
@@ -502,6 +507,16 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
         }
         .leaflet-container {
           background: ${theme === 'dark' ? '#0c0a09' : '#fafaf9'} !important;
+        }
+        /* Mobile pinch-zoom gate. Leaflet sets touch-action conditionally via
+           its own CSS classes (.leaflet-touch-drag / .leaflet-touch-zoom), but
+           that only applies *after* the handler initialises. Declaring it
+           unconditionally here guarantees the browser permits two-finger
+           pinch gestures from first touch — without it, some mobile browsers
+           suppress the multi-touch touchmove events that Leaflet's pinch
+           handler needs, making the map un-zoomable by gesture. */
+        .leaflet-container {
+          touch-action: none;
         }
       `}</style>
       <div className="relative w-full h-full">
