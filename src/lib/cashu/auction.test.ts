@@ -5,6 +5,7 @@ import {
   auctionAddress,
   buildAuctionEvent,
   buildBidEvent,
+  canBuyNow,
   dedupeAuctionListings,
   isAuctionClosed,
   parseAuctionBid,
@@ -183,6 +184,51 @@ describe('isAuctionClosed / validateBidAmount', () => {
 
   it('accepts a valid bid', () => {
     expect(validateBidAmount(2000, auction, null, NOW)).toBeNull();
+  });
+});
+
+describe('canBuyNow', () => {
+  const auction = parseAuctionListing(makeAuction())!; // buy_now = 50000, closes NOW+3600
+
+  it('is available when buy-now price set and auction active with no bids', () => {
+    expect(canBuyNow(auction, null, NOW)).toBe(true);
+  });
+
+  it('is unavailable when no buy-now price set', () => {
+    const noBuyNow = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+    ] }))!;
+    expect(canBuyNow(noBuyNow, null, NOW)).toBe(false);
+  });
+
+  it('is unavailable after close', () => {
+    expect(canBuyNow(auction, null, NOW + 3600)).toBe(false);
+  });
+
+  it('is unavailable once highest bid reaches buy-now price', () => {
+    const atBuyNow = { eventId: 'x', pubkey: BIDDER2, amountSats: 50000, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, atBuyNow, NOW)).toBe(false);
+  });
+
+  it('is available while highest bid is below buy-now price', () => {
+    const below = { eventId: 'x', pubkey: BIDDER2, amountSats: 49999, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, below, NOW)).toBe(true);
+  });
+
+  it('is unavailable for sold auctions', () => {
+    expect(canBuyNow({ ...auction, status: 'sold' }, null, NOW)).toBe(false);
+  });
+
+  it('allows a bid exactly at the buy-now price (Buy It Now flow)', () => {
+    expect(validateBidAmount(50000, auction, null, NOW)).toBeNull();
+    // After that bid lands, Buy It Now must disappear (bidding reached it).
+    const atBuyNow = { eventId: 'x', pubkey: BIDDER2, amountSats: 50000, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, atBuyNow, NOW)).toBe(false);
+    // ...but the bid itself stays valid against the closed floor.
+    expect(validateBidAmount(50000, auction, atBuyNow, NOW)).toMatch(/at least 50,001/);
   });
 });
 
