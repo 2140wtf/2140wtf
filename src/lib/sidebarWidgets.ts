@@ -48,7 +48,7 @@ export interface WidgetDefinition {
 
 /** All available widget definitions. */
 export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
-  // Discovery
+  // Discovery (order per spec: Timechain Art → BAO MARKETS → NOSTR PETS)
   {
     id: 'timechain-art',
     label: 'Timechain Art',
@@ -59,6 +59,17 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 700,
     category: 'discovery',
     href: 'https://2140.wtf/npub1zrclffvv67nlda0ds8kw755lzm8yy9eavxta54qn4g8wegxzzv3q8amvxc',
+  },
+  {
+    id: 'prediction-markets',
+    label: '₿AO MARKETS',
+    description: 'Kind 38000 prediction markets from ₿AO',
+    icon: BarChart3,
+    defaultHeight: 360,
+    minHeight: 250,
+    maxHeight: 650,
+    category: 'discovery',
+    href: '/bao/markets',
   },
   {
     id: 'trends',
@@ -116,19 +127,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     href: '/trends',
   },
   {
-    id: 'prediction-markets',
-    label: '₿AO MARKETS',
-    description: 'Kind 38000 prediction markets from ₿AO',
-    icon: BarChart3,
-    defaultHeight: 360,
-    minHeight: 250,
-    maxHeight: 650,
-    category: 'discovery',
-    href: '/bao/markets',
-  },
-  {
     id: 'roadstr',
-
     label: 'Roadstr',
     description: 'Nearby road event reports with quick confirmations',
     icon: Navigation,
@@ -137,6 +136,17 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 700,
     category: 'discovery',
     href: '/roadstr',
+  },
+  {
+    id: 'pets',
+    label: 'NOSTR PETS',
+    description: 'Your NOSTR PETS companion, quick actions, and daily bounties',
+    icon: Cat,
+    defaultHeight: 360,
+    minHeight: 250,
+    maxHeight: 700,
+    category: 'personal',
+    href: '/pets',
   },
 
   // Personal
@@ -150,17 +160,6 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
     maxHeight: 120,
     category: 'personal',
     href: '/profile',
-  },
-  {
-    id: 'pets',
-    label: 'NOSTR PETS',
-    description: 'Your NOSTR PETS companion, quick actions, and daily bounties',
-    icon: Cat,
-    defaultHeight: 360,
-    minHeight: 250,
-    maxHeight: 700,
-    category: 'personal',
-    href: '/pets',
   },
   // Content feeds
   {
@@ -228,7 +227,7 @@ export const DEFAULT_SIDEBAR_WIDGETS: WidgetConfig[] = [
 ];
 
 /** Bump this to reset existing users' right-sidebar widgets to the default. */
-export const SIDEBAR_WIDGETS_VERSION = 7;
+export const SIDEBAR_WIDGETS_VERSION = 8;
 
 /** Category labels for display in the picker. */
 export const WIDGET_CATEGORIES: Record<string, string> = {
