@@ -170,6 +170,10 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     const map = L.map(containerRef.current, {
       center: [20, 0],
       zoom: 2,
+      // Match the tile layer's max (19) so the +/- buttons can zoom all the
+      // way in to street-level detail — no artificial ceiling at the Leaflet
+      // default of 18.
+      maxZoom: 19,
       zoomControl: false,
       attributionControl: false,
       preferCanvas: true,
