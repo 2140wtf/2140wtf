@@ -222,7 +222,19 @@ export function MarketPage(): React.JSX.Element {
 
   return (
     <main>
-      <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />} />
+      <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />}>
+        {/* Search lives in the header row so it can use the full remaining width. */}
+        <div className="relative flex-1 max-w-md ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search listings…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-full pl-9"
+          />
+        </div>
+      </PageHeader>
 
       <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
@@ -256,17 +268,6 @@ export function MarketPage(): React.JSX.Element {
               <Gavel className="size-3.5" />
               Auctions
             </button>
-          </div>
-
-          <div className="relative min-w-16 flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search listings…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-full pl-9"
-            />
           </div>
 
           <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
