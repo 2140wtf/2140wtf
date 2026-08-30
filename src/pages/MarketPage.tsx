@@ -222,6 +222,13 @@ export function MarketPage(): React.JSX.Element {
 
       <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {/* Experimental badge — auctions are in beta. */}
+          <span
+            className="hidden shrink-0 items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-500 md:inline-flex"
+            title="Experimental — auctions are in beta and escrow flows are still being tested"
+          >
+            Experimental Tech — For Testing Purposes Only
+          </span>
           {/* Listings / Auctions view toggle. */}
           <div className="flex shrink-0 rounded-full border border-border p-0.5">
             <button
