@@ -1,5 +1,10 @@
 // Dump imeta tags from the Timechain Art Magazine's recent kind-1 notes so we
 // can see how broken images (#1 #6 #13) differ from working ones.
+// Node < 22 has no global WebSocket — polyfill from `ws` (available via playwright's deps).
+import WS from 'ws';
+if (typeof globalThis.WebSocket === 'undefined') {
+  globalThis.WebSocket = WS;
+}
 const NPUB = 'npub1zrclffvv67nlda0ds8kw755lzm8yy9eavxta54qn4g8wegxzzv3q8amvxc';
 
 import('nostr-tools').then(({ nip19 }) => {
@@ -12,24 +17,39 @@ function main(pubkey) {
 console.log('pubkey:', pubkey);
 
 const relays = ['wss://relay.damus.io', 'wss://nos.lol', 'wss://nostr.wine', 'wss://relay.nostr.band'];
-const ws = new WebSocket(relays[0]);
 const events = new Map();
-ws.onopen = () => {
-  ws.send(JSON.stringify(['REQ', 'art', { kinds: [1], authors: [pubkey], limit: 60 }]));
-};
-ws.onmessage = (m) => {
-  const msg = JSON.parse(m.data);
-  if (msg[0] === 'EVENT') {
-    const ev = msg[2];
-    if (!events.has(ev.id)) events.set(ev.id, ev);
-  }
-  if (msg[0] === 'EOSE') {
-    ws.close();
+
+let relayIdx = 0;
+let ws = null;
+function connect(i) {
+  if (i >= relays.length) {
+    console.error('All relays failed');
     report();
+    return;
   }
-};
-ws.onerror = (e) => { console.error('WS error', e.message ?? e); process.exit(1); };
-setTimeout(() => { ws.close(); report(); }, 15000);
+  console.log(`connecting ${relays[i]} ...`);
+  ws = new WebSocket(relays[i]);
+  ws.onopen = () => {
+    ws.send(JSON.stringify(['REQ', 'art', { kinds: [1], authors: [pubkey], limit: 60 }]));
+  };
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg[0] === 'EVENT') {
+      const ev = msg[2];
+      if (!events.has(ev.id)) events.set(ev.id, ev);
+    }
+    if (msg[0] === 'EOSE') {
+      ws.close();
+      report();
+    }
+  };
+  ws.onerror = (e) => {
+    console.error(`WS error on ${relays[i]}:`, e.message ?? e);
+    connect(i + 1);
+  };
+}
+connect(relayIdx);
+setTimeout(() => { try { ws.close(); } catch { /* already closed */ } report(); }, 15000);
 
 function report() {
   const evs = [...events.values()].sort((a, b) => b.created_at - a.created_at);
