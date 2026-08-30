@@ -358,11 +358,21 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   {markSold.isPending ? 'Updating…' : 'Mark as sold'}
                 </Button>
               )}
-              {isSeller && listing.status === 'active' && (
+              {(!isSeller || listing.status === 'active') && (
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => setAuctionOpen(true)}
+                  onClick={() => {
+                    if (!user) {
+                      toast({
+                        title: 'Log in required',
+                        description: 'You need to log in to design an auction for this item.',
+                      });
+                      setLoginOpen(true);
+                      return;
+                    }
+                    if (isSeller) setAuctionOpen(true);
+                  }}
                 >
                   <Gavel className="w-4 h-4 mr-2" />
                   Design auction
@@ -382,7 +392,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
         />
       )}
 
-      {isSeller && (
+      {user && isSeller && (
         <CreateAuctionDialog
           open={auctionOpen}
           onOpenChange={setAuctionOpen}
