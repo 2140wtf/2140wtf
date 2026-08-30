@@ -16,8 +16,9 @@ import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { validateBidAmount, type AuctionBid, type AuctionListing } from '@/lib/cashu/auction';
-import { buildMultisigEscrowLock, MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
+import { validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
+import { savePendingBidDeposit } from '@/lib/cashu/auctionSettlement';
+import { MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
 import { formatSats } from '@/lib/bitcoin';
 
 interface AuctionBidDialogProps {
@@ -88,19 +89,12 @@ export function AuctionBidDialog({
     try {
       const bidderP2pk = wallet.getWalletP2pkPubkey()!;
       const now = Math.floor(Date.now() / 1000);
+      const locktime = now + MULTISIG_REFUND_PERIOD_SECONDS;
 
       // Lock the bid amount with the 2-of-3 escrow primitive. The lock is
       // validated BEFORE the wallet is debited; the returned token is the
-      // bidder's only handle on the locked funds and is kept for the refund
-      // path (journaling lives in the wallet's send-recovery storage).
-      const lock = buildMultisigEscrowLock({
-        partyAPubkey: bidderP2pk,
-        partyBPubkey: sellerPubkey,
-        operatorPubkey: bidderP2pk === sellerPubkey ? bidderP2pk : sellerPubkey,
-        refundPubkey: bidderP2pk,
-        locktime: now + MULTISIG_REFUND_PERIOD_SECONDS,
-      });
-      void lock; // shape-validated above; sendMultisigLockedToken rebuilds it
+      // bidder's only handle on the locked funds — journal it for the refund
+      // path before anything can go wrong on the wire.
       const token = await wallet.sendMultisigLockedToken(
         numericAmount,
         {
@@ -108,13 +102,19 @@ export function AuctionBidDialog({
           partyBPubkey: sellerPubkey,
           operatorPubkey: sellerPubkey,
           refundPubkey: bidderP2pk,
-          locktime: now + MULTISIG_REFUND_PERIOD_SECONDS,
+          locktime,
         },
         `Auction bid ${auction.dTag}`,
       );
       if (!token) {
         throw new Error(wallet.error || 'Wallet could not lock the bid amount.');
       }
+      savePendingBidDeposit({
+        auctionAddress: auctionAddress(auction.pubkey, auction.dTag),
+        token,
+        amountSats: numericAmount,
+        locktime,
+      });
 
       // Publish the bid event (amount + P2PK key only — no proofs on relay).
       await publishEvent({
