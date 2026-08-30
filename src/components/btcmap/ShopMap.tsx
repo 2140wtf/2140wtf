@@ -196,13 +196,18 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Force resize after container is fully laid out — fixes blank map in flex containers.
-    const resizeTimer = setTimeout(() => {
-      map.invalidateSize();
-    }, 400);
-    const resizeTimer2 = setTimeout(() => {
-      map.invalidateSize();
-    }, 800);
+    // Force resize after the container is fully laid out — fixes blank map in
+    // flex containers and late-layout cases (top-bar height, web fonts, slow
+    // parent layout). A single shot is not enough: the container may still be
+    // 0-sized when the first fires, so re-check across the layout-settle
+    // window. Without this, fitBounds()/marker draws can run against a 0-size
+    // map and the result looks blank until the user rotates/zooms or hits
+    // Reset — the classic "map didn't load, click reset to fix it" bug.
+    const resizeTimers: Array<ReturnType<typeof setTimeout>> = [];
+    [0, 120, 400, 900, 1800, 3200].forEach((ms) => {
+      resizeTimers.push(setTimeout(() => map.invalidateSize(), ms));
+    });
+    const rAFTimer = requestAnimationFrame(() => map.invalidateSize());
 
     // ResizeObserver catches any later container size changes (tab switches, accordion open, etc.)
     const resizeObs = new ResizeObserver(() => {
@@ -242,8 +247,8 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     return () => {
       if (moveTimeout) clearTimeout(moveTimeout);
       if (initialTimeout) clearTimeout(initialTimeout);
-      if (resizeTimer) clearTimeout(resizeTimer);
-      if (resizeTimer2) clearTimeout(resizeTimer2);
+      cancelAnimationFrame(rAFTimer);
+      resizeTimers.forEach((t) => clearTimeout(t));
       resizeObs.disconnect();
       if (reportBoundsHandler) {
         map.off('moveend zoomend', reportBoundsHandler);
@@ -421,8 +426,17 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     // Fit bounds when filter changes (shop count changes significantly).
     // Skip when a country is selected — the country effect handles zooming.
     if (countryFilter === 'all' && shops.length > 0 && Math.abs(shops.length - prevShopCount.current) > 5) {
-      const bounds = L.latLngBounds(shops.map(s => [s.lat, s.lon]));
-      map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+      // Make sure the map knows its real size BEFORE fitting: a fit computed
+      // against a still-settling (0-size) container produces a view that looks
+      // blank/unloaded until the user hits Reset. If the size isn't in yet we
+      // skip the fit entirely and keep the sane initial world view — the
+      // deferred invalidateSize() timers in the init effect will re-render it.
+      map.invalidateSize();
+      const size = map.getSize();
+      if (size.x > 0 && size.y > 0) {
+        const bounds = L.latLngBounds(shops.map(s => [s.lat, s.lon]));
+        map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+      }
     }
     prevShopCount.current = shops.length;
   }, [shops, userLocation, theme, countryFilter]);
