@@ -227,25 +227,8 @@ export function MarketPage(): React.JSX.Element {
         icon={<ShoppingBag className="size-5" />}
         className="sticky top-mobile-bar sidebar:top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border"
       >
-        {/* Search lives in the header row so it can use the full remaining width. */}
-        <div className="relative flex-1 max-w-md ml-auto">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search listings…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-full pl-9"
-          />
-        </div>
-      </PageHeader>
-
-      {/* Pinned control frame: toolbar + disclaimer stay fixed while the
-          listing grid scrolls underneath. */}
-      <div className="px-[11px] max-w-6xl mx-auto">
-        <div className="sticky top-[calc(var(--top-bar-height)+var(--safe-area-inset-top,env(safe-area-inset-top,0px))+3.25rem)] sidebar:top-[3.25rem] z-10 -mx-[11px] px-[11px] bg-background/90 backdrop-blur-md border-b border-border shadow-sm">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-2">
-          {/* Listings / Auctions view toggle. */}
+        {/* Listings/Auctions toggle lives in the header row, left of the search. */}
+        <div className="flex shrink-0 items-center gap-3">
           <div className="flex shrink-0 rounded-full border border-border p-0.5">
             <button
               type="button"
@@ -269,7 +252,25 @@ export function MarketPage(): React.JSX.Element {
               Auctions
             </button>
           </div>
+        </div>
+        {/* Search lives in the header row so it can use the full remaining width. */}
+        <div className="relative flex-1 max-w-md ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search listings…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-full pl-9"
+          />
+        </div>
+      </PageHeader>
 
+      {/* Pinned control frame: toolbar + disclaimer stay fixed while the
+          listing grid scrolls underneath. */}
+      <div className="px-[11px] max-w-6xl mx-auto">
+        <div className="sticky top-[calc(var(--top-bar-height)+var(--safe-area-inset-top,env(safe-area-inset-top,0px))+3.25rem)] sidebar:top-[3.25rem] z-10 -mx-[11px] px-[11px] bg-background/90 backdrop-blur-md border-b border-border shadow-sm">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-2">
           <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
             <SelectTrigger
               className="size-9 shrink-0 rounded-full px-0 justify-center [&>[data-radix-select-trigger-icon]]:hidden"
