@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, RefreshCw, Search, ShoppingBag, LayoutGrid, ArrowUpDown } from 'lucide-react';
+import { Plus, RefreshCw, Search, ShoppingBag, LayoutGrid, ArrowUpDown, Gavel } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,13 @@ import {
 } from '@/components/ui/select';
 import { PageHeader } from '@/components/PageHeader';
 import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
+import { AuctionCard } from '@/components/marketplace/AuctionCard';
+import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
 import { ProductListingComposeDialog } from '@/components/marketplace/ProductListingComposeDialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthors, type AuthorData } from '@/hooks/useAuthors';
+import { useAuctions } from '@/hooks/useAuctions';
 import { useBtcPrice } from '@/hooks/useBtcPrice';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNip99Listings } from '@/hooks/useNip99Listings';
@@ -83,8 +86,13 @@ export function MarketPage(): React.JSX.Element {
   const [sort, setSort] = useState<SortValue>('newest');
   const [columns, setColumns] = useState<1 | 2 | 3 | 4>(1);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [auctionOpen, setAuctionOpen] = useState(false);
+  // 'listings' | 'auctions' — which feed the grid shows.
+  const [view, setView] = useState<'listings' | 'auctions'>('listings');
 
   const { btcPrice } = useBtcPrice();
+
+  const { auctions, isLoading: auctionsLoading, refetch: refetchAuctions } = useAuctions();
 
   const { listings, isLoading, error, refetch } = useNip99Listings({
     category,
@@ -144,6 +152,28 @@ export function MarketPage(): React.JSX.Element {
   }, [listings, sort, btcPrice, authors]);
 
   const gridItems = useMemo(() => {
+    if (view === 'auctions') {
+      if (auctions.length > 0) {
+        return auctions.map((auction) => <AuctionCard key={auction.id} auction={auction} />);
+      }
+      if (auctionsLoading) {
+        return Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
+            <Skeleton className="aspect-[4/3] w-full" />
+            <div className="p-4 space-y-3">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
+        ));
+      }
+      return (
+        <div className="col-span-full py-20 text-center text-sm text-muted-foreground">
+          <p>No auctions yet. Sellers can create one with "Design auction".</p>
+        </div>
+      );
+    }
+
     // Progressive: render real listings as soon as any have arrived, so the
     // first cards land instantly and the rest fill in as more come back —
     // never make the user stare at skeletons until the whole (slow) query
@@ -184,7 +214,7 @@ export function MarketPage(): React.JSX.Element {
         <p>No active listings found. Try a different category or search.</p>
       </div>
     );
-  }, [isLoading, sortedListings, error, refetch]);
+  }, [view, auctions, auctionsLoading, isLoading, sortedListings, error, refetch]);
 
   return (
     <main>
@@ -192,6 +222,31 @@ export function MarketPage(): React.JSX.Element {
 
       <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {/* Listings / Auctions view toggle. */}
+          <div className="flex shrink-0 rounded-full border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setView('listings')}
+              className={cn(
+                'rounded-full px-3 h-8 text-xs font-medium transition-colors',
+                view === 'listings' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              Listings
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('auctions')}
+              className={cn(
+                'flex items-center gap-1 rounded-full px-3 h-8 text-xs font-medium transition-colors',
+                view === 'auctions' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              <Gavel className="size-3.5" />
+              Auctions
+            </button>
+          </div>
+
           <div className="relative min-w-16 flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
@@ -260,10 +315,21 @@ export function MarketPage(): React.JSX.Element {
           </Button>
 
           {user && (
-            <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
-              <Plus className="size-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">List product</span>
-            </Button>
+            <>
+              <Button
+                className="h-9 shrink-0 rounded-full px-3"
+                variant="outline"
+                onClick={() => setAuctionOpen(true)}
+                aria-label="Design auction"
+              >
+                <Gavel className="size-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Design auction</span>
+              </Button>
+              <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
+                <Plus className="size-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">List product</span>
+              </Button>
+            </>
           )}
         </div>
 
@@ -288,6 +354,15 @@ export function MarketPage(): React.JSX.Element {
         open={composeOpen}
         onOpenChange={setComposeOpen}
         onSuccess={() => refetch()}
+      />
+
+      <CreateAuctionDialog
+        open={auctionOpen}
+        onOpenChange={setAuctionOpen}
+        onSuccess={() => {
+          setView('auctions');
+          refetchAuctions();
+        }}
       />
     </main>
   );
