@@ -90,14 +90,23 @@ export function AuctionBidDialog({
       const now = Math.floor(Date.now() / 1000);
 
       // Lock the bid amount with the 2-of-3 escrow primitive. The lock is
-      // validated BEFORE the wallet is debited; the token stays in a local
-      // journal so the refund path is always available to the bidder.
+      // validated BEFORE the wallet is debited; the returned token is the
+      // bidder's only handle on the locked funds and is kept for the refund
+      // path (journaling lives in the wallet's send-recovery storage).
+      const lock = buildMultisigEscrowLock({
+        partyAPubkey: bidderP2pk,
+        partyBPubkey: sellerPubkey,
+        operatorPubkey: bidderP2pk === sellerPubkey ? bidderP2pk : sellerPubkey,
+        refundPubkey: bidderP2pk,
+        locktime: now + MULTISIG_REFUND_PERIOD_SECONDS,
+      });
+      void lock; // shape-validated above; sendMultisigLockedToken rebuilds it
       const token = await wallet.sendMultisigLockedToken(
         numericAmount,
         {
           partyAPubkey: bidderP2pk,
           partyBPubkey: sellerPubkey,
-          operatorPubkey: user.pubkey === sellerPubkey ? bidderP2pk : bidderP2pk,
+          operatorPubkey: sellerPubkey,
           refundPubkey: bidderP2pk,
           locktime: now + MULTISIG_REFUND_PERIOD_SECONDS,
         },
@@ -127,8 +136,7 @@ export function AuctionBidDialog({
       onOpenChange(false);
       onBidPlaced?.();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Bid failed.';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Bid failed.');
     } finally {
       setIsBidding(false);
     }
@@ -143,7 +151,7 @@ export function AuctionBidDialog({
             Place bid
           </DialogTitle>
           <DialogDescription>
-            {auction.title} — closing at {new Date(auction.closesAt * 1000).toLocaleString()}
+            {auction.title} — closing {new Date(auction.closesAt * 1000).toLocaleString()}
           </DialogDescription>
         </DialogHeader>
 
