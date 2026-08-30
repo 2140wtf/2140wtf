@@ -1,6 +1,22 @@
 import { useMemo, useState } from 'react';
 import { Gavel, Loader2 } from 'lucide-react';
 
+/** Live countdown label to the close time, e.g. "2d 4h 3m 12s left". */
+function timeLeftLabel(closesAt: number): string {
+  const secs = Math.max(0, closesAt - Math.floor(Date.now() / 1000));
+  if (secs === 0) return 'closed';
+  const days = Math.floor(secs / 86400);
+  const hours = Math.floor((secs % 86400) / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (days || hours) parts.push(`${hours}h`);
+  if (days || hours || minutes) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+  return `${parts.join(' ')} left`;
+}
+
 import {
   Dialog,
   DialogContent,
@@ -151,7 +167,19 @@ export function AuctionBidDialog({
             Place bid
           </DialogTitle>
           <DialogDescription>
-            {auction.title} — closing {new Date(auction.closesAt * 1000).toLocaleString()}
+            {auction.title} — closes exactly{' '}
+            <span className="font-medium tabular-nums">
+              {new Intl.DateTimeFormat(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short',
+              }).format(new Date(auction.closesAt * 1000))}
+            </span>{' '}
+            ({timeLeftLabel(auction.closesAt)})
           </DialogDescription>
         </DialogHeader>
 

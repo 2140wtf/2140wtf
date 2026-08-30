@@ -32,10 +32,27 @@ function timeRemaining(closesAt: number, nowSeconds: number): string {
   if (secs <= 0) return 'Closed';
   const days = Math.floor(secs / 86400);
   const hours = Math.floor((secs % 86400) / 3600);
-  if (days > 0) return `${days}d ${hours}h left`;
   const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+  if (days > 0) return `${days}d ${hours}h left`;
   if (hours > 0) return `${hours}h ${minutes}m left`;
-  return `${minutes}m left`;
+  if (minutes > 0) return `${minutes}m ${seconds}s left`;
+  return `${seconds}s left`;
+}
+
+/** Exact close time incl. seconds and timezone, e.g. "Aug 30, 2026, 08:31:42 PM CET". */
+const EXACT_CLOSE_FMT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  timeZoneName: 'short',
+});
+
+function exactClose(closesAt: number): string {
+  return EXACT_CLOSE_FMT.format(new Date(closesAt * 1000));
 }
 
 /**
@@ -57,12 +74,15 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
   const [settling, setSettling] = useState(false);
   const [refunding, setRefunding] = useState(false);
 
-  // Ticks every 30s so the countdown stays fresh without per-second renders.
+  // Ticks every second under 1h to close (seconds matter at auction end),
+  // otherwise every 30s so the countdown stays fresh without churn.
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    const nearEnd = auction.closesAt - now <= 3600;
+    const intervalMs = nearEnd ? 1_000 : 30_000;
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), intervalMs);
     return () => clearInterval(id);
-  }, []);
+  }, [auction.closesAt, now]);
 
   const closed = isAuctionClosed(auction, now);
   const isSeller = user?.pubkey === auction.pubkey;
@@ -231,7 +251,11 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
           </div>
         )}
         <div className="absolute top-2 left-2">
-          <Badge variant={closed ? 'secondary' : 'default'} className="text-[10px]">
+          <Badge
+            variant={closed ? 'secondary' : 'default'}
+            className="text-[10px]"
+            title={`Ends: ${exactClose(auction.closesAt)}`}
+          >
             {closed ? 'Closed' : timeRemaining(auction.closesAt, now)}
           </Badge>
         </div>
@@ -264,6 +288,9 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
             <div className="text-[10px] text-muted-foreground">
               {highest ? 'current bid' : 'starting bid'}
               {!bidsLoading && bidState.sorted.length > 0 && ` · ${bidState.sorted.length} bid${bidState.sorted.length > 1 ? 's' : ''}`}
+            </div>
+            <div className="text-[10px] text-muted-foreground tabular-nums">
+              {closed ? `Ended: ${exactClose(auction.closesAt)}` : `Ends: ${exactClose(auction.closesAt)}`}
             </div>
           </div>
           {auction.buyNowSats ? (
