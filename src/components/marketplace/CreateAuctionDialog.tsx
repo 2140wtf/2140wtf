@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Gavel, Loader2 } from 'lucide-react';
+import { Gavel, Loader2, TriangleAlert } from 'lucide-react';
 
 import {
   Dialog,
@@ -186,6 +186,23 @@ export function CreateAuctionDialog({
             Design auction
           </DialogTitle>
         </DialogHeader>
+
+        {/* Experimental-tech warning — auctions are in beta, escrow flows untested at scale. */}
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-500" />
+          <div className="text-xs leading-snug">
+            <p className="font-semibold uppercase tracking-wide text-amber-500">
+              Experimental Tech — For Testing Purposes Only
+            </p>
+            <p className="text-muted-foreground">
+              Auctions and their escrow flows are in beta. Test with small
+              amounts only — settlement and refund behavior may still change.
+            </p>
+          </div>
+        </div>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
