@@ -154,10 +154,13 @@ export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
 const LOAD_TIMEOUT_MS = 8_000;
 
 /**
- * Exact byte size of nostr.build's "image not found" placeholder JPEG that it
- * serves (with HTTP 200) for missing blobs. Real images never match this size.
+ * Byte sizes of CDN "image not found" placeholder JPEGs. cdn.nostr.build
+ * re-encodes everything to 512x512 — including its placeholder, which is
+ * 53319 bytes (not the 64096 of the original full-res placeholder). Real
+ * art re-encoded to 512x512 varies in size (58345, 65294, etc.) so a size
+ * match against the known placeholder set is the only reliable signal.
  */
-const PLACEHOLDER_SIZE = '64096';
+const PLACEHOLDER_SIZES = new Set(['64096', '53319']);
 
 /**
  * Compact art gallery widget.
@@ -432,16 +435,16 @@ function ArtTile({
             clearTimeout(timer);
             if (!res.ok) return resolve(false);
             // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
-            // "image not found" placeholder JPEG that is always exactly 64096
-            // bytes. Detect by content length (header when present, body size
-            // otherwise) and treat it as a miss. Real images are re-encoded by
-            // nostr.build (e.g. to 512x512), so dimension checks would wrongly
-            // reject them — only the exact placeholder byte size is a miss.
+            // "image not found" placeholder. The placeholder byte size varies
+            // by CDN edge (53319 on cdn.nostr.build, 64096 on the original
+            // endpoint). Check against the full set. Real art re-encoded to
+            // 512x512 varies in size (58345, 65294, etc.) so a set match is
+            // the only reliable signal — never match on dimension alone.
             const length = res.headers.get('content-length');
-            if (length === PLACEHOLDER_SIZE) return resolve(false);
+            if (length && PLACEHOLDER_SIZES.has(length)) return resolve(false);
             if (length === null) {
               const blob = await res.blob();
-              return resolve(blob.size !== Number(PLACEHOLDER_SIZE));
+              return resolve(!PLACEHOLDER_SIZES.has(String(blob.size)));
             }
             return resolve(true);
           })
