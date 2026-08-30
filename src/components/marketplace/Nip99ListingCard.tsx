@@ -71,6 +71,26 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
   const [buyOpen, setBuyOpen] = useState(false);
   const [auctionOpen, setAuctionOpen] = useState(false);
 
+  /** Shared click handler for every auction entry point on this card. */
+  const openAuctionDialog = () => {
+    if (!user) {
+      toast({
+        title: 'Log in required',
+        description: 'You need to log in to design an auction for this item.',
+      });
+      setLoginOpen(true);
+      return;
+    }
+    if (isSeller) {
+      setAuctionOpen(true);
+    } else {
+      toast({
+        title: 'Not your listing',
+        description: 'Only the seller of this item can design an auction for it.',
+      });
+    }
+  };
+
   const metadata = author?.metadata;
   const displayName = metadata?.display_name || metadata?.name || `${listing.pubkey.slice(0, 8)}…`;
   const profileUrl = useProfileUrl(listing.pubkey, metadata);
@@ -241,22 +261,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!user) {
-                      toast({
-                        title: 'Log in required',
-                        description: 'You need to log in to design an auction for this item.',
-                      });
-                      setLoginOpen(true);
-                      return;
-                    }
-                    if (isSeller) {
-                      setAuctionOpen(true);
-                    } else {
-                      toast({
-                        title: 'Not your listing',
-                        description: 'Only the seller of this item can design an auction for it.',
-                      });
-                    }
+                    openAuctionDialog();
                   }}
                   className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-500"
                 >
@@ -400,17 +405,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => {
-                    if (!user) {
-                      toast({
-                        title: 'Log in required',
-                        description: 'You need to log in to design an auction for this item.',
-                      });
-                      setLoginOpen(true);
-                      return;
-                    }
-                    if (isSeller) setAuctionOpen(true);
-                  }}
+                  onClick={openAuctionDialog}
                 >
                   <Gavel className="w-4 h-4 mr-2" />
                   Design auction
