@@ -147,8 +147,8 @@ interface TimechainArtWidgetProps {
   className?: string;
 }
 
-/** How often the gallery rotates to the next image (21 min 40 s). */
-export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
+/** How often the gallery rotates to the next image (2 min 14 s). */
+export const ROTATE_INTERVAL_MS = 2 * 60 * 1000 + 14 * 1000;
 
 /** Max time to wait for an image before swapping to a fallback Blossom server. */
 const LOAD_TIMEOUT_MS = 8_000;
