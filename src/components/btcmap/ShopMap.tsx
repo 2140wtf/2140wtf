@@ -128,6 +128,23 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * No-key basemap tiles for /btcmap.
+ *
+ * CARTO's free `basemaps.cartocdn.com` tiles were retired (CARTO now serves an
+ * "API key needed" error tile to unauthenticated clients, which Leaflet renders
+ * because the response is still HTTP 200 — so the old tileerror fallback never
+ * fired). We therefore use the same providers the rest of the app already uses,
+ * both of which need no key and no configuration:
+ *   - light: OpenStreetMap standard tiles (same URL as EventsMap)
+ *   - dark : Esri World_Dark_Gray_Base canvas tiles (free Esri basemap)
+ */
+function tileUrlFor(theme: 'dark' | 'light'): string {
+  return theme === 'light'
+    ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+}
+
 export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClick, userLocation, onBoundsChange, theme = 'dark', countryFilter = 'all' }: ShopMapProps): React.JSX.Element {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -158,15 +175,14 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
       preferCanvas: true,
     });
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const tileUrl = tileUrlFor(theme);
     const tileLayer = L.tileLayer(tileUrl, {
       maxZoom: 19,
-      subdomains: 'abcd',
-      className: theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light',
+      subdomains: 'abc',
+      className: theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light',
     }).addTo(map);
-    // Fallback tile layer if CartoDB fails
+    // Fallback tile layer if the primary provider fails (unreachable,
+    // 4xx/5xx tile errors) — OSM works for both themes.
     let fallbackTriggered = false;
     const tileErrorHandler = () => {
       if (!fallbackTriggered && tileLayerRef.current) {
@@ -262,16 +278,14 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     const map = mapRef.current;
     if (!map || !tileLayerRef.current) return;
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const tileUrl = tileUrlFor(theme);
 
     tileLayerRef.current.setUrl(tileUrl);
-    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light';
+    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light';
 
     const container = map.getContainer();
-    container.classList.remove('leaflet-bright-dark', 'leaflet-light');
-    container.classList.add(theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light');
+    container.classList.remove('leaflet-bright-dark', 'leaflet-light', 'leaflet-map-dark');
+    container.classList.add(theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light');
 
     // Force tile refresh
     tileLayerRef.current.redraw();
@@ -435,8 +449,8 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
   return (
     <>
       <style>{`
-        .leaflet-bright-dark {
-          filter: brightness(1.35) contrast(1.05) saturate(1.1);
+        .leaflet-map-dark {
+          filter: saturate(1.08) contrast(1.04);
         }
         .shop-popup-dark .leaflet-popup-content-wrapper {
           background: #0f172a !important;

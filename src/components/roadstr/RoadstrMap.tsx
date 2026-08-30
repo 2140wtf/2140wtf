@@ -113,14 +113,18 @@ interface TileConfig {
 function getTileConfig(style: EffectiveMapStyle): TileConfig {
   const osmAttribution =
     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+  const esriAttribution =
+    '&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
   switch (style) {
     case 'dark':
+      // Esri World_Dark_Gray_Base is already dark and needs no key (CartoDB's
+      // free dark tiles now demand an API key and serve an error tile instead).
       return {
-        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        className: 'roadstr-carto-dark',
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        className: 'roadstr-esri-dark',
         fallbackUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         fallbackClassName: 'roadstr-osm-dark',
-        attribution: `&copy; <a href="https://carto.com/attributions">CartoDB</a>, ${osmAttribution}`,
+        attribution: `&copy; <a href="https://www.esri.com/">Esri</a>, ${osmAttribution}`,
       };
     case 'satellite':
       return {
@@ -128,16 +132,17 @@ function getTileConfig(style: EffectiveMapStyle): TileConfig {
         className: 'roadstr-satellite',
         fallbackUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         fallbackClassName: 'roadstr-osm-light',
-        attribution:
-          '&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        attribution: esriAttribution,
       };
     case 'light':
     default:
       return {
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         className: 'roadstr-osm-light',
-        fallbackUrl: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-        fallbackClassName: 'roadstr-carto-light',
+        // If OSM is down, Esri World_Street_Map is another no-key light basemap
+        // (the previous CartoDB fallback now requires an API key).
+        fallbackUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        fallbackClassName: 'roadstr-esri-light',
         attribution: osmAttribution,
       };
   }
@@ -513,14 +518,18 @@ export function RoadstrMap({
     <>
       <style>{`
         /* OSM tiles are light, so a filter is needed in dark mode. We only use
-           OSM as a fallback in dark mode; the primary dark provider is CartoDB
-           dark matter, which needs no filter and avoids tile-layer flicker. */
+           OSM as a fallback in dark mode; the primary dark provider is Esri's
+           World_Dark_Gray_Base, which needs no filter and avoids tile-layer
+           flicker. */
         .roadstr-osm-dark {
           filter: brightness(0.7) contrast(1.1) saturate(0.75);
         }
-        .roadstr-carto-dark {
-          /* CartoDB dark matter is already dark; no filter keeps the tile layer
+        .roadstr-esri-dark {
+          /* Esri dark gray canvas is already dark; no filter keeps the tile layer
              free of the compositing flicker caused by CSS filters. */
+        }
+        .roadstr-esri-light {
+          /* Esri World_Street_Map is a light basemap; no filter needed. */
         }
         .roadstr-satellite img {
           /* Satellite imagery already has strong contrast; keep it unfiltered. */
