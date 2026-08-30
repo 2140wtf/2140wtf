@@ -95,7 +95,11 @@ interface ReplyRef {
 interface ChatPayload {
   text?: string;
   reply?: ReplyRef;
-  identity?: { npub: string };
+  /** App-level identity convention riding INSIDE the encrypted envelope.
+   *  Exactly one field is set in practice, depending on the sender's identity
+   *  mode: `npub` (anon mode, manual npub), `nip05` (verified identifier only),
+   *  or `pseudonym` (stable hashed pseudonym — NOT an npub; do not nip19-decode). */
+  identity?: { npub?: string; nip05?: string; pseudonym?: string };
   to?: string[];
   presence?: { name?: string };
   epochAdvance?: { epoch?: number };
@@ -151,7 +155,11 @@ function loadIdentityMode(): IdentityMode {
 }
 
 /** Stable pseudonym from the account pubkey via a salted sha256 — linkable
- *  across messages, not to the key. */
+ *  across messages. NOTE: the "salt" is a public constant and the input is the
+ *  PUBLIC key, so this is NOT cryptographically unlinkable — anyone who learns
+ *  the pubkey (profile event, NIP-05 resolution, one exposed npub) can recompute
+ *  it offline and link the whole pseudonymous history. It only avoids putting
+ *  the raw key on the envelope. */
 function hashedIdentityNpub(pubkey: string): string {
   const digest = sha256(new TextEncoder().encode(`2140:bao-social-identity:${pubkey}`));
   return `anon-${bytesToHex(digest).slice(0, 8)}`;
@@ -300,11 +308,17 @@ function BaoSocialChatClient() {
   const [draft, setDraft] = useState("");
   const [replyDraft, setReplyDraft] = useState<{ author: string; msgId: string; preview: string } | null>(null);
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
-  const [npubInput, setNpubInput] = useState(() => localStorage.getItem(NPUB_KEY) ?? "");
+  const [npubInput, setNpubInput] = useState(() => {
+    // The manual npub is anon-mode-scoped: only seed the persisted value when
+    // the persisted mode is actually "anon", so a previously typed npub can
+    // never silently re-attach in hashed/nip05 mode (privacy).
+    if (loadIdentityMode() !== "anon") return "";
+    return localStorage.getItem(NPUB_KEY) ?? "";
+  });
   const [joinLinkInput, setJoinLinkInput] = useState("");
   const [showIdentity, setShowIdentity] = useState(false);
   const [identityMode, setIdentityMode] = useState<IdentityMode>(loadIdentityMode);
-const [roomsCollapsed, setRoomsCollapsed] = useState(false);
+  const [roomsCollapsed, setRoomsCollapsed] = useState(false);
 
   // ── Identity module (shown on EVERY entry, 2140.social parity) ────────────
   // Default per session: the hashed pseudonym. The npubInput used on the wire
@@ -315,24 +329,43 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
     } catch {
       /* best-effort */
     }
-    if (identityMode === "nip05" && nip05) {
-      setNpubInput(""); // nip05 mode rides the verified identifier, not an npub
+    // Leaving anon mode must clear BOTH the state and the persisted value:
+    // otherwise a previously typed npub keeps riding the envelope in
+    // hashed/nip05 mode, and resurrects from localStorage on the next mount
+    // even though the user saw the field emptied.
+    if (identityMode !== "anon") {
+      setNpubInput("");
+      try {
+        localStorage.removeItem(NPUB_KEY);
+      } catch {
+        /* best-effort */
+      }
     }
-  }, [identityMode, nip05]);
+  }, [identityMode]);
 
-  const effectiveIdentityNpub = useMemo(() => {
-    if (identityMode === "hashed" && user) return hashedIdentityNpub(user.pubkey);
-    if (identityMode === "nip05") return ""; // handled via nip05 below
-    return validateNpub(npubInput); // anon: whatever the user typed (usually empty)
-  }, [identityMode, user, npubInput]);
+  /** What actually rides the envelope for the current mode. `undefined` =
+   *  anonymous — nothing is attached. nip05 mode only attaches a VERIFIED
+   *  identifier (never while verification is pending/failed). */
+  const effectiveIdentity = useMemo<ChatPayload["identity"]>(() => {
+    if (identityMode === "hashed" && user) return { pseudonym: hashedIdentityNpub(user.pubkey) };
+    if (identityMode === "nip05") return nip05 && nip05Verified ? { nip05 } : undefined;
+    const npub = validateNpub(npubInput); // anon: whatever the user typed (usually empty)
+    return npub ? { npub } : undefined;
+  }, [identityMode, user, nip05, nip05Verified, npubInput]);
+
+  /** Short printable form of the effective identity (npub / @nip05 / pseudonym). */
+  const effectiveIdentityLabel = useMemo(() => {
+    if (!effectiveIdentity) return undefined;
+    return effectiveIdentity.nip05 ?? effectiveIdentity.npub ?? effectiveIdentity.pseudonym;
+  }, [effectiveIdentity]);
 
   const identityLabel = useMemo(() => {
     if (identityMode === "nip05") {
-      return nip05 && nip05Verified ? `@${nip05}` : "NIP-05 (unverified)";
+      return nip05 ? (nip05Verified ? `@${nip05}` : "NIP-05 (unverified)") : "no NIP-05 on profile";
     }
-    if (identityMode === "hashed") return effectiveIdentityNpub ?? "hashed anon";
-    return effectiveIdentityNpub ? "custom npub" : "anonymous";
-  }, [identityMode, nip05, nip05Verified, effectiveIdentityNpub]);
+    if (identityMode === "hashed") return effectiveIdentityLabel ?? "hashed anon";
+    return effectiveIdentityLabel ? "custom npub" : "anonymous";
+  }, [identityMode, nip05, nip05Verified, effectiveIdentityLabel]);
 
   const log = useCallback((msg: string) => {
     setLogLines((lines) => [...lines.slice(-80), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -539,8 +572,8 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
     if (replyDraft) {
       payload.reply = { author: replyDraft.author, msg_id: replyDraft.msgId };
     }
-    const exposed = effectiveIdentityNpub;
-    if (exposed) payload.identity = { npub: exposed };
+    const identity = effectiveIdentity;
+    if (identity) payload.identity = identity;
     const to = resolveMentions(text, r.roster);
     if (to.length > 0) payload.to = to;
     try {
@@ -560,7 +593,7 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
       if (replyDraft) setReplyDraft(replyDraft);
       log(`#${r.info.name}: post failed — draft restored: ${(err as Error).message}`);
     }
-  }, [draft, replyDraft, effectiveIdentityNpub, refreshScroll, log]);
+  }, [draft, replyDraft, effectiveIdentity, refreshScroll, log]);
 
   // ── Join by invite link ──────────────────────────────────────────────────
 
@@ -872,7 +905,7 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
                 )}
                 {identityMode === "hashed" && (
                   <span className="text-[11px] text-muted-foreground">
-                    ✓ visible as {effectiveIdentityNpub}
+                    ✓ visible as {effectiveIdentityLabel}
                   </span>
                 )}
                 {identityMode === "anon" && (
@@ -890,10 +923,10 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
                       placeholder="npub1… (optional — expose your identity)"
                       className="h-7 max-w-64 text-xs"
                     />
-                    <span className={cn("text-[11px]", effectiveIdentityNpub ? "text-success" : "text-muted-foreground")}>
+                    <span className={cn("text-[11px]", effectiveIdentityLabel ? "text-success" : "text-muted-foreground")}>
                       {npubInput.trim()
-                        ? effectiveIdentityNpub
-                          ? `✓ visible as ${effectiveIdentityNpub.slice(0, 12)}…`
+                        ? effectiveIdentityLabel
+                          ? `✓ visible as ${effectiveIdentityLabel.slice(0, 12)}…`
                           : "✗ invalid npub — stays anonymous"
                         : "anonymous"}
                     </span>
