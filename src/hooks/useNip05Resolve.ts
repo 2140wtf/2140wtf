@@ -1,22 +1,60 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { getNip05Cached, setNip05Cached, deleteNip05Cached } from '@/lib/nip05Cache';
+import {
+  getNip05Cached,
+  setNip05Cached,
+  deleteNip05Cached,
+  getNip05FailureCached,
+  setNip05FailureCached,
+} from '@/lib/nip05Cache';
 import { isNostrId } from '@/lib/nostrId';
 
 /**
- * Fetches a NIP-05 nostr.json URL.
+ * Failure type flagging whether retrying would ever help.
+ *
+ * Deterministic failures — CORS-blocked responses (TypeError "Failed to
+ * fetch"), HTTP 4xx, dead domains — fail identically on every retry, so the
+ * old unconditional `retry: 1` doubled every blocked lookup. Transient
+ * failures (timeout, HTTP 5xx) may succeed on retry.
  */
-async function fetchNostrJson(url: URL, signal: AbortSignal): Promise<Record<string, unknown> | null> {
-  // Try direct fetch first (works when server has proper CORS headers)
+class Nip05FetchError extends Error {
+  readonly deterministic: boolean;
+  constructor(message: string, deterministic: boolean) {
+    super(message);
+    this.name = 'Nip05FetchError';
+    this.deterministic = deterministic;
+  }
+}
+
+/**
+ * Fetches a NIP-05 nostr.json URL.
+ *
+ * Throws {@link Nip05FetchError} on any failure instead of returning null so
+ * the caller can classify deterministic vs transient and persist a negative
+ * cache entry. (CORS blocks surface as `TypeError`; the 800 ms budget as an
+ * `AbortError`.)
+ */
+async function fetchNostrJson(url: URL, signal: AbortSignal): Promise<Record<string, unknown>> {
   try {
     const response = await fetch(url, { signal });
     if (response.ok) {
       return await response.json();
     }
-  } catch {
-    // fallthrough
+    // Server answered with an error status. 4xx is deterministic (the
+    // identifier/domain state won't change by retrying); 5xx may be transient.
+    throw new Nip05FetchError(
+      `NIP-05 ${url.hostname} answered HTTP ${response.status} for ${url.searchParams.get('name')}`,
+      response.status < 500,
+    );
+  } catch (err) {
+    if (err instanceof Nip05FetchError) throw err;
+    const isTimeout = err instanceof Error && err.name === 'AbortError';
+    const deterministic = !isTimeout;
+    throw new Nip05FetchError(
+      `NIP-05 fetch failed for ${url.hostname} (${err instanceof Error ? err.message : String(err)})`,
+      deterministic,
+    );
   }
-  return null;
 }
 
 /** Entries older than this are not trusted at all — show a skeleton instead. */
@@ -33,6 +71,12 @@ const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
  * a background re-check runs.  Entries older than 7 days are discarded
  * and a fresh verification is required.
  *
+ * FAILURES are persisted too, as a 15-minute negative cache (see
+ * nip05Cache.ts): a domain that is CORS-blocked, down, or definitively
+ * missing the identifier is fast-failed on the next mounts instead of
+ * being re-fetched every time any badge remounts (deterministic failures
+ * are also not retried — see the `retry` callback).
+ *
  * Accepts formats:
  * - `user@domain.com` → looks up `user` at `domain.com`
  * - `domain.com` (no @) → looks up `_` (default user) at `domain.com`
@@ -41,13 +85,25 @@ export function useNip05Resolve(identifier: string | undefined) {
   // Read cache synchronously so TanStack Query can skip the pending state.
   const cached = identifier ? getNip05Cached(identifier) : undefined;
 
-  // Discard entries that are too old to trust — force a fresh verification.
-  const usableCache = cached && (Date.now() - cached.lastVerified < MAX_CACHE_AGE) ? cached : undefined;
+  // Discard entries that are too old to trust (or lack a verification stamp
+  // entirely) — force a fresh verification.
+  const usableCache =
+    cached && typeof cached.lastVerified === 'number' && (Date.now() - cached.lastVerified < MAX_CACHE_AGE)
+      ? cached
+      : undefined;
 
   return useQuery<string | null>({
     queryKey: ['nip05-resolve', identifier],
     queryFn: async ({ signal }) => {
       if (!identifier) return null;
+
+      // Recent failure (CORS block / down / absent, < 15 min old)? Fast-fail
+      // instead of hitting the domain again — this is what stops the per-mount
+      // refetch spam. A stale-but-usable positive cache still renders via
+      // initialData while the negative entry suppresses the background check.
+      if (getNip05FailureCached(identifier)) {
+        throw new Nip05FetchError(`NIP-05 negative cache: ${identifier}`, true);
+      }
 
       let name: string;
       let domain: string;
@@ -72,17 +128,24 @@ export function useNip05Resolve(identifier: string | undefined) {
 
       const fetchSignal = AbortSignal.any([signal, AbortSignal.timeout(800)]);
 
-      const data = await fetchNostrJson(url, fetchSignal);
-      if (!data) {
-        // Network failure — don't evict cache; return null so TanStack Query
-        // marks this as a failed fetch while the stale cached value remains.
-        throw new Error(`NIP-05 fetch failed for ${identifier}`);
+      let data: Record<string, unknown>;
+      try {
+        data = await fetchNostrJson(url, fetchSignal);
+      } catch (err) {
+        // CORS/HTTP/network failure — persist a negative entry (15-min TTL) so
+        // other mounts skip straight to the relay fallback instead of spamming
+        // this domain, then surface the classified error upward.
+        void setNip05FailureCached(identifier);
+        throw err;
       }
 
       const names = data.names;
       if (!names || typeof names !== 'object') {
-        // The domain responded but the identifier is gone — evict stale cache.
+        // The domain responded but the identifier is gone — evict stale cache
+        // AND arm a 15-min negative entry so absent identifiers stop being
+        // re-fetched on every mount (the relay fallback covers verification).
         void deleteNip05Cached(identifier);
+        void setNip05FailureCached(identifier);
         return null;
       }
 
@@ -95,8 +158,9 @@ export function useNip05Resolve(identifier: string | undefined) {
         pubkey = entry?.[1];
       }
       if (typeof pubkey !== 'string') {
-        // Identifier no longer in the JSON — evict stale cache.
+        // Identifier no longer in the JSON — evict stale cache + arm negative.
         void deleteNip05Cached(identifier);
+        void setNip05FailureCached(identifier);
         return null;
       }
 
@@ -105,7 +169,9 @@ export function useNip05Resolve(identifier: string | undefined) {
       // could return arbitrary strings that get persisted to IndexedDB and
       // later fed into Nostr filters or passed to downstream consumers.
       if (!isNostrId(pubkey)) {
+        // Invalid pubkey from this domain — evict stale cache + arm negative.
         void deleteNip05Cached(identifier);
+        void setNip05FailureCached(identifier);
         return null;
       }
 
@@ -117,7 +183,12 @@ export function useNip05Resolve(identifier: string | undefined) {
     enabled: !!identifier,
     staleTime: 60 * 60 * 1000,  // 1 hour — NIP-05 records rarely change
     gcTime: 2 * 60 * 60 * 1000, // 2 hours
-    retry: 1,
+    // Deterministic failures (CORS, network down, HTTP 4xx — see
+    // Nip05FetchError) fail identically every time, so retrying only doubles
+    // the spam against a blocked domain. Retry only transient ones (timeout,
+    // HTTP 5xx), and only once.
+    retry: (failureCount, error) =>
+      !(error instanceof Nip05FetchError && error.deterministic) && failureCount < 1,
 
     // Seed from IndexedDB cache so the first render already has data.
     // TanStack Query compares initialDataUpdatedAt against staleTime:

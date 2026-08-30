@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getRailBalance, getRailTileBalance } from '../BaoWalletTab';
+import { getRailBalance, getRailTileBalance } from '../../lib/walletRailBalance';
 import type { BaoWalletBalances } from '@/lib/baoWalletApi';
 
 const api: BaoWalletBalances = {

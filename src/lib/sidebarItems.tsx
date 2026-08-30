@@ -153,6 +153,8 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: WalletCards,
     requiresAuth: true,
   },
+  // Merchants placed directly below Wallet for all users by default.
+  { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   { id: "events", label: "Events", path: "/events", icon: CalendarDays },
   // Remaining navigation & system pages
   {
@@ -164,7 +166,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
   { id: "court", label: "₿AO Court", path: "/court", icon: Gavel, requiresAuth: true },
-  { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   {
     id: "btcmap",
     label: "BTC MAP",

@@ -128,11 +128,28 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
+/**
+ * No-key basemap tiles for /btcmap.
+ *
+ * CARTO's free `basemaps.cartocdn.com` tiles were retired (CARTO now serves an
+ * "API key needed" error tile to unauthenticated clients, which Leaflet renders
+ * because the response is still HTTP 200 — so the old tileerror fallback never
+ * fired). We therefore use the same providers the rest of the app already uses,
+ * both of which need no key and no configuration:
+ *   - light: OpenStreetMap standard tiles (same URL as EventsMap)
+ *   - dark : Esri World_Dark_Gray_Base canvas tiles (free Esri basemap)
+ */
+function tileUrlFor(theme: 'dark' | 'light'): string {
+  return theme === 'light'
+    ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+}
+
 export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClick, userLocation, onBoundsChange, theme = 'dark', countryFilter = 'all' }: ShopMapProps): React.JSX.Element {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
-  const prevShopCount = useRef(0);
+  const initialFitDoneRef = useRef(false);
   const prevSelected = useRef<string | null>(null);
   const prevRadius = useRef<number | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
@@ -153,20 +170,28 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     const map = L.map(containerRef.current, {
       center: [20, 0],
       zoom: 2,
+      // Match the tile layer's max (19) so the +/- buttons can zoom all the
+      // way in to street-level detail — no artificial ceiling at the Leaflet
+      // default of 18.
+      maxZoom: 19,
       zoomControl: false,
       attributionControl: false,
       preferCanvas: true,
+      // Native zoom (pinch-to-zoom) is enabled by default on Leaflet 1.x for
+      // touch devices via the built-in TouchZoom handler. We don't disable it,
+      // so two-finger gestures work out of the box on iOS/Android once the
+      // viewport meta and touch-action CSS permit them (see index.html &
+      // the <style> block below).
     });
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const tileUrl = tileUrlFor(theme);
     const tileLayer = L.tileLayer(tileUrl, {
       maxZoom: 19,
-      subdomains: 'abcd',
-      className: theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light',
+      subdomains: 'abc',
+      className: theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light',
     }).addTo(map);
-    // Fallback tile layer if CartoDB fails
+    // Fallback tile layer if the primary provider fails (unreachable,
+    // 4xx/5xx tile errors) — OSM works for both themes.
     let fallbackTriggered = false;
     const tileErrorHandler = () => {
       if (!fallbackTriggered && tileLayerRef.current) {
@@ -180,13 +205,18 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // Force resize after container is fully laid out — fixes blank map in flex containers.
-    const resizeTimer = setTimeout(() => {
-      map.invalidateSize();
-    }, 400);
-    const resizeTimer2 = setTimeout(() => {
-      map.invalidateSize();
-    }, 800);
+    // Force resize after the container is fully laid out — fixes blank map in
+    // flex containers and late-layout cases (top-bar height, web fonts, slow
+    // parent layout). A single shot is not enough: the container may still be
+    // 0-sized when the first fires, so re-check across the layout-settle
+    // window. Without this, fitBounds()/marker draws can run against a 0-size
+    // map and the result looks blank until the user rotates/zooms or hits
+    // Reset — the classic "map didn't load, click reset to fix it" bug.
+    const resizeTimers: Array<ReturnType<typeof setTimeout>> = [];
+    [0, 120, 400, 900, 1800, 3200].forEach((ms) => {
+      resizeTimers.push(setTimeout(() => map.invalidateSize(), ms));
+    });
+    const rAFTimer = requestAnimationFrame(() => map.invalidateSize());
 
     // ResizeObserver catches any later container size changes (tab switches, accordion open, etc.)
     const resizeObs = new ResizeObserver(() => {
@@ -226,8 +256,8 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     return () => {
       if (moveTimeout) clearTimeout(moveTimeout);
       if (initialTimeout) clearTimeout(initialTimeout);
-      if (resizeTimer) clearTimeout(resizeTimer);
-      if (resizeTimer2) clearTimeout(resizeTimer2);
+      cancelAnimationFrame(rAFTimer);
+      resizeTimers.forEach((t) => clearTimeout(t));
       resizeObs.disconnect();
       if (reportBoundsHandler) {
         map.off('moveend zoomend', reportBoundsHandler);
@@ -262,16 +292,14 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     const map = mapRef.current;
     if (!map || !tileLayerRef.current) return;
 
-    const tileUrl = theme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    const tileUrl = tileUrlFor(theme);
 
     tileLayerRef.current.setUrl(tileUrl);
-    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light';
+    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light';
 
     const container = map.getContainer();
-    container.classList.remove('leaflet-bright-dark', 'leaflet-light');
-    container.classList.add(theme === 'dark' ? 'leaflet-bright-dark' : 'leaflet-light');
+    container.classList.remove('leaflet-bright-dark', 'leaflet-light', 'leaflet-map-dark');
+    container.classList.add(theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light');
 
     // Force tile refresh
     tileLayerRef.current.redraw();
@@ -404,13 +432,29 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
       }
     }
 
-    // Fit bounds when filter changes (shop count changes significantly).
-    // Skip when a country is selected — the country effect handles zooming.
-    if (countryFilter === 'all' && shops.length > 0 && Math.abs(shops.length - prevShopCount.current) > 5) {
-      const bounds = L.latLngBounds(shops.map(s => [s.lat, s.lon]));
-      map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+    // Fit bounds ONCE on the initial load of the full (worldwide) dataset.
+    // This must NOT fire on viewport-driven changes: getShops already trims
+    // visibleShops to the current viewportBbox, so a pan/zoom changes the
+    // filtered count by thousands. Re-running fitBounds on that creates a
+    // feedback loop (refit moves the viewport -> bounds change event -> refit)
+    // that fights the user's zoom and constantly snaps the map back to the
+    // global view. Country view resets are handled by the country-filter
+    // effect above; the Reset button and the initial center+zoom=2 cover the
+    // rest. Only "all" gets an initial fit here (it's skipped per-country).
+    if (countryFilter === 'all' && !initialFitDoneRef.current && shops.length > 0) {
+      // Invalidate first so a fit against a still-settling (0-size) container
+      // is never produced. If the size isn't in yet we skip the fit but leave
+      // initialFitDoneRef false so this retries on the next shops change (which
+      // happens naturally once the layout-settle invalidateSize timers and the
+      // initial bounds report land) and on the ResizeObserver callback.
+      map.invalidateSize();
+      const size = map.getSize();
+      if (size.x > 0 && size.y > 0) {
+        const bounds = L.latLngBounds(shops.map(s => [s.lat, s.lon]));
+        map.fitBounds(bounds.pad(0.15), { animate: true, duration: 0.6 });
+        initialFitDoneRef.current = true;
+      }
     }
-    prevShopCount.current = shops.length;
   }, [shops, userLocation, theme, countryFilter]);
 
   // Pan + zoom when a specific shop is selected from the list
@@ -435,8 +479,8 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
   return (
     <>
       <style>{`
-        .leaflet-bright-dark {
-          filter: brightness(1.35) contrast(1.05) saturate(1.1);
+        .leaflet-map-dark {
+          filter: saturate(1.08) contrast(1.04);
         }
         .shop-popup-dark .leaflet-popup-content-wrapper {
           background: #0f172a !important;
@@ -463,6 +507,16 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
         }
         .leaflet-container {
           background: ${theme === 'dark' ? '#0c0a09' : '#fafaf9'} !important;
+        }
+        /* Mobile pinch-zoom gate. Leaflet sets touch-action conditionally via
+           its own CSS classes (.leaflet-touch-drag / .leaflet-touch-zoom), but
+           that only applies *after* the handler initialises. Declaring it
+           unconditionally here guarantees the browser permits two-finger
+           pinch gestures from first touch — without it, some mobile browsers
+           suppress the multi-touch touchmove events that Leaflet's pinch
+           handler needs, making the map un-zoomable by gesture. */
+        .leaflet-container {
+          touch-action: none;
         }
       `}</style>
       <div className="relative w-full h-full">

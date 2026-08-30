@@ -10,7 +10,9 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { Copy, Hash, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, X } from "lucide-react";
+import { Copy, Hash, IdCard, KeyRound, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, ShieldCheck, X } from "lucide-react";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 import {
   WebRelayConn,
@@ -31,6 +33,10 @@ import type { Envelope, JoinedRoom, RosterEntry } from "@/lib/baosocial/browser.
 import { BAO_SOCIAL_DIRECTORY, type BaoSocialRoomInfo } from "@/lib/baosocial/rooms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useNip05Verify } from "@/hooks/useNip05Verify";
+import LoginDialog from "@/components/auth/LoginDialog";
+import SignupDialog from "@/components/auth/SignupDialog";
 import { cn } from "@/lib/utils";
 
 // ── Persistence (demo parity: the app decides its own custody policy) ───────
@@ -89,7 +95,11 @@ interface ReplyRef {
 interface ChatPayload {
   text?: string;
   reply?: ReplyRef;
-  identity?: { npub: string };
+  /** App-level identity convention riding INSIDE the encrypted envelope.
+   *  Exactly one field is set in practice, depending on the sender's identity
+   *  mode: `npub` (anon mode, manual npub), `nip05` (verified identifier only),
+   *  or `pseudonym` (stable hashed pseudonym — NOT an npub; do not nip19-decode). */
+  identity?: { npub?: string; nip05?: string; pseudonym?: string };
   to?: string[];
   presence?: { name?: string };
   epochAdvance?: { epoch?: number };
@@ -118,6 +128,69 @@ function previewText(env: Envelope): string {
   const p = env.payload as ChatPayload | null;
   const s = p && typeof p.text === "string" ? p.text : "";
   return s.length > 200 ? `${s.slice(0, 200)}…` : s;
+}
+
+// ── Auth gate + identity module (2140 Social access policy) ─────────────────
+//
+// Mirrors production 2140.social: the chat itself stays isolated/anonymous,
+// but ENTERING is for authed users only. After login, EVERY entry to the
+// chat shows the identity module first — the user picks how to appear:
+//   - "nip05"  : ride the account's verified NIP-05 identifier inside the
+//                encrypted envelope (never on the wire)
+//   - "hashed" : a stable pseudonym derived from the account pubkey via a
+//                salted sha256 — linkable across messages, not to the key
+//   - "anon"   : pure burner (protocol default)
+
+// Identity preferences are scoped PER ACCOUNT (the app supports multiple
+// stored logins): `2140:bao-social-identity-mode-v1:<pubkey>` and
+// `2140:bao-social-npub-v1:<pubkey>`. The legacy unscoped keys are read once
+// for migration and then retired, so a second account can never inherit the
+// first one's identity preferences.
+const IDENTITY_MODE_KEY = "2140:bao-social-identity-mode-v1";
+type IdentityMode = "nip05" | "hashed" | "anon";
+
+function isIdentityMode(v: string | null): v is IdentityMode {
+  return v === "nip05" || v === "hashed" || v === "anon";
+}
+
+/** Account-scoped identity mode; falls back to the legacy browser-wide key. */
+function loadIdentityModeFor(pubkey: string | undefined): IdentityMode {
+  try {
+    if (pubkey) {
+      const scoped = localStorage.getItem(`${IDENTITY_MODE_KEY}:${pubkey}`);
+      if (isIdentityMode(scoped)) return scoped;
+    }
+    const legacy = localStorage.getItem(IDENTITY_MODE_KEY);
+    if (isIdentityMode(legacy)) return legacy;
+  } catch {
+    /* best-effort */
+  }
+  return "hashed";
+}
+
+/** Account-scoped manual npub; falls back to the legacy browser-wide key. */
+function loadNpubFor(pubkey: string | undefined): string {
+  try {
+    if (pubkey) {
+      const scoped = localStorage.getItem(`${NPUB_KEY}:${pubkey}`);
+      if (scoped !== null) return scoped;
+    }
+    return localStorage.getItem(NPUB_KEY) ?? "";
+  } catch {
+    /* best-effort */
+  }
+  return "";
+}
+
+/** Stable pseudonym from the account pubkey via a salted sha256 — linkable
+ *  across messages. NOTE: the "salt" is a public constant and the input is the
+ *  PUBLIC key, so this is NOT cryptographically unlinkable — anyone who learns
+ *  the pubkey (profile event, NIP-05 resolution, one exposed npub) can recompute
+ *  it offline and link the whole pseudonymous history. It only avoids putting
+ *  the raw key on the envelope. */
+function hashedIdentityNpub(pubkey: string): string {
+  const digest = sha256(new TextEncoder().encode(`2140:bao-social-identity:${pubkey}`));
+  return `anon-${bytesToHex(digest).slice(0, 8)}`;
 }
 
 // ── Imperative per-room session state (mirrors the demo's RoomState) ───────
@@ -168,11 +241,70 @@ function newRuntime(info: BaoSocialRoomInfo, relayUrl: string): RoomRuntime {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+/** Logged-out gate: only authed users reach the chat client. Anon visitors
+ *  get the join CTA every time (2140.social parity) — no relay connection is
+ *  ever made until `user` exists. */
 export function BaoCommunitiesPage() {
   useSeoMeta({
     title: "2140 Social",
     description: "2140 Social — encrypted community scroll on Nostr, inside 2140.",
   });
+
+  const { user } = useCurrentUser();
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [signupOpen, setSignupOpen] = useState(false);
+
+  if (!user) {
+    return (
+      <main className="flex-1 min-w-0">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
+          <h1 className="text-lg font-semibold">2140 Social</h1>
+        </div>
+        <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
+          <ShieldCheck className="size-10 text-muted-foreground" />
+          <div>
+            <h2 className="text-base font-semibold">Members-only encrypted chat</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              2140 Social is an encrypted, burner-keyed community scroll. Sign in
+              to join the rooms — your identity key never touches the chat wire.
+            </p>
+          </div>
+          <Button onClick={() => setLoginOpen(true)}>Join to enter</Button>
+          <p className="text-xs text-muted-foreground">
+            No account yet?{" "}
+            <button
+              type="button"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+              onClick={() => setSignupOpen(true)}
+            >
+              Create account
+            </button>
+          </p>
+          <LoginDialog
+            isOpen={loginOpen}
+            onClose={() => setLoginOpen(false)}
+            onLogin={() => setLoginOpen(false)}
+            onSignupClick={() => {
+              setLoginOpen(false);
+              setSignupOpen(true);
+            }}
+          />
+          <SignupDialog isOpen={signupOpen} onClose={() => setSignupOpen(false)} />
+        </div>
+      </main>
+    );
+  }
+
+  return <BaoSocialChatClient />;
+}
+
+/** The chat client itself — mounted only for authed users. */
+function BaoSocialChatClient() {
+  const { user, metadata } = useCurrentUser();
+  // Identity preferences are scoped to this account (see loadIdentityModeFor).
+  const accountPubkey = user?.pubkey;
+  const nip05 = typeof metadata?.nip05 === "string" && metadata.nip05.trim() !== "" ? metadata.nip05 : undefined;
+  const { data: nip05Verified } = useNip05Verify(nip05, user?.pubkey);
 
   const [, rerender] = useReducer((x: number) => x + 1, 0);
   const runtimes = useRef(new Map<string, RoomRuntime>());
@@ -206,10 +338,89 @@ export function BaoCommunitiesPage() {
   const [draft, setDraft] = useState("");
   const [replyDraft, setReplyDraft] = useState<{ author: string; msgId: string; preview: string } | null>(null);
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? "");
-  const [npubInput, setNpubInput] = useState(() => localStorage.getItem(NPUB_KEY) ?? "");
+  const [npubInput, setNpubInput] = useState(() => {
+    // The manual npub is anon-mode-scoped: only seed the persisted value when
+    // the persisted mode is actually "anon", so a previously typed npub can
+    // never silently re-attach in hashed/nip05 mode (privacy).
+    if (loadIdentityModeFor(accountPubkey) !== "anon") return "";
+    return loadNpubFor(accountPubkey);
+  });
   const [joinLinkInput, setJoinLinkInput] = useState("");
   const [showIdentity, setShowIdentity] = useState(false);
-const [roomsCollapsed, setRoomsCollapsed] = useState(false);
+  const [identityMode, setIdentityMode] = useState<IdentityMode>(() => loadIdentityModeFor(accountPubkey));
+  const [roomsCollapsed, setRoomsCollapsed] = useState(false);
+
+  // ── Identity module (shown on EVERY entry, 2140.social parity) ────────────
+  // Default per session: the hashed pseudonym. The npubInput used on the wire
+  // is DERIVED from the mode — manual npub entry is folded into the module.
+
+  // One-time per-account migration: copy the legacy browser-wide identity
+  // preferences into this account's scope, then retire the unscoped keys.
+  useEffect(() => {
+    if (!accountPubkey) return;
+    try {
+      const modeKey = `${IDENTITY_MODE_KEY}:${accountPubkey}`;
+      const npubKey = `${NPUB_KEY}:${accountPubkey}`;
+      if (localStorage.getItem(modeKey) === null) {
+        const legacy = localStorage.getItem(IDENTITY_MODE_KEY);
+        if (legacy !== null) localStorage.setItem(modeKey, legacy);
+      }
+      if (localStorage.getItem(npubKey) === null) {
+        const legacyNpub = localStorage.getItem(NPUB_KEY);
+        if (legacyNpub !== null) localStorage.setItem(npubKey, legacyNpub);
+      }
+      localStorage.removeItem(IDENTITY_MODE_KEY);
+      localStorage.removeItem(NPUB_KEY);
+    } catch {
+      /* best-effort */
+    }
+  }, [accountPubkey]);
+
+  useEffect(() => {
+    try {
+      const modeKey = accountPubkey ? `${IDENTITY_MODE_KEY}:${accountPubkey}` : IDENTITY_MODE_KEY;
+      localStorage.setItem(modeKey, identityMode);
+    } catch {
+      /* best-effort */
+    }
+    // Leaving anon mode must clear BOTH the state and the persisted value:
+    // otherwise a previously typed npub keeps riding the envelope in
+    // hashed/nip05 mode, and resurrects from localStorage on the next mount
+    // even though the user saw the field emptied.
+    if (identityMode !== "anon") {
+      setNpubInput("");
+      try {
+        const npubKey = accountPubkey ? `${NPUB_KEY}:${accountPubkey}` : NPUB_KEY;
+        localStorage.removeItem(npubKey);
+      } catch {
+        /* best-effort */
+      }
+    }
+  }, [identityMode, accountPubkey]);
+
+  /** What actually rides the envelope for the current mode. `undefined` =
+   *  anonymous — nothing is attached. nip05 mode only attaches a VERIFIED
+   *  identifier (never while verification is pending/failed). */
+  const effectiveIdentity = useMemo<ChatPayload["identity"]>(() => {
+    if (identityMode === "hashed" && user) return { pseudonym: hashedIdentityNpub(user.pubkey) };
+    if (identityMode === "nip05") return nip05 && nip05Verified ? { nip05 } : undefined;
+    const npub = validateNpub(npubInput); // anon: whatever the user typed (usually empty)
+    return npub ? { npub } : undefined;
+  }, [identityMode, user, nip05, nip05Verified, npubInput]);
+
+  /** Short printable form of the effective identity (npub / @nip05 / pseudonym). */
+  const effectiveIdentityLabel = useMemo(() => {
+    if (!effectiveIdentity) return undefined;
+    return effectiveIdentity.nip05 ?? effectiveIdentity.npub ?? effectiveIdentity.pseudonym;
+  }, [effectiveIdentity]);
+
+  const identityLabel = useMemo(() => {
+    if (identityMode === "nip05") {
+      return nip05 ? (nip05Verified ? `@${nip05}` : "NIP-05 (unverified)") : "no NIP-05 on profile";
+    }
+    if (identityMode === "hashed") return effectiveIdentityLabel ?? "hashed anon";
+    return effectiveIdentityLabel ? "custom npub" : "anonymous";
+  }, [identityMode, nip05, nip05Verified, effectiveIdentityLabel]);
 
   const log = useCallback((msg: string) => {
     setLogLines((lines) => [...lines.slice(-80), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -416,8 +627,8 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
     if (replyDraft) {
       payload.reply = { author: replyDraft.author, msg_id: replyDraft.msgId };
     }
-    const exposed = validateNpub(npubInput);
-    if (exposed) payload.identity = { npub: exposed };
+    const identity = effectiveIdentity;
+    if (identity) payload.identity = identity;
     const to = resolveMentions(text, r.roster);
     if (to.length > 0) payload.to = to;
     try {
@@ -437,7 +648,7 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
       if (replyDraft) setReplyDraft(replyDraft);
       log(`#${r.info.name}: post failed — draft restored: ${(err as Error).message}`);
     }
-  }, [draft, replyDraft, npubInput, refreshScroll, log]);
+  }, [draft, replyDraft, effectiveIdentity, refreshScroll, log]);
 
   // ── Join by invite link ──────────────────────────────────────────────────
 
@@ -487,7 +698,6 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
   // ── Derived render data ──────────────────────────────────────────────────
 
   const current = currentId.current ? runtimes.current.get(currentId.current) : undefined;
-  const npubValid = validateNpub(npubInput);
 
   const handleFor = useCallback(
     (r: RoomRuntime, author: string) => r.roster.get(author)?.handle ?? `${author.slice(0, 8)}…`,
@@ -696,10 +906,88 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
               className="rounded-md border px-2 py-0.5 text-muted-foreground hover:bg-secondary/60"
               onClick={() => setShowIdentity((value) => !value)}
             >
-              🪪 {name.trim() || (npubValid ? "named npub" : "anonymous")} {showIdentity ? "▾" : "▸"}
+              🪪 {identityLabel} {showIdentity ? "▾" : "▸"}
             </button>
             {showIdentity && (
               <div className="flex flex-1 flex-wrap items-center gap-2">
+                {/* Identity modes — NIP-05 vs hashed-anon vs pure burner. */}
+                <div className="flex items-center gap-1 rounded-md border p-0.5">
+                  <button
+                    type="button"
+                    aria-pressed={identityMode === "nip05"}
+                    title={nip05 ? (nip05Verified ? `Appear as @${nip05} inside the encrypted envelope` : "Your NIP-05 is not verified yet") : "No NIP-05 on your profile"}
+                    className={cn(
+                      "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors",
+                      identityMode === "nip05" ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/60",
+                    )}
+                    onClick={() => setIdentityMode("nip05")}
+                  >
+                    <IdCard className="size-3" /> NIP-05
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={identityMode === "hashed"}
+                    title="Stable pseudonym derived from your pubkey — linkable across messages, never to your key"
+                    className={cn(
+                      "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors",
+                      identityMode === "hashed" ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/60",
+                    )}
+                    onClick={() => setIdentityMode("hashed")}
+                  >
+                    <ShieldCheck className="size-3" /> Hashed
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={identityMode === "anon"}
+                    title="Pure burner — no identity rides the envelope"
+                    className={cn(
+                      "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors",
+                      identityMode === "anon" ? "bg-primary/10 font-medium text-primary" : "text-muted-foreground hover:bg-secondary/60",
+                    )}
+                    onClick={() => setIdentityMode("anon")}
+                  >
+                    <KeyRound className="size-3" /> Anon
+                  </button>
+                </div>
+                {identityMode === "nip05" && (
+                  <span className={cn("text-[11px]", nip05 && nip05Verified ? "text-success" : "text-muted-foreground")}>
+                    {nip05
+                      ? nip05Verified
+                        ? `✓ visible as @${nip05}`
+                        : "⏳ verifying NIP-05…"
+                      : "no NIP-05 on your profile — set one in settings"}
+                  </span>
+                )}
+                {identityMode === "hashed" && (
+                  <span className="text-[11px] text-muted-foreground">
+                    ✓ visible as {effectiveIdentityLabel}
+                  </span>
+                )}
+                {identityMode === "anon" && (
+                  <>
+                    <Input
+                      value={npubInput}
+                      onChange={(event) => {
+                        setNpubInput(event.target.value);
+                        try {
+                          const npubKey = accountPubkey ? `${NPUB_KEY}:${accountPubkey}` : NPUB_KEY;
+                          localStorage.setItem(npubKey, event.target.value);
+                        } catch {
+                          /* best-effort */
+                        }
+                      }}
+                      placeholder="npub1… (optional — expose your identity)"
+                      className="h-7 max-w-64 text-xs"
+                    />
+                    <span className={cn("text-[11px]", effectiveIdentityLabel ? "text-success" : "text-muted-foreground")}>
+                      {npubInput.trim()
+                        ? effectiveIdentityLabel
+                          ? `✓ visible as ${effectiveIdentityLabel.slice(0, 12)}…`
+                          : "✗ invalid npub — stays anonymous"
+                        : "anonymous"}
+                    </span>
+                  </>
+                )}
                 <Input
                   value={name}
                   onChange={(event) => {
@@ -716,26 +1004,6 @@ const [roomsCollapsed, setRoomsCollapsed] = useState(false);
                   className="h-7 max-w-56 text-xs"
                   maxLength={40}
                 />
-                <Input
-                  value={npubInput}
-                  onChange={(event) => {
-                    setNpubInput(event.target.value);
-                    try {
-                      localStorage.setItem(NPUB_KEY, event.target.value);
-                    } catch {
-                      /* best-effort */
-                    }
-                  }}
-                  placeholder="npub1… (optional — expose your identity)"
-                  className="h-7 max-w-64 text-xs"
-                />
-                <span className={cn("text-[11px]", npubValid ? "text-success" : "text-muted-foreground")}>
-                  {npubInput.trim()
-                    ? npubValid
-                      ? `✓ visible as ${npubValid.slice(0, 12)}…`
-                      : "✗ invalid npub — stays anonymous"
-                    : "anonymous"}
-                </span>
                 {current?.session && (
                   <span className="text-[10px] text-muted-foreground" title={getPublicKey(current.session.joined.authorSecretKey)}>
                     room key: {getPublicKey(current.session.joined.authorSecretKey).slice(0, 12)}…

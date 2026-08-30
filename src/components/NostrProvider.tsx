@@ -11,6 +11,7 @@ import { NIndexedDB } from '@nostrify/indexeddb';
 import { NostrStorageContext } from '@/contexts/NostrStorageContext';
 import { EventStoreContext, type EventStoreContextType } from '@/contexts/EventStoreContext';
 import { emitRelayReopened } from '@/lib/relayReopen';
+import { RelayBackoff } from '@/lib/relayBackoff';
 import { normalizeRelayUrl } from '@/lib/platform';
 import { logSync } from '@/lib/syncLog';
 
@@ -311,6 +312,15 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
         // Normalize once for user-AUTH caches and the relayReopen signal.
         const relayKey = normalizeRelayUrl(relayUrl) ?? url.href;
         const relay: NRelay1 = new NRelay1(url.href, {
+          // Capped exponential backoff for reconnect storms. Without this,
+          // NRelay1's default (`ExponentialBackoff(1000)`, uncapped) is recreated
+          // FRESH on every socket rebuild (send → wake), so a relay failing its
+          // handshake (e.g. HTTP 503) was retried every ~5–10s all session.
+          // Passing ONE stateful instance per relay makes failures accumulate
+          // across rebuilds; websocket-ts resets it on every successful open,
+          // so one-off blips stay on the fast path. Logged per transition via
+          // logSync ('relay' tag) for debugging.
+          backoff: new RelayBackoff({ relayUrl: relayKey, log: (msg) => logSync('relay', msg) }),
           // Gift-wrap (1059/21059) outer signatures are redundant on the client
           // (see verifyEventSkippingWraps); skip them, verify everything else.
           verifyEvent: verifyEventSkippingWraps,

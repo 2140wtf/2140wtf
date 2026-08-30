@@ -63,7 +63,6 @@ export function createJoinLink(host, inviteSecret, roomId, opts = {}) {
             if (opts.do !== undefined) {
                 if (typeof opts.do !== 'string' || opts.do.length === 0 || opts.do.length > 640)
                     throw new Error('join link: do must be 1–640 chars');
-                // eslint-disable-next-line no-control-regex
                 if (/[\u0000-\u001f]/.test(opts.do))
                     throw new Error('join link: do must not contain control characters');
             }

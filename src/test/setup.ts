@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
 import 'fake-indexeddb/auto';
+import { WebSocket as WsWebSocket } from 'ws';
 import { vi } from 'vitest';
 
 // jsdom replaces the global TextEncoder with an implementation whose output is
@@ -105,4 +106,18 @@ global.ResizeObserver = class ResizeObserverMock implements ResizeObserver {
   }
   globalThis.TextEncoder = SameRealmTextEncoder as typeof TextEncoder;
 }
+}
+
+// Node >= 22 ships a native WHATWG WebSocket global; Node 20 does not. The
+// node-environment tests (e.g. the local-relay publish regression suite)
+// exercise @nostrify/nostrify's NRelay1, which goes through websocket-ts and
+// references the global `WebSocket`. Polyfill it from the `ws` dependency so
+// the suite passes on any supported Node version (repo engines: node >= 22,
+// but CI/dev machines may still run Node 20).
+if (typeof globalThis.WebSocket === 'undefined') {
+  Object.defineProperty(globalThis, 'WebSocket', {
+    value: WsWebSocket,
+    writable: true,
+    configurable: true,
+  });
 }
