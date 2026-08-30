@@ -222,7 +222,11 @@ export function MarketPage(): React.JSX.Element {
 
   return (
     <main>
-      <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />}>
+      <PageHeader
+        title="Merchants"
+        icon={<ShoppingBag className="size-5" />}
+        className="sticky top-mobile-bar sidebar:top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border"
+      >
         {/* Search lives in the header row so it can use the full remaining width. */}
         <div className="relative flex-1 max-w-md ml-auto">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -236,8 +240,11 @@ export function MarketPage(): React.JSX.Element {
         </div>
       </PageHeader>
 
-      <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+      {/* Pinned control frame: toolbar + disclaimer stay fixed while the
+          listing grid scrolls underneath. */}
+      <div className="px-[11px] max-w-6xl mx-auto">
+        <div className="sticky top-[calc(var(--top-bar-height)+var(--safe-area-inset-top,env(safe-area-inset-top,0px))+3.25rem)] sidebar:top-[3.25rem] z-10 -mx-[11px] px-[11px] bg-background/90 backdrop-blur-md border-b border-border shadow-sm">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-2">
           {/* Experimental badge — auctions are in beta. */}
           <span
             className="hidden shrink-0 items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-500 md:inline-flex"
@@ -350,10 +357,12 @@ export function MarketPage(): React.JSX.Element {
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground pb-2">
           Showing NIP-99 classified listings published by Nostr users. Artwork and products are sold by the artists, not by {config.appName}.
         </p>
+        </div>
 
+        <div className="pt-4">
         <div
           className={cn(
             'grid gap-4',
@@ -364,6 +373,7 @@ export function MarketPage(): React.JSX.Element {
           )}
         >
           {gridItems}
+        </div>
         </div>
       </div>
 
