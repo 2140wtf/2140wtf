@@ -899,7 +899,7 @@ export function useJurorSession(
     } finally {
       setIsPending(false);
     }
-  }, [user, dispute, tally, demoMode, realMode, myJurorIdx, publishEvent]);
+  }, [user, dispute, tally, demoMode, realMode, publishEvent]);
 
   const advancePhase = useCallback((next: AppealPhase) => {
     setPhase(next);

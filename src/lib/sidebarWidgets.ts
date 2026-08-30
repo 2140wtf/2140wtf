@@ -128,6 +128,7 @@ export const WIDGET_DEFINITIONS: WidgetDefinition[] = [
   },
   {
     id: 'roadstr',
+
     label: 'Roadstr',
     description: 'Nearby road event reports with quick confirmations',
     icon: Navigation,
