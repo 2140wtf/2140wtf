@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Gavel, HandCoins, Loader2, RotateCcw } from 'lucide-react';
+import { HandCoins, ShoppingCart } from 'lucide-react';
+import { Gavel, Loader2, RotateCcw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useQueryClient } from '@tanstack/react-query';
-import { isAuctionClosed, type AuctionListing } from '@/lib/cashu/auction';
+import { isAuctionClosed, canBuyNow, type AuctionListing } from '@/lib/cashu/auction';
 import {
   buildAuctionSettleTags,
   clearPendingBidDeposit,
@@ -73,6 +74,7 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
   const [loginOpen, setLoginOpen] = useState(false);
   const [settling, setSettling] = useState(false);
   const [refunding, setRefunding] = useState(false);
+  const [buyingNow, setBuyingNow] = useState(false);
 
   // Ticks every second under 1h to close (seconds matter at auction end),
   // otherwise every 30s so the countdown stays fresh without churn.
@@ -106,6 +108,21 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
       return;
     }
     setBidOpen(true);
+  };
+
+  /** eBay blueprint: Buy It Now skips the auction — buyer pays the fixed
+   * price and the auction ends immediately. The escrow lock + bid event are
+   * placed at the fixed price via the bid dialog (buyNowMode), and the
+   * seller then settles exactly like a normal auction winner. */
+  const buyNowAvailable = canBuyNow(auction, highest, now);
+
+  const handleBuyNowClick = () => {
+    if (!user) {
+      toast({ title: 'Log in required', description: 'You need to log in to use Buy It Now.' });
+      setLoginOpen(true);
+      return;
+    }
+    setBidOpen(true); // bid dialog opens pre-capped at the buy-now price
   };
 
   /** Seller: close the auction now (publishes status=sold). */
@@ -300,11 +317,29 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
           ) : null}
         </div>
 
-        {/* Bidder actions */}
+        {/* Bidder actions — eBay blueprint: Bid always; Buy It Now only
+            when the seller set a buy-now price and bidding hasn't reached it. */}
         {!isSeller && !closed && (
-          <Button className="w-full" onClick={handleBidClick}>
-            {iAmHighest ? 'Raise bid' : 'Place bid'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              variant={buyNowAvailable ? 'outline' : 'default'}
+              onClick={handleBidClick}
+            >
+              <Gavel className="size-4 mr-1.5" />
+              {iAmHighest ? 'Raise bid' : 'Place bid'}
+            </Button>
+            {buyNowAvailable && (
+              <Button className="flex-1" onClick={handleBuyNowClick} disabled={buyingNow}>
+                {buyingNow ? (
+                  <Loader2 className="size-4 mr-1.5 animate-spin" />
+                ) : (
+                  <ShoppingCart className="size-4 mr-1.5" />
+                )}
+                Buy It Now ({formatSats(auction.buyNowSats!)} sats)
+              </Button>
+            )}
+          </div>
         )}
 
         {/* Bidder refund reclaim (lost/outbid). */}
@@ -359,6 +394,7 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
         open={bidOpen}
         onOpenChange={setBidOpen}
         onBidPlaced={() => refetchBids()}
+        buyNowMode={buyNowAvailable}
       />
 
       <LoginDialog

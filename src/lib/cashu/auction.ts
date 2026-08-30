@@ -363,6 +363,23 @@ export function isAuctionClosed(
 }
 
 /**
+ * Whether the Buy-It-Now option is available (eBay blueprint): the seller
+ * must have set a buy-now price, the auction must still be active, and no
+ * bid may have reached/exceeded the buy-now price yet (once bidding passes
+ * it, the buy-now option disappears — same as eBay).
+ */
+export function canBuyNow(
+  auction: AuctionListing,
+  currentHighest: AuctionBid | null,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!auction.buyNowSats) return false;
+  if (isAuctionClosed(auction, nowSeconds)) return false;
+  if (currentHighest && currentHighest.amountSats >= auction.buyNowSats) return false;
+  return true;
+}
+
+/**
  * Validate a bid amount against the auction state. Returns an error message
  * or null when the bid is acceptable.
  */

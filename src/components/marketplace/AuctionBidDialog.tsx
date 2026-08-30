@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Gavel, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Gavel, Loader2, ShoppingCart } from 'lucide-react';
 
 /** Live countdown label to the close time, e.g. "2d 4h 3m 12s left". */
 function timeLeftLabel(closesAt: number): string {
@@ -46,6 +46,10 @@ interface AuctionBidDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onBidPlaced?: () => void;
+  /** eBay blueprint: Buy-It-Now flow — amount fixed at buy-now price,
+   * input locked; on confirm the auction is closed (status=sold) so the
+   * buyer becomes the winner and settlement proceeds as usual. */
+  buyNowMode?: boolean;
 }
 
 /**
@@ -64,6 +68,7 @@ export function AuctionBidDialog({
   open,
   onOpenChange,
   onBidPlaced,
+  buyNowMode = false,
 }: AuctionBidDialogProps) {
   const { user } = useCurrentUser();
   const wallet = useCashuWalletContext();
@@ -71,6 +76,11 @@ export function AuctionBidDialog({
   const { toast } = useToast();
 
   const [amount, setAmount] = useState(String(minNextBid));
+
+  // Buy-now mode: snap the amount to the fixed price each open.
+  useEffect(() => {
+    if (open && buyNowMode && auction.buyNowSats) setAmount(String(auction.buyNowSats));
+  }, [open, buyNowMode, auction.buyNowSats]);
   const [isBidding, setIsBidding] = useState(false);
   const [error, setError] = useState('');
 
@@ -145,9 +155,26 @@ export function AuctionBidDialog({
         ],
       });
 
+      // Buy-now: end the auction immediately (status=sold) so the buyer
+      // becomes the winner and the seller settles exactly as usual.
+      if (buyNowMode) {
+        const soldTags = auction.event.tags.map((t) =>
+          t[0] === 'status' ? ['status', 'sold'] : t,
+        );
+        if (!soldTags.some(([n]) => n === 'status')) soldTags.push(['status', 'sold']);
+        await publishEvent({
+          kind: auction.event.kind,
+          content: auction.event.content,
+          tags: soldTags,
+          prev: auction.event,
+        });
+      }
+
       toast({
-        title: 'Bid placed!',
-        description: `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
+        title: buyNowMode ? 'Buy It Now 成功！' : 'Bid placed!',
+        description: buyNowMode
+          ? `${formatSats(numericAmount)} sats 已锁定，拍卖已结束，等待卖家结算。`
+          : `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
       });
       onOpenChange(false);
       onBidPlaced?.();
@@ -163,8 +190,8 @@ export function AuctionBidDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Gavel className="size-4" />
-            Place bid
+            {buyNowMode ? <ShoppingCart className="size-4" /> : <Gavel className="size-4" />}
+            {buyNowMode ? 'Buy It Now' : 'Place bid'}
           </DialogTitle>
           <DialogDescription>
             {auction.title} — closes exactly{' '}
@@ -185,12 +212,13 @@ export function AuctionBidDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="bid-amount">Your bid (sats)</Label>
+            <Label htmlFor="bid-amount">{buyNowMode ? 'Fixed price (sats)' : 'Your bid (sats)'}</Label>
             <Input
               id="bid-amount"
               type="number"
               min={minNextBid}
               value={amount}
+              disabled={buyNowMode}
               onChange={(e) => setAmount(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
@@ -227,7 +255,7 @@ export function AuctionBidDialog({
                 Locking escrow…
               </>
             ) : (
-              'Lock bid in escrow'
+              buyNowMode ? 'Confirm Buy It Now' : 'Lock bid in escrow'
             )}
           </Button>
         </DialogFooter>
