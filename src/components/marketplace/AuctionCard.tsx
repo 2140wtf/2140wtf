@@ -122,6 +122,7 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
       setLoginOpen(true);
       return;
     }
+    setBuyingNow(true);
     setBidOpen(true); // bid dialog opens pre-capped at the buy-now price
   };
 

@@ -47,13 +47,6 @@ const CLOSE_FMT = new Intl.DateTimeFormat(undefined, {
   timeZoneName: 'short',
 });
 
-/** Local-time offset of a date relative to UTC, e.g. "+02:00" (for datetime-local). */
-function localIsoOffset(d: Date): string {
-  const pad = (n: number) => String(Math.abs(n)).padStart(2, '0');
-  const sign = d.getTimezoneOffset() <= 0 ? '+' : '-';
-  return `${sign}${pad(Math.floor(Math.abs(d.getTimezoneOffset()) / 60))}:${pad(Math.abs(d.getTimezoneOffset()) % 60)}`;
-}
-
 /** Unix seconds → "YYYY-MM-DDTHH:mm" in local time (for <input type=datetime-local>). */
 function toLocalInputValue(unixSeconds: number): string {
   const d = new Date(unixSeconds * 1000);
