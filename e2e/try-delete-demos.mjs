@@ -37,3 +37,9 @@ console.log('The demo events were published with ephemeral keys that no longer e
 console.log('so relays keep the originals — deletion from a random key has no effect.');
 pool.close(RELAYS);
 process.exit(0);
+
+// VERIFIED LIVE (2026-08-31): relay response to a third-party deletion:
+//   "invalid: can't delete other user's events"
+// NIP-09 author-only enforcement is protocol-level. The orphaned 21k-sat
+// demos can only leave the relays by expiring (close tag) or by relay
+// operator action. They are hidden client-side in this app.
