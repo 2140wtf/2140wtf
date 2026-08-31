@@ -136,6 +136,12 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
   const dTag = getTag(event, 'd');
   if (!dTag) return null;
 
+  // Hide known demo/test listings: they were published to the public relays
+  // by ephemeral throwaway keys that no longer exist, so NIP-09 deletion is
+  // impossible. Filter by d-tag pattern instead of leaving them to spam the
+  // Merchants feed. (demo-auction-* is also filtered in the auction parser.)
+  if (/^demo-auction-/.test(dTag) || /^test-\d{13}/.test(dTag)) return null;
+
   const title = getTag(event, 'title')?.trim() || dTag;
   const summary = getTag(event, 'summary')?.trim() || '';
 
