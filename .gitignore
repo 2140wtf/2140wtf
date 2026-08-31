@@ -51,6 +51,9 @@ tests-manual/
 # Local release-note drafts
 RELEASE_NOTES*.md
 
+# Demo publisher signing keys — never commit (they can delete relay events)
+e2e/.demo-keys.json
+
 # Android build outputs and sensitive files
 *.aab
 resources/
