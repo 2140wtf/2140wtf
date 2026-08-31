@@ -34,6 +34,7 @@ const eventTemplate = {
     ['auction', 'auction'],
     ['price', '1', 'sat'],
     ['buy_now', '21'],
+    ['min_wot', '60'],
     ['close', String(closesAt)],
     ['image', 'https://cdn.nostr.build/p/demo-auction-1.jpg'],
   ],
