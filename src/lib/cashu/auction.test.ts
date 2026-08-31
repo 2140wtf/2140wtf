@@ -5,6 +5,8 @@ import {
   auctionAddress,
   buildAuctionEvent,
   buildBidEvent,
+  canBidWot,
+  canBuyNow,
   dedupeAuctionListings,
   isAuctionClosed,
   parseAuctionBid,
@@ -183,6 +185,160 @@ describe('isAuctionClosed / validateBidAmount', () => {
 
   it('accepts a valid bid', () => {
     expect(validateBidAmount(2000, auction, null, NOW)).toBeNull();
+  });
+});
+
+describe('canBuyNow', () => {
+  const auction = parseAuctionListing(makeAuction())!; // buy_now = 50000, closes NOW+3600
+
+  it('is available when buy-now price set and auction active with no bids', () => {
+    expect(canBuyNow(auction, null, NOW)).toBe(true);
+  });
+
+  it('is unavailable when no buy-now price set', () => {
+    const noBuyNow = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+    ] }))!;
+    expect(canBuyNow(noBuyNow, null, NOW)).toBe(false);
+  });
+
+  it('is unavailable after close', () => {
+    expect(canBuyNow(auction, null, NOW + 3600)).toBe(false);
+  });
+
+  it('is unavailable once highest bid reaches buy-now price', () => {
+    const atBuyNow = { eventId: 'x', pubkey: BIDDER2, amountSats: 50000, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, atBuyNow, NOW)).toBe(false);
+  });
+
+  it('is available while highest bid is below buy-now price', () => {
+    const below = { eventId: 'x', pubkey: BIDDER2, amountSats: 49999, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, below, NOW)).toBe(true);
+  });
+
+  it('is unavailable for sold auctions', () => {
+    expect(canBuyNow({ ...auction, status: 'sold' }, null, NOW)).toBe(false);
+  });
+
+  it('allows a bid exactly at the buy-now price (Buy It Now flow)', () => {
+    expect(validateBidAmount(50000, auction, null, NOW)).toBeNull();
+    // After that bid lands, Buy It Now must disappear (bidding reached it).
+    const atBuyNow = { eventId: 'x', pubkey: BIDDER2, amountSats: 50000, auctionAddress: '', createdAt: NOW };
+    expect(canBuyNow(auction, atBuyNow, NOW)).toBe(false);
+    // ...but the bid itself stays valid against the closed floor.
+    expect(validateBidAmount(50000, auction, atBuyNow, NOW)).toMatch(/at least 50,001/);
+  });
+});
+
+describe('canBidWot', () => {
+  it('allows any bidder when the auction has no threshold', () => {
+    const open = parseAuctionListing(makeAuction())!; // no min_wot tag
+    expect(canBidWot(open, 0)).toEqual({ allowed: true, reason: null });
+    expect(canBidWot(open, null)).toEqual({ allowed: true, reason: null });
+    expect(canBidWot(open, undefined)).toEqual({ allowed: true, reason: null });
+  });
+
+  it('allows any bidder when the threshold is zero', () => {
+    const zero = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', '0'],
+    ] }))!;
+    expect(zero.minWot).toBeUndefined();
+    expect(canBidWot(zero, 0).allowed).toBe(true);
+  });
+
+  it('blocks bidders below the threshold with a gentle message', () => {
+    const gated = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', '50'],
+    ] }))!;
+    expect(gated.minWot).toBe(50);
+
+    const blocked = canBidWot(gated, 10);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.reason).toContain('50');
+    expect(blocked.reason).toContain('Web of Trust');
+
+    const noScore = canBidWot(gated, null);
+    expect(noScore.allowed).toBe(false);
+    expect(noScore.reason).toContain('50');
+  });
+
+  it('allows bidders at or above the threshold', () => {
+    const gated = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', '50'],
+    ] }))!;
+    expect(canBidWot(gated, 50).allowed).toBe(true);
+    expect(canBidWot(gated, 99).allowed).toBe(true);
+    expect(canBidWot(gated, 100).allowed).toBe(true);
+  });
+
+  it('clamps the parsed threshold to [1, 100] and drops invalid values', () => {
+    const over = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', '250'],
+    ] }))!;
+    expect(over.minWot).toBe(100);
+
+    const junk = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', 'abc'],
+    ] }))!;
+    expect(junk.minWot).toBeUndefined();
+  });
+
+  it('emits the min_wot tag from buildAuctionEvent when set', () => {
+    const ev = buildAuctionEvent({
+      sellerPubkey: SELLER,
+      dTag: 'x',
+      title: 'T',
+      startingSats: 1,
+      minWot: 50,
+      durationHours: 24,
+      now: NOW,
+    });
+    expect(ev.tags).toContainEqual(['min_wot', '50']);
+
+    const open = buildAuctionEvent({
+      sellerPubkey: SELLER,
+      dTag: 'y',
+      title: 'T',
+      startingSats: 1,
+      durationHours: 24,
+      now: NOW,
+    });
+    expect(open.tags.some((t) => t[0] === 'min_wot')).toBe(false);
+  });
+
+  it('does not block bids by amount validation (WoT is a separate gate)', () => {
+    const gated = parseAuctionListing(makeAuction({ tags: [
+      ['d', 'art-1'],
+      ['auction', 'auction'],
+      ['price', '1000', 'sats'],
+      ['close', String(NOW + 3600)],
+      ['min_wot', '99'],
+    ] }))!;
+    // A high-WoT bidder's amount check is unaffected by the threshold.
+    expect(validateBidAmount(1000, gated, null, NOW)).toBeNull();
   });
 });
 

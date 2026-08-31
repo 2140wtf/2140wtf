@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Gavel, HandCoins, Loader2, RotateCcw } from 'lucide-react';
+import { HandCoins, ShoppingCart } from 'lucide-react';
+import { Gavel, Loader2, RotateCcw } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useQueryClient } from '@tanstack/react-query';
-import { isAuctionClosed, type AuctionListing } from '@/lib/cashu/auction';
+import { isAuctionClosed, canBuyNow, type AuctionListing } from '@/lib/cashu/auction';
 import {
   buildAuctionSettleTags,
   clearPendingBidDeposit,
@@ -32,10 +33,27 @@ function timeRemaining(closesAt: number, nowSeconds: number): string {
   if (secs <= 0) return 'Closed';
   const days = Math.floor(secs / 86400);
   const hours = Math.floor((secs % 86400) / 3600);
-  if (days > 0) return `${days}d ${hours}h left`;
   const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+  if (days > 0) return `${days}d ${hours}h left`;
   if (hours > 0) return `${hours}h ${minutes}m left`;
-  return `${minutes}m left`;
+  if (minutes > 0) return `${minutes}m ${seconds}s left`;
+  return `${seconds}s left`;
+}
+
+/** Exact close time incl. seconds and timezone, e.g. "Aug 30, 2026, 08:31:42 PM CET". */
+const EXACT_CLOSE_FMT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  timeZoneName: 'short',
+});
+
+function exactClose(closesAt: number): string {
+  return EXACT_CLOSE_FMT.format(new Date(closesAt * 1000));
 }
 
 /**
@@ -56,13 +74,17 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
   const [loginOpen, setLoginOpen] = useState(false);
   const [settling, setSettling] = useState(false);
   const [refunding, setRefunding] = useState(false);
+  const [buyingNow, setBuyingNow] = useState(false);
 
-  // Ticks every 30s so the countdown stays fresh without per-second renders.
+  // Ticks every second under 1h to close (seconds matter at auction end),
+  // otherwise every 30s so the countdown stays fresh without churn.
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
-    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    const nearEnd = auction.closesAt - now <= 3600;
+    const intervalMs = nearEnd ? 1_000 : 30_000;
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), intervalMs);
     return () => clearInterval(id);
-  }, []);
+  }, [auction.closesAt, now]);
 
   const closed = isAuctionClosed(auction, now);
   const isSeller = user?.pubkey === auction.pubkey;
@@ -86,6 +108,22 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
       return;
     }
     setBidOpen(true);
+  };
+
+  /** eBay blueprint: Buy It Now skips the auction — buyer pays the fixed
+   * price and the auction ends immediately. The escrow lock + bid event are
+   * placed at the fixed price via the bid dialog (buyNowMode), and the
+   * seller then settles exactly like a normal auction winner. */
+  const buyNowAvailable = canBuyNow(auction, highest, now);
+
+  const handleBuyNowClick = () => {
+    if (!user) {
+      toast({ title: 'Log in required', description: 'You need to log in to use Buy It Now.' });
+      setLoginOpen(true);
+      return;
+    }
+    setBuyingNow(true);
+    setBidOpen(true); // bid dialog opens pre-capped at the buy-now price
   };
 
   /** Seller: close the auction now (publishes status=sold). */
@@ -231,7 +269,11 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
           </div>
         )}
         <div className="absolute top-2 left-2">
-          <Badge variant={closed ? 'secondary' : 'default'} className="text-[10px]">
+          <Badge
+            variant={closed ? 'secondary' : 'default'}
+            className="text-[10px]"
+            title={`Ends: ${exactClose(auction.closesAt)}`}
+          >
             {closed ? 'Closed' : timeRemaining(auction.closesAt, now)}
           </Badge>
         </div>
@@ -265,6 +307,9 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
               {highest ? 'current bid' : 'starting bid'}
               {!bidsLoading && bidState.sorted.length > 0 && ` · ${bidState.sorted.length} bid${bidState.sorted.length > 1 ? 's' : ''}`}
             </div>
+            <div className="text-[10px] text-muted-foreground tabular-nums">
+              {closed ? `Ended: ${exactClose(auction.closesAt)}` : `Ends: ${exactClose(auction.closesAt)}`}
+            </div>
           </div>
           {auction.buyNowSats ? (
             <span className="text-xs text-muted-foreground">
@@ -273,11 +318,29 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
           ) : null}
         </div>
 
-        {/* Bidder actions */}
+        {/* Bidder actions — eBay blueprint: Bid always; Buy It Now only
+            when the seller set a buy-now price and bidding hasn't reached it. */}
         {!isSeller && !closed && (
-          <Button className="w-full" onClick={handleBidClick}>
-            {iAmHighest ? 'Raise bid' : 'Place bid'}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              variant={buyNowAvailable ? 'outline' : 'default'}
+              onClick={handleBidClick}
+            >
+              <Gavel className="size-4 mr-1.5" />
+              {iAmHighest ? 'Raise bid' : 'Place bid'}
+            </Button>
+            {buyNowAvailable && (
+              <Button className="flex-1" onClick={handleBuyNowClick} disabled={buyingNow}>
+                {buyingNow ? (
+                  <Loader2 className="size-4 mr-1.5 animate-spin" />
+                ) : (
+                  <ShoppingCart className="size-4 mr-1.5" />
+                )}
+                Buy It Now ({formatSats(auction.buyNowSats!)} sats)
+              </Button>
+            )}
+          </div>
         )}
 
         {/* Bidder refund reclaim (lost/outbid). */}
@@ -332,6 +395,7 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
         open={bidOpen}
         onOpenChange={setBidOpen}
         onBidPlaced={() => refetchBids()}
+        buyNowMode={buyNowAvailable}
       />
 
       <LoginDialog

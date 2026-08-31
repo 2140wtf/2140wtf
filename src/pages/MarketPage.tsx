@@ -15,6 +15,8 @@ import { Nip99ListingCard } from '@/components/marketplace/Nip99ListingCard';
 import { AuctionCard } from '@/components/marketplace/AuctionCard';
 import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
 import { ProductListingComposeDialog } from '@/components/marketplace/ProductListingComposeDialog';
+import LoginDialog from '@/components/auth/LoginDialog';
+import { useOnboarding } from '@/hooks/useOnboarding';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthors, type AuthorData } from '@/hooks/useAuthors';
@@ -81,6 +83,8 @@ export function MarketPage(): React.JSX.Element {
   });
 
   const { user } = useCurrentUser();
+  const { startSignup } = useOnboarding();
+  const [loginOpen, setLoginOpen] = useState(false);
   const [category, setCategory] = useState<ListingCategoryValue | 'all'>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortValue>('newest');
@@ -218,11 +222,13 @@ export function MarketPage(): React.JSX.Element {
 
   return (
     <main>
-      <PageHeader title="Merchants" icon={<ShoppingBag className="size-5" />} />
-
-      <div className="px-[11px] py-4 max-w-6xl mx-auto space-y-4">
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {/* Listings / Auctions view toggle. */}
+      <PageHeader
+        title="Merchants"
+        icon={<ShoppingBag className="size-5" />}
+        className="sticky top-mobile-bar sidebar:top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border"
+      >
+        {/* Listings/Auctions toggle lives in the header row, left of the search. */}
+        <div className="flex shrink-0 items-center gap-3">
           <div className="flex shrink-0 rounded-full border border-border p-0.5">
             <button
               type="button"
@@ -246,18 +252,25 @@ export function MarketPage(): React.JSX.Element {
               Auctions
             </button>
           </div>
+        </div>
+        {/* Search lives in the header row so it can use the full remaining width. */}
+        <div className="relative flex-1 max-w-md ml-auto">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search listings…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="rounded-full pl-9"
+          />
+        </div>
+      </PageHeader>
 
-          <div className="relative min-w-16 flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search listings…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="rounded-full pl-9"
-            />
-          </div>
-
+      {/* Pinned control frame: toolbar + disclaimer stay fixed while the
+          listing grid scrolls underneath. */}
+      <div className="px-[11px] max-w-6xl mx-auto">
+        <div className="sticky top-[calc(var(--top-bar-height)+var(--safe-area-inset-top,env(safe-area-inset-top,0px))+3.25rem)] sidebar:top-[3.25rem] z-10 -mx-[11px] px-[11px] bg-background/90 backdrop-blur-md border-b border-border shadow-sm">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-2">
           <Select value={sort} onValueChange={(value) => setSort(value as SortValue)}>
             <SelectTrigger
               className="size-9 shrink-0 rounded-full px-0 justify-center [&>[data-radix-select-trigger-icon]]:hidden"
@@ -314,29 +327,36 @@ export function MarketPage(): React.JSX.Element {
             <RefreshCw className={`size-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
 
+          {/* Design auction — visible to everyone; prompts login when logged out. */}
+          <Button
+            className="h-9 shrink-0 rounded-full px-3"
+            variant="outline"
+            onClick={() => {
+              if (!user) {
+                setLoginOpen(true);
+                return;
+              }
+              setAuctionOpen(true);
+            }}
+            aria-label="Design auction"
+          >
+            <Gavel className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Design auction</span>
+          </Button>
           {user && (
-            <>
-              <Button
-                className="h-9 shrink-0 rounded-full px-3"
-                variant="outline"
-                onClick={() => setAuctionOpen(true)}
-                aria-label="Design auction"
-              >
-                <Gavel className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">Design auction</span>
-              </Button>
-              <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
-                <Plus className="size-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">List product</span>
-              </Button>
-            </>
+            <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
+              <Plus className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">List product</span>
+            </Button>
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground pb-2">
           Showing NIP-99 classified listings published by Nostr users. Artwork and products are sold by the artists, not by {config.appName}.
         </p>
+        </div>
 
+        <div className="pt-4">
         <div
           className={cn(
             'grid gap-4',
@@ -347,6 +367,7 @@ export function MarketPage(): React.JSX.Element {
           )}
         >
           {gridItems}
+        </div>
         </div>
       </div>
 
@@ -362,6 +383,16 @@ export function MarketPage(): React.JSX.Element {
         onSuccess={() => {
           setView('auctions');
           refetchAuctions();
+        }}
+      />
+
+      <LoginDialog
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={() => setLoginOpen(false)}
+        onSignupClick={() => {
+          setLoginOpen(false);
+          startSignup();
         }}
       />
     </main>

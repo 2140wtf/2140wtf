@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { MapPin, ShoppingCart, Tag, User, MessageCircle, Box, Truck, Download, ImageOff } from 'lucide-react';
+import { MapPin, ShoppingCart, Tag, User, MessageCircle, Box, Truck, Download, ImageOff, Gavel } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
@@ -24,6 +24,7 @@ import { useOnboarding } from '@/hooks/useOnboarding';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { CreateOrderDialog } from '@/components/CreateOrderDialog';
+import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
 import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, type Nip99Listing } from '@/lib/nip99';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +69,27 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
   const { toast } = useToast();
   const [detailOpen, setDetailOpen] = useState(false);
   const [buyOpen, setBuyOpen] = useState(false);
+  const [auctionOpen, setAuctionOpen] = useState(false);
+
+  /** Shared click handler for every auction entry point on this card. */
+  const openAuctionDialog = () => {
+    if (!user) {
+      toast({
+        title: 'Log in required',
+        description: 'You need to log in to design an auction for this item.',
+      });
+      setLoginOpen(true);
+      return;
+    }
+    if (isSeller) {
+      setAuctionOpen(true);
+    } else {
+      toast({
+        title: 'Not your listing',
+        description: 'Only the seller of this item can design an auction for it.',
+      });
+    }
+  };
 
   const metadata = author?.metadata;
   const displayName = metadata?.display_name || metadata?.name || `${listing.pubkey.slice(0, 8)}…`;
@@ -219,12 +241,35 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
               </Avatar>
               <span className="text-xs text-muted-foreground truncate">{displayName}</span>
             </div>
-            {listing.location && (
-              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                <MapPin className="w-3 h-3" />
-                <span className="truncate max-w-[80px]">{listing.location}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {listing.location && (
+                <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                  <MapPin className="w-3 h-3" />
+                  <span className="truncate max-w-[80px]">{listing.location}</span>
+                </div>
+              )}
+              {listing.status === 'active' && (
+                <button
+                  type="button"
+                  aria-label={`Design auction for ${listing.title}`}
+                  title={
+                    user
+                      ? isSeller
+                        ? 'Design auction from this listing'
+                        : 'Log in as the seller to design an auction for this item'
+                      : 'Log in to design an auction'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAuctionDialog();
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-amber-500/40 hover:bg-amber-500/10 hover:text-amber-500"
+                >
+                  <Gavel className="size-3" />
+                  Auction
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -356,6 +401,16 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   {markSold.isPending ? 'Updating…' : 'Mark as sold'}
                 </Button>
               )}
+              {(!isSeller || listing.status === 'active') && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={openAuctionDialog}
+                >
+                  <Gavel className="w-4 h-4 mr-2" />
+                  Design auction
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -367,6 +422,18 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
           open={buyOpen}
           onOpenChange={setBuyOpen}
           onCreated={handleCreated}
+        />
+      )}
+
+      {user && isSeller && (
+        <CreateAuctionDialog
+          open={auctionOpen}
+          onOpenChange={setAuctionOpen}
+          initialTitle={listing.title}
+          initialSummary={listing.summary || undefined}
+          initialContent={listing.content || undefined}
+          initialImages={listing.images}
+          initialCategories={listing.categories}
         />
       )}
 

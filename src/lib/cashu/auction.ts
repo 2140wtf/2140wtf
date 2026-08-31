@@ -59,6 +59,8 @@ export interface AuctionListing {
   startingSats: number;
   /** Optional buy-now price in sats; 0/undefined = no buy-now. */
   buyNowSats?: number;
+  /** Minimum Web-of-Trust score (0–100) required to bid; 0/undefined = open to all. */
+  minWot?: number;
   /** Unix seconds when bidding closes. */
   closesAt: number;
   /** The original Nostr event. */
@@ -113,6 +115,9 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
   const buyNowRaw = getTag(event, 'buy_now');
   const buyNowSats = buyNowRaw ? Number(buyNowRaw) : NaN;
 
+  const minWotRaw = getTag(event, 'min_wot');
+  const minWot = minWotRaw ? Number(minWotRaw) : NaN;
+
   return {
     id: `${event.pubkey}:${dTag}`,
     eventId: event.id,
@@ -133,6 +138,8 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
     startingSats,
     buyNowSats:
       Number.isSafeInteger(buyNowSats) && buyNowSats > 0 ? buyNowSats : undefined,
+    minWot:
+      Number.isSafeInteger(minWot) && minWot > 0 ? Math.min(100, Math.round(minWot)) : undefined,
     closesAt,
     event,
   };
@@ -195,8 +202,15 @@ export function buildAuctionEvent(input: {
   categories?: string[];
   startingSats: number;
   buyNowSats?: number;
-  /** Auction duration in hours (clamped to [1, 720]). */
+  /** Minimum Web-of-Trust score (0–100) required to bid; omit/0 = open to all. */
+  minWot?: number;
+  /** Auction duration in hours (clamped to [1, 720]). Ignored when closesAt is set. */
   durationHours: number;
+  /**
+   * Exact close time in unix seconds (minute precision from the UI). When set,
+   * it overrides durationHours; must be in the future and within the 30-day cap.
+   */
+  closesAt?: number;
   /** Unix seconds when the auction is created. */
   now: number;
 }): {
@@ -205,11 +219,18 @@ export function buildAuctionEvent(input: {
   tags: string[][];
   created_at: number;
 } {
-  const duration = Math.max(
-    1,
-    Math.min(MAX_AUCTION_DURATION_HOURS, Math.round(input.durationHours)),
-  );
-  const closesAt = input.now + duration * 3600;
+  const now = input.now;
+  let closesAt: number;
+  if (input.closesAt !== undefined) {
+    // Exact end time wins; clamp into [now + 1min, now + 30d].
+    closesAt = Math.max(now + 60, Math.min(now + MAX_AUCTION_DURATION_HOURS * 3600, Math.round(input.closesAt)));
+  } else {
+    const duration = Math.max(
+      1,
+      Math.min(MAX_AUCTION_DURATION_HOURS, Math.round(input.durationHours)),
+    );
+    closesAt = now + duration * 3600;
+  }
 
   const tags: string[][] = [
     ['d', input.dTag],
@@ -222,6 +243,9 @@ export function buildAuctionEvent(input: {
 
   if (input.buyNowSats && input.buyNowSats > 0) {
     tags.push(['buy_now', String(Math.round(input.buyNowSats))]);
+  }
+  if (input.minWot && input.minWot > 0) {
+    tags.push(['min_wot', String(Math.min(100, Math.round(input.minWot)))]);
   }
   if (input.summary?.trim()) tags.push(['summary', input.summary.trim()]);
   for (const img of input.images ?? []) {
@@ -348,6 +372,47 @@ export function isAuctionClosed(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): boolean {
   return auction.status === 'sold' || nowSeconds >= auction.closesAt;
+}
+
+/**
+ * Whether the Buy-It-Now option is available (eBay blueprint): the seller
+ * must have set a buy-now price, the auction must still be active, and no
+ * bid may have reached/exceeded the buy-now price yet (once bidding passes
+ * it, the buy-now option disappears — same as eBay).
+ */
+export function canBuyNow(
+  auction: AuctionListing,
+  currentHighest: AuctionBid | null,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!auction.buyNowSats) return false;
+  if (isAuctionClosed(auction, nowSeconds)) return false;
+  if (currentHighest && currentHighest.amountSats >= auction.buyNowSats) return false;
+  return true;
+}
+
+/**
+ * Whether a bidder's Web-of-Trust score clears the auction's minimum-WoT
+ * threshold. Sellers can gate auctions to bidders with a min score (0–100);
+ * `0`/undefined on the auction means open to everyone.
+ *
+ * Returns `{ allowed, reason }` — `reason` is a gentle, user-facing message
+ * when bidding is blocked, null when allowed.
+ */
+export function canBidWot(
+  auction: Pick<AuctionListing, 'minWot'>,
+  bidderWotScore: number | null | undefined,
+): { allowed: boolean; reason: string | null } {
+  const threshold = auction.minWot ?? 0;
+  if (threshold <= 0) return { allowed: true, reason: null };
+  const score = typeof bidderWotScore === 'number' && Number.isFinite(bidderWotScore) ? bidderWotScore : 0;
+  if (score >= threshold) return { allowed: true, reason: null };
+  return {
+    allowed: false,
+    reason:
+      `You cannot bid on this auction — it requires a minimum Web of Trust score of ${threshold}` +
+      (score > 0 ? ` (your score: ${Math.round(score)}).` : '.'),
+  };
 }
 
 /**

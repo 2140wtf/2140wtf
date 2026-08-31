@@ -1,5 +1,21 @@
-import { useMemo, useState } from 'react';
-import { Gavel, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Gavel, Loader2, ShoppingCart } from 'lucide-react';
+
+/** Live countdown label to the close time, e.g. "2d 4h 3m 12s left". */
+function timeLeftLabel(closesAt: number): string {
+  const secs = Math.max(0, closesAt - Math.floor(Date.now() / 1000));
+  if (secs === 0) return 'closed';
+  const days = Math.floor(secs / 86400);
+  const hours = Math.floor((secs % 86400) / 3600);
+  const minutes = Math.floor((secs % 3600) / 60);
+  const seconds = secs % 60;
+  const parts: string[] = [];
+  if (days) parts.push(`${days}d`);
+  if (days || hours) parts.push(`${hours}h`);
+  if (days || hours || minutes) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+  return `${parts.join(' ')} left`;
+}
 
 import {
   Dialog,
@@ -16,7 +32,8 @@ import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
+import { useWot } from '@/hooks/useWot';
+import { canBidWot, validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
 import { savePendingBidDeposit } from '@/lib/cashu/auctionSettlement';
 import { MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
 import { formatSats } from '@/lib/bitcoin';
@@ -30,6 +47,10 @@ interface AuctionBidDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onBidPlaced?: () => void;
+  /** eBay blueprint: Buy-It-Now flow — amount fixed at buy-now price,
+   * input locked; on confirm the auction is closed (status=sold) so the
+   * buyer becomes the winner and settlement proceeds as usual. */
+  buyNowMode?: boolean;
 }
 
 /**
@@ -48,13 +69,23 @@ export function AuctionBidDialog({
   open,
   onOpenChange,
   onBidPlaced,
+  buyNowMode = false,
 }: AuctionBidDialogProps) {
   const { user } = useCurrentUser();
   const wallet = useCashuWalletContext();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  // WoT gate: score the bidder from the seller's perspective (community view).
+  const { scores } = useWot(user ? [user.pubkey] : [], { anchor: sellerPubkey });
+  const wotScore = user ? scores.get(user.pubkey)?.score ?? 0 : null;
+  const wotGate = useMemo(() => canBidWot(auction, wotScore), [auction, wotScore]);
 
   const [amount, setAmount] = useState(String(minNextBid));
+
+  // Buy-now mode: snap the amount to the fixed price each open.
+  useEffect(() => {
+    if (open && buyNowMode && auction.buyNowSats) setAmount(String(auction.buyNowSats));
+  }, [open, buyNowMode, auction.buyNowSats]);
   const [isBidding, setIsBidding] = useState(false);
   const [error, setError] = useState('');
 
@@ -80,7 +111,8 @@ export function AuctionBidDialog({
     Number.isFinite(numericAmount) &&
     !bidError &&
     !insufficient &&
-    !isBidding;
+    !isBidding &&
+    wotGate.allowed;
 
   const handleBid = async () => {
     if (!canBid || !user) return;
@@ -129,9 +161,26 @@ export function AuctionBidDialog({
         ],
       });
 
+      // Buy-now: end the auction immediately (status=sold) so the buyer
+      // becomes the winner and the seller settles exactly as usual.
+      if (buyNowMode) {
+        const soldTags = auction.event.tags.map((t) =>
+          t[0] === 'status' ? ['status', 'sold'] : t,
+        );
+        if (!soldTags.some(([n]) => n === 'status')) soldTags.push(['status', 'sold']);
+        await publishEvent({
+          kind: auction.event.kind,
+          content: auction.event.content,
+          tags: soldTags,
+          prev: auction.event,
+        });
+      }
+
       toast({
-        title: 'Bid placed!',
-        description: `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
+        title: buyNowMode ? 'Buy It Now confirmed!' : 'Bid placed!',
+        description: buyNowMode
+          ? `${formatSats(numericAmount)} sats locked. Auction ended — waiting for seller settlement.`
+          : `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
       });
       onOpenChange(false);
       onBidPlaced?.();
@@ -147,22 +196,35 @@ export function AuctionBidDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Gavel className="size-4" />
-            Place bid
+            {buyNowMode ? <ShoppingCart className="size-4" /> : <Gavel className="size-4" />}
+            {buyNowMode ? 'Buy It Now' : 'Place bid'}
           </DialogTitle>
           <DialogDescription>
-            {auction.title} — closing {new Date(auction.closesAt * 1000).toLocaleString()}
+            {auction.title} — closes exactly{' '}
+            <span className="font-medium tabular-nums">
+              {new Intl.DateTimeFormat(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short',
+              }).format(new Date(auction.closesAt * 1000))}
+            </span>{' '}
+            ({timeLeftLabel(auction.closesAt)})
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="bid-amount">Your bid (sats)</Label>
+            <Label htmlFor="bid-amount">{buyNowMode ? 'Fixed price (sats)' : 'Your bid (sats)'}</Label>
             <Input
               id="bid-amount"
               type="number"
               min={minNextBid}
               value={amount}
+              disabled={buyNowMode}
               onChange={(e) => setAmount(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
@@ -184,6 +246,9 @@ export function AuctionBidDialog({
               </p>
             )}
             {bidError && <p className="mt-1 text-destructive">{bidError}</p>}
+            {!wotGate.allowed && wotGate.reason && (
+              <p className="mt-1 text-amber-500">{wotGate.reason}</p>
+            )}
             {error && <p className="mt-1 text-destructive">{error}</p>}
           </div>
         </div>
@@ -199,7 +264,7 @@ export function AuctionBidDialog({
                 Locking escrow…
               </>
             ) : (
-              'Lock bid in escrow'
+              wotGate.allowed ? (buyNowMode ? 'Confirm Buy It Now' : 'Lock bid in escrow') : 'WoT score too low'
             )}
           </Button>
         </DialogFooter>
