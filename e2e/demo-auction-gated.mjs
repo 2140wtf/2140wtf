@@ -2,12 +2,25 @@
 // bid gate can be verified in the browser. Run with:
 //   node e2e/demo-auction-gated.mjs
 //
-// Ephemeral seller keypair — throwaway, nobody owns it afterward.
+// The seller key is persisted in e2e/.demo-keys.json (gitignored) under the
+// "gated" identity, so this event can be deleted later:
+//   node e2e/delete-demo-auctions.mjs gated
+//
 // min_wot=99 means only a bidder scoring >= 99 from the seller's perspective
 // may bid; any fresh account scores 0, so the gate must show the gentle
 // block message and disable the confirm button.
-import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
+import { finalizeEvent } from 'nostr-tools';
 import { SimplePool } from 'nostr-tools';
+import { loadOrCreateKey, recordEvent } from './demo-keyring.mjs';
+
+// Safety: publishing demo events to the PUBLIC relays creates real Nostr
+// content. Require an explicit opt-in so no garbage is created by accident.
+if (process.env.ALLOW_DEMO_PUBLISH !== '1') {
+  console.error('Refusing to publish demo events to public relays.');
+  console.error('This creates real Nostr content visible to the whole ecosystem.');
+  console.error('If you really mean it: ALLOW_DEMO_PUBLISH=1 node ' + process.argv[1]);
+  process.exit(1);
+}
 
 const RELAYS = [
   'wss://relay.ditto.pub',
@@ -19,8 +32,7 @@ const RELAYS = [
 const now = Math.floor(Date.now() / 1000);
 const closesAt = now + 7 * 24 * 3600; // 7 days — the long-running demo
 
-const sk = generateSecretKey();
-const pubkey = getPublicKey(sk);
+const { sk, pubkey } = loadOrCreateKey('gated');
 
 const eventTemplate = {
   kind: 30402,
@@ -40,6 +52,7 @@ const eventTemplate = {
 };
 
 const signed = finalizeEvent(eventTemplate, sk);
+recordEvent('gated', signed.id);
 console.log(`Seller pubkey: ${pubkey}`);
 console.log(`Event id: ${signed.id}`);
 console.log(`Close time: ${new Date(closesAt * 1000).toISOString()}`);

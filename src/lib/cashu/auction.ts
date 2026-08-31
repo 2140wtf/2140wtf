@@ -106,6 +106,11 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
   const dTag = getTag(event, 'd');
   if (!dTag) return null;
 
+  // Hide the old 21,000-sat demo auctions: they were published to the public
+  // relays by ephemeral throwaway keys that no longer exist, so NIP-09
+  // deletion is impossible. Filter them out by their d-tag prefix instead.
+  if (dTag.startsWith('demo-auction-')) return null;
+
   const startingSats = Number(getTag(event, 'price'));
   if (!Number.isSafeInteger(startingSats) || startingSats < 0) return null;
 

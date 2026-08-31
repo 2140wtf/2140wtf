@@ -42,11 +42,16 @@ app.json
 # Agent memory / local-only workspace
 .claude/
 .kimi/
-/AGENTS.md
 /TODO.md
 
 # Manual probe scripts — machine-specific, never publish
 tests-manual/
+
+# Local release-note drafts
+RELEASE_NOTES*.md
+
+# Demo publisher signing keys — never commit (they can delete relay events)
+e2e/.demo-keys.json
 
 # Android build outputs and sensitive files
 *.aab
@@ -102,3 +107,6 @@ grant-proposal-experiment/
 
 # local capture credentials — never commit
 .capture-nsec
+
+# Agent rules ARE tracked (exception to any ignore pattern)
+!AGENTS.md
