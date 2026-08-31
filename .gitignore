@@ -42,7 +42,6 @@ app.json
 # Agent memory / local-only workspace
 .claude/
 .kimi/
-/AGENTS.md
 /TODO.md
 
 # Manual probe scripts — machine-specific, never publish
@@ -108,3 +107,6 @@ grant-proposal-experiment/
 
 # local capture credentials — never commit
 .capture-nsec
+
+# Agent rules ARE tracked (exception to any ignore pattern)
+!AGENTS.md
