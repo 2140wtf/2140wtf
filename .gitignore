@@ -48,6 +48,9 @@ app.json
 # Manual probe scripts — machine-specific, never publish
 tests-manual/
 
+# Local release-note drafts
+RELEASE_NOTES*.md
+
 # Android build outputs and sensitive files
 *.aab
 resources/
