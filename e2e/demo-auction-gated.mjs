@@ -13,6 +13,15 @@ import { finalizeEvent } from 'nostr-tools';
 import { SimplePool } from 'nostr-tools';
 import { loadOrCreateKey, recordEvent } from './demo-keyring.mjs';
 
+// Safety: publishing demo events to the PUBLIC relays creates real Nostr
+// content. Require an explicit opt-in so no garbage is created by accident.
+if (process.env.ALLOW_DEMO_PUBLISH !== '1') {
+  console.error('Refusing to publish demo events to public relays.');
+  console.error('This creates real Nostr content visible to the whole ecosystem.');
+  console.error('If you really mean it: ALLOW_DEMO_PUBLISH=1 node ' + process.argv[1]);
+  process.exit(1);
+}
+
 const RELAYS = [
   'wss://relay.ditto.pub',
   'wss://relay.dreamith.to',
