@@ -59,6 +59,8 @@ export interface AuctionListing {
   startingSats: number;
   /** Optional buy-now price in sats; 0/undefined = no buy-now. */
   buyNowSats?: number;
+  /** Minimum Web-of-Trust score (0–100) required to bid; 0/undefined = open to all. */
+  minWot?: number;
   /** Unix seconds when bidding closes. */
   closesAt: number;
   /** The original Nostr event. */
@@ -113,6 +115,9 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
   const buyNowRaw = getTag(event, 'buy_now');
   const buyNowSats = buyNowRaw ? Number(buyNowRaw) : NaN;
 
+  const minWotRaw = getTag(event, 'min_wot');
+  const minWot = minWotRaw ? Number(minWotRaw) : NaN;
+
   return {
     id: `${event.pubkey}:${dTag}`,
     eventId: event.id,
@@ -133,6 +138,8 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
     startingSats,
     buyNowSats:
       Number.isSafeInteger(buyNowSats) && buyNowSats > 0 ? buyNowSats : undefined,
+    minWot:
+      Number.isSafeInteger(minWot) && minWot > 0 ? Math.min(100, Math.round(minWot)) : undefined,
     closesAt,
     event,
   };
@@ -195,6 +202,8 @@ export function buildAuctionEvent(input: {
   categories?: string[];
   startingSats: number;
   buyNowSats?: number;
+  /** Minimum Web-of-Trust score (0–100) required to bid; omit/0 = open to all. */
+  minWot?: number;
   /** Auction duration in hours (clamped to [1, 720]). Ignored when closesAt is set. */
   durationHours: number;
   /**
@@ -234,6 +243,9 @@ export function buildAuctionEvent(input: {
 
   if (input.buyNowSats && input.buyNowSats > 0) {
     tags.push(['buy_now', String(Math.round(input.buyNowSats))]);
+  }
+  if (input.minWot && input.minWot > 0) {
+    tags.push(['min_wot', String(Math.min(100, Math.round(input.minWot)))]);
   }
   if (input.summary?.trim()) tags.push(['summary', input.summary.trim()]);
   for (const img of input.images ?? []) {
@@ -377,6 +389,30 @@ export function canBuyNow(
   if (isAuctionClosed(auction, nowSeconds)) return false;
   if (currentHighest && currentHighest.amountSats >= auction.buyNowSats) return false;
   return true;
+}
+
+/**
+ * Whether a bidder's Web-of-Trust score clears the auction's minimum-WoT
+ * threshold. Sellers can gate auctions to bidders with a min score (0–100);
+ * `0`/undefined on the auction means open to everyone.
+ *
+ * Returns `{ allowed, reason }` — `reason` is a gentle, user-facing message
+ * when bidding is blocked, null when allowed.
+ */
+export function canBidWot(
+  auction: Pick<AuctionListing, 'minWot'>,
+  bidderWotScore: number | null | undefined,
+): { allowed: boolean; reason: string | null } {
+  const threshold = auction.minWot ?? 0;
+  if (threshold <= 0) return { allowed: true, reason: null };
+  const score = typeof bidderWotScore === 'number' && Number.isFinite(bidderWotScore) ? bidderWotScore : 0;
+  if (score >= threshold) return { allowed: true, reason: null };
+  return {
+    allowed: false,
+    reason:
+      `You cannot bid on this auction — it requires a minimum Web of Trust score of ${threshold}` +
+      (score > 0 ? ` (your score: ${Math.round(score)}).` : '.'),
+  };
 }
 
 /**

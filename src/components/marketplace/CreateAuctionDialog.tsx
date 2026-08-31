@@ -93,6 +93,8 @@ export function CreateAuctionDialog({
   const [content, setContent] = useState('');
   const [startingSats, setStartingSats] = useState('');
   const [buyNowSats, setBuyNowSats] = useState('');
+  // Minimum Web-of-Trust score required to bid (0–100; 0 = open to all).
+  const [minWot, setMinWot] = useState(0);
   const [durationHours, setDurationHours] = useState<number>(DEFAULT_AUCTION_DURATION_HOURS);
   // Exact close time (local input value "YYYY-MM-DDTHH:mm"). Empty = use duration preset.
   const [closeAtInput, setCloseAtInput] = useState('');
@@ -113,6 +115,7 @@ export function CreateAuctionDialog({
     setContent(initialContent ?? '');
     setStartingSats('');
     setBuyNowSats('');
+    setMinWot(0);
     setDurationHours(DEFAULT_AUCTION_DURATION_HOURS);
     setCloseAtInput(toLocalInputValue(Math.floor(Date.now() / 1000) + DEFAULT_AUCTION_DURATION_HOURS * 3600));
   } else if (!open && wasOpen) {
@@ -148,6 +151,7 @@ export function CreateAuctionDialog({
         categories: [...(initialCategories ?? []), 'auction'],
         startingSats: starting,
         buyNowSats: Number.isSafeInteger(buyNow) ? buyNow : undefined,
+        minWot,
         durationHours,
         closesAt: closeAtInput ? closesAt : undefined,
         now: Math.floor(Date.now() / 1000),
@@ -170,6 +174,7 @@ export function CreateAuctionDialog({
       setContent('');
       setStartingSats('');
       setBuyNowSats('');
+      setMinWot(0);
       onOpenChange(false);
       onSuccess?.();
     } catch {
@@ -249,6 +254,24 @@ export function CreateAuctionDialog({
                 onChange={(e) => setBuyNowSats(e.target.value)}
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="auction-minwot">Min WoT score to bid (0-100, optional)</Label>
+            <Input
+              id="auction-minwot"
+              type="number"
+              min={0}
+              max={100}
+              placeholder="0 = anyone can bid"
+              value={minWot || ''}
+              onChange={(e) => setMinWot(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+            />
+            <p className="text-xs text-muted-foreground">
+              {minWot > 0
+                ? `Only users with WoT score ≥ ${minWot} can bid.`
+                : 'Leave 0 to allow anyone to bid.'}
+            </p>
           </div>
 
           <div className="space-y-1.5">

@@ -32,7 +32,8 @@ import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
-import { validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
+import { useWot } from '@/hooks/useWot';
+import { canBidWot, validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
 import { savePendingBidDeposit } from '@/lib/cashu/auctionSettlement';
 import { MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
 import { formatSats } from '@/lib/bitcoin';
@@ -74,6 +75,10 @@ export function AuctionBidDialog({
   const wallet = useCashuWalletContext();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
+  // WoT gate: score the bidder from the seller's perspective (community view).
+  const { scores } = useWot(user ? [user.pubkey] : [], { anchor: sellerPubkey });
+  const wotScore = user ? scores.get(user.pubkey)?.score ?? 0 : null;
+  const wotGate = useMemo(() => canBidWot(auction, wotScore), [auction, wotScore]);
 
   const [amount, setAmount] = useState(String(minNextBid));
 
@@ -106,7 +111,8 @@ export function AuctionBidDialog({
     Number.isFinite(numericAmount) &&
     !bidError &&
     !insufficient &&
-    !isBidding;
+    !isBidding &&
+    wotGate.allowed;
 
   const handleBid = async () => {
     if (!canBid || !user) return;
@@ -171,9 +177,9 @@ export function AuctionBidDialog({
       }
 
       toast({
-        title: buyNowMode ? 'Buy It Now 成功！' : 'Bid placed!',
+        title: buyNowMode ? 'Buy It Now confirmed!' : 'Bid placed!',
         description: buyNowMode
-          ? `${formatSats(numericAmount)} sats 已锁定，拍卖已结束，等待卖家结算。`
+          ? `${formatSats(numericAmount)} sats locked. Auction ended — waiting for seller settlement.`
           : `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
       });
       onOpenChange(false);
@@ -240,6 +246,9 @@ export function AuctionBidDialog({
               </p>
             )}
             {bidError && <p className="mt-1 text-destructive">{bidError}</p>}
+            {!wotGate.allowed && wotGate.reason && (
+              <p className="mt-1 text-amber-500">{wotGate.reason}</p>
+            )}
             {error && <p className="mt-1 text-destructive">{error}</p>}
           </div>
         </div>
@@ -255,7 +264,7 @@ export function AuctionBidDialog({
                 Locking escrow…
               </>
             ) : (
-              buyNowMode ? 'Confirm Buy It Now' : 'Lock bid in escrow'
+              wotGate.allowed ? (buyNowMode ? 'Confirm Buy It Now' : 'Lock bid in escrow') : 'WoT score too low'
             )}
           </Button>
         </DialogFooter>
