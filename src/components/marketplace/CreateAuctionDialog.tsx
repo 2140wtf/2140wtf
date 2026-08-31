@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Gavel, Loader2, TriangleAlert } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Gavel, ImagePlus, Loader2, TriangleAlert, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/useToast';
+import { useUploadFile } from '@/hooks/useUploadFile';
 import { buildAuctionEvent, DEFAULT_AUCTION_DURATION_HOURS } from '@/lib/cashu/auction';
 import { cn } from '@/lib/utils';
 
@@ -78,12 +79,15 @@ export function CreateAuctionDialog({
 }: CreateAuctionDialogProps) {
   const { user } = useCurrentUser();
   const { mutateAsync: createEvent, isPending: isPublishing } = useNostrPublish();
+  const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [content, setContent] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [startingSats, setStartingSats] = useState('');
   const [buyNowSats, setBuyNowSats] = useState('');
   // Minimum Web-of-Trust score required to bid (0–100; 0 = open to all).
@@ -106,6 +110,7 @@ export function CreateAuctionDialog({
     setTitle(initialTitle ?? '');
     setSummary(initialSummary ?? '');
     setContent(initialContent ?? '');
+    setImages(initialImages ?? []);
     setStartingSats('');
     setBuyNowSats('');
     setMinWot(0);
@@ -131,6 +136,25 @@ export function CreateAuctionDialog({
 
   const canPublish = !!user && formValid && !isPublishing;
 
+  const handleFileSelected = async (file: File | undefined) => {
+    if (!file || !user) return;
+    try {
+      const tags = await uploadFile(file);
+      const url = tags[0]?.[1];
+      if (url) {
+        setImages((prev) => [...prev, url]);
+      }
+    } catch {
+      toast({
+        title: 'Upload failed',
+        description: 'Could not upload the image to your Blossom servers.',
+        variant: 'destructive',
+      });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async () => {
     if (!canPublish) return;
     try {
@@ -140,7 +164,7 @@ export function CreateAuctionDialog({
         title: title.trim(),
         summary: summary.trim(),
         content: content.trim(),
-        images: initialImages ?? [],
+        images,
         categories: [...(initialCategories ?? []), 'auction'],
         startingSats: starting,
         buyNowSats: Number.isSafeInteger(buyNow) ? buyNow : undefined,
@@ -165,6 +189,7 @@ export function CreateAuctionDialog({
       setTitle('');
       setSummary('');
       setContent('');
+      setImages([]);
       setStartingSats('');
       setBuyNowSats('');
       setMinWot(0);
@@ -222,6 +247,57 @@ export function CreateAuctionDialog({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Images</Label>
+            {images.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {images.map((url, i) => (
+                  <div key={url} className="group relative size-16 overflow-hidden rounded-md border">
+                    <img src={url} alt={`Auction image ${i + 1}`} className="size-full object-cover" />
+                    <button
+                      type="button"
+                      aria-label={`Remove image ${i + 1}`}
+                      className="absolute right-0.5 top-0.5 rounded-sm bg-black/60 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => setImages((prev) => prev.filter((u) => u !== url))}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleFileSelected(e.target.files?.[0])}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              disabled={!user || isUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Uploading to Blossom…
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="size-4 mr-2" />
+                  {images.length === 0 ? 'Add image' : 'Add another image'}
+                </>
+              )}
+            </Button>
+            {!user && (
+              <p className="text-xs text-muted-foreground">Log in to upload images.</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
