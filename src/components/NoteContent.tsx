@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback, type ReactNode } from 'react';
 import { type NostrEvent } from '@nostrify/nostrify';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
+import { Hash } from 'lucide-react';
 import { useAuthor } from '@/hooks/useAuthor';
 import { getDisplayName } from '@/lib/getDisplayName';
 import { getAvatarShape } from '@/lib/avatarShape';
@@ -25,6 +26,7 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { HASHTAG_PATTERN } from '@/lib/hashtag';
 import { highlightSourceAttrs } from '@/lib/highlightSource';
 import { cn } from '@/lib/utils';
+import { parseJoinLink } from '@/lib/baosocial/browser.js';
 import type { AddrCoords } from '@/hooks/useEvent';
 
 interface NoteContentProps {
@@ -265,6 +267,7 @@ type ContentToken =
   | { type: 'nostr-link'; id: string; raw: string }
   | { type: 'hashtag'; tag: string; raw: string }
   | { type: 'relay-link'; url: string }
+  | { type: 'join-link'; url: string }
   | { type: 'lightning-invoice'; invoice: string };
 
 /**
@@ -378,6 +381,15 @@ export function NoteContent({
         // WebSocket relay URLs → link to internal relay page
         if (/^wss?:\/\//i.test(url)) {
           result.push({ type: 'relay-link', url });
+          lastIndex = index + fullMatch.length;
+          continue;
+        }
+
+        // ₿AO room invite links → compact join chip. Matched BEFORE generic
+        // embeds: the link is a CREDENTIAL, so it must never be sent to a
+        // link-preview fetcher and the fragment must never be displayed.
+        if (/\/chat\/join#/i.test(url)) {
+          result.push({ type: 'join-link', url });
           lastIndex = index + fullMatch.length;
           continue;
         }
@@ -835,6 +847,8 @@ export function NoteContent({
                 {token.url}
               </Link>
             );
+          case 'join-link':
+            return <JoinLinkChip key={i} url={token.url} />;
           case 'lightning-invoice':
             if (disableEmbeds) {
               return <span key={i} className="text-primary break-all">{token.invoice}</span>;
@@ -874,6 +888,37 @@ function PlainLinkFallback({ url }: { url: string }) {
     >
       {url}
     </a>
+  );
+}
+
+/**
+ * Compact chip for ₿AO room invite links found in rendered notes.
+ *
+ * Shows only the room label / room id prefix — the credential fragment is
+ * never rendered. Clicking opens the room picker pre-filled with the full
+ * link so the human can review it and explicitly confirm joining; nothing
+ * joins automatically (privacy: joining is an explicit user action).
+ */
+function JoinLinkChip({ url }: { url: string }) {
+  let label = '₿AO room';
+  try {
+    const parts = parseJoinLink(url);
+    if (parts.label) label = parts.label;
+    else if (parts.roomId) label = `room-${parts.roomId.slice(0, 6)}`;
+  } catch {
+    /* unparseable — keep the generic label */
+  }
+  return (
+    <Link
+      to="/bao-social"
+      state={{ joinLink: url }}
+      className="inline-flex items-center gap-1.5 my-1 mr-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+      onClick={(e) => e.stopPropagation()}
+      title="₿AO room invite — open in 2140 Social to join"
+    >
+      <Hash className="size-3" />
+      {label}
+    </Link>
   );
 }
 

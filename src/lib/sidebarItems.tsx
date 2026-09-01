@@ -123,6 +123,12 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   // Default top navigation
   { id: "feed", label: "Feed", path: "/feed", icon: Box },
   {
+    id: "fal-live",
+    label: "FAL LIVE TV",
+    path: "/fal-live",
+    icon: Sparkles,
+  },
+  {
     id: "messages",
     label: "Chat",
     path: "/messages",
@@ -145,6 +151,12 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     label: "LN OBSERVATORY",
     path: "/lightning-observatory",
     icon: Telescope,
+  },
+  {
+    id: "notifications",
+    label: "Notifications",
+    path: "/notifications",
+    icon: Bell,
   },
   {
     id: "wallet",

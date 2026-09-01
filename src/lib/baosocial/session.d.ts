@@ -64,7 +64,8 @@ export declare class RoomSession {
     readonly joined: JoinedRoom;
     private readonly clock;
     private readonly rng;
-    constructor(conn: import('./join.js').RelayConn, joined: JoinedRoom, clock?: Clock, rng?: Rng);
+    private readonly opts?: { onHandlerError?: (err: unknown, env: import('./envelope.js').Envelope, event: import('@nostrify/nostrify').NostrEvent) => void };
+    constructor(conn: import('./join.js').RelayConn, joined: JoinedRoom, clock?: Clock, rng?: Rng, opts?: { onHandlerError?: (err: unknown, env: import('./envelope.js').Envelope, event: import('@nostrify/nostrify').NostrEvent) => void });
     private ctx;
     publishEvent(event: NostrEvent): Promise<void>;
     /** Publish path: direct for config-A rooms; NIP-59 gift-wrap to the shield
