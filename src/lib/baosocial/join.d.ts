@@ -110,6 +110,16 @@ export declare function createJoinLink(host: string, inviteSecret: string, roomI
  * OUT of band (verified channel) rather than trusting link-carried keys.
  */
 export declare function parseJoinLink(link: string): JoinLinkParts;
+
+/**
+ * absorbLink — normalise a join link that survived a hostile transport:
+ * quotes/angle-bracket wrapping, trailing punctuation, markdown escapes,
+ * whitespace inside the fragment (line-wrapped pastes), merged '#…'
+ * anchors. Transport repair only — never touches the credential bytes.
+ * Runs inside parseJoinLink before the strict fail-closed parse.
+ */
+export declare function absorbLink(raw: string): string;
+
 export interface JoinRoomInfo {
     roomId: string;
     /** One or more welcomer pubkeys (redundant welcomers, §5.2). */

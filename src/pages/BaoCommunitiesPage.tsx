@@ -9,6 +9,7 @@
  * encrypted envelope payload, never on the wire.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 import { Copy, Hash, IdCard, KeyRound, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, ShieldCheck, X } from "lucide-react";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -19,6 +20,7 @@ import {
   RoomSession,
   joinRoom,
   parseJoinLink,
+  absorbLink,
   serializeJoinedRoom,
   restoreJoinedRoom,
   dedupKey,
@@ -346,6 +348,18 @@ function BaoSocialChatClient() {
     return loadNpubFor(accountPubkey);
   });
   const [joinLinkInput, setJoinLinkInput] = useState("");
+  // A join link handed over from elsewhere in the app (e.g. the ₿AO join chip
+  // rendered inside notes) lands here via router state and pre-fills the
+  // paste box — joining stays an explicit human action.
+  const location = useLocation();
+  const handedLink = (location.state as { joinLink?: string } | null)?.joinLink;
+  useEffect(() => {
+    if (handedLink) {
+      setJoinLinkInput(handedLink);
+      // Clear the state so a refresh / back-nav doesn't re-fill the box.
+      window.history.replaceState({}, "");
+    }
+  }, [handedLink]);
   const [showIdentity, setShowIdentity] = useState(false);
   const [identityMode, setIdentityMode] = useState<IdentityMode>(() => loadIdentityModeFor(accountPubkey));
   const [roomsCollapsed, setRoomsCollapsed] = useState(false);
@@ -653,7 +667,7 @@ function BaoSocialChatClient() {
   // ── Join by invite link ──────────────────────────────────────────────────
 
   const addRoomFromLink = useCallback(() => {
-    const link = joinLinkInput.trim();
+    const link = absorbLink(joinLinkInput.trim());
     if (!link) return;
     try {
       const parts = parseJoinLink(link);

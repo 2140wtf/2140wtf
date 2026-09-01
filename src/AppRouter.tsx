@@ -100,6 +100,7 @@ const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage")
 const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
 const LightningObservatoryFullPage = lazy(() => import("./pages/LightningObservatoryFullPage").then(m => ({ default: m.LightningObservatoryFullPage })));
+const FalLivePage = lazy(() => import("./pages/FalLivePage").then(m => ({ default: m.FalLivePage })));
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
@@ -347,6 +348,7 @@ export function AppRouter() {
               <Route path="/btcmap" element={<BtcMapPage />} />
               <Route path="/lightning-observatory" element={<LightningObservatoryPage />} />
               <Route path="/lightning-observatory/full" element={<LightningObservatoryFullPage />} />
+              <Route path="/fal-live" element={<FalLivePage />} />
               <Route path="/roadstr" element={<RoadstrPage />} />
               <Route path="/market" element={<MarketPage />} />
               <Route path="/messages" element={<MessagesPage />} />

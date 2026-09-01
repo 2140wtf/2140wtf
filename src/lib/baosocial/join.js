@@ -72,6 +72,48 @@ export function createJoinLink(host, inviteSecret, roomId, opts = {}) {
     return `https://${host}/chat/join#${fragment}`;
 }
 /**
+ * absorbLink — normalise a join link that survived a hostile transport.
+ *
+ * Chat UIs, markdown renderers and URL shorteners routinely mangle the
+ * fat fragment: smart quotes around the URL, trailing punctuation glued to
+ * the fragment, markdown trailing-slash, a line break inside the fragment,
+ * or the whole link wrapped in <…>. parseJoinLink is intentionally strict
+ * (fail-closed); absorbLink runs BEFORE it to repair the transport damage
+ * without ever touching the credential bytes:
+ *   - trims whitespace and surrounding quotes/angle brackets/backticks;
+ *   - strips trailing punctuation (.,;:!?) and markdown escapes (\_, \#);
+ *   - removes whitespace INSIDE the fragment only (base64url never has any;
+ *     a line-wrapped paste does) — never inside the https:// scheme part;
+ *   - keeps the LAST '#…' segment when the paste accidentally contains a
+ *     second '#' (markdown anchor merge); a legitimate fragment cannot
+ *     contain a raw '#'.
+ * If nothing needed repair, the link is returned byte-identical.
+ */
+export function absorbLink(raw) {
+    if (typeof raw !== 'string')
+        throw new Error('join link must be a string');
+    let link = raw.trim();
+    // Wrapped in quotes/angle brackets/backticks by a chat layer.
+    link = link.replace(/^[<"'`]+/, '').replace(/[>"'`]+$/, '');
+    // Markdown escapes before # and inside the fragment.
+    link = link.replace(/\\([_#])/g, '$1');
+    // Trailing punctuation glued to the fragment by prose.
+    link = link.replace(/[.,;:!?]+$/, '');
+    const hashIndex = link.indexOf('#');
+    if (hashIndex < 0)
+        return link; // nothing to repair inside the fragment
+    const head = link.slice(0, hashIndex);
+    let frag = link.slice(hashIndex + 1);
+    // Keep only the last #-segment (a pasted "url#frag#anchor" merge).
+    const extraHash = frag.indexOf('#');
+    if (extraHash >= 0)
+        frag = frag.slice(extraHash + 1);
+    // Remove ALL whitespace inside the fragment: base64url alphabet has no
+    // spaces, so any whitespace is transport damage (line wrapping).
+    frag = frag.replace(/\s+/g, '');
+    return head + '#' + frag;
+}
+/**
  * parseJoinLink — trust-anchor note (threat model, documented not silent).
  *
  * The fragment travels WITH the claimant, so it is exactly as trustworthy
@@ -90,6 +132,8 @@ export function createJoinLink(host, inviteSecret, roomId, opts = {}) {
  * OUT of band (verified channel) rather than trusting link-carried keys.
  */
 export function parseJoinLink(link) {
+    // Transport-repair first (absorbLink), then strict fail-closed parsing.
+    link = absorbLink(link);
     const hashIndex = link.indexOf('#');
     if (hashIndex < 0)
         throw new Error('join link has no fragment (link truncated?)');

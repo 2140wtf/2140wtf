@@ -147,6 +147,18 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: Telescope,
   },
   {
+    id: "notifications",
+    label: "Notifications",
+    path: "/notifications",
+    icon: Bell,
+  },
+  {
+    id: "fal-live",
+    label: "FAL LIVE",
+    path: "/fal-live",
+    icon: Sparkles,
+  },
+  {
     id: "wallet",
     label: "Wallet",
     path: "/wallet",

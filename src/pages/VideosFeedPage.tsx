@@ -39,7 +39,6 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useAuthor } from "@/hooks/useAuthor";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useFeed } from "@/hooks/useFeed";
-import { useFeedTab } from "@/hooks/useFeedTab";
 import { useFollowList } from "@/hooks/useFollowActions";
 import { useMuteList } from "@/hooks/useMuteList";
 import { useMutedAuthorFilter } from "@/hooks/useMutedAuthorFilter";
@@ -731,10 +730,10 @@ export function VideosFeedPage() {
   const { user } = useCurrentUser();
   const { muteItems } = useMuteList();
 
-  const [feedTab, setFeedTab] = useFeedTab<FeedTab>("videos", [
-    "follows",
-    "global",
-  ], user ? "follows" : "global");
+  // Always open on the "All" (global) tab — every visit, no persistence.
+  // Follows is opt-in per visit (user ? "follows" : "global" would remember
+  // the last tab via useFeedTab's localStorage; we deliberately bypass it).
+  const [feedTab, setFeedTab] = useState<FeedTab>("global");
 
   useSeoMeta({
     title: `Videos | ${config.appName}`,

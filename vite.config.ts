@@ -197,6 +197,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/lo-api/, '/api'),
         },
+        // fal.live REST API (no CORS headers upstream; production hosts should
+        // add the equivalent rule forwarding /fal-api/* to fal.ai upstream).
+        '/fal-api': {
+          target: 'https://fal.ai',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/fal-api/, ''),
+        },
       },
       watch: {
         ignored: [
@@ -236,6 +243,13 @@ export default defineConfig(({ mode }) => {
           target: 'https://lightningobservatory.com',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/lo-api/, '/api'),
+        },
+        // fal.live REST API (no CORS headers upstream; production hosts should
+        // add the equivalent rule forwarding /fal-api/* to fal.ai upstream).
+        '/fal-api': {
+          target: 'https://fal.ai',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/fal-api/, ''),
         },
       },
     },
