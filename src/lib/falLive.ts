@@ -1,13 +1,14 @@
 /**
  * fal.live — AI image/video generation client.
  *
- * fal.ai sends `X-Frame-Options: DENY` and no CORS headers, so direct
- * iframing/fetching from the browser is blocked. The bao-fal-proxy
- * Cloudflare Worker (FAL_PROXY_URL) strips those headers for iframe embeds
- * and adds CORS headers for the REST API, mirroring the Lightning
- * Observatory proxy pattern (bao-lo-proxy).
+ * The fal.live studio page sends no `X-Frame-Options` and no CSP
+ * `frame-ancestors`, so it is iframed directly (FAL_LIVE_URL). The
+ * fal.ai REST API, however, sends `X-Frame-Options: DENY` and no CORS
+ * headers, so browser-side API calls need a proxy: the bao-fal-proxy
+ * Cloudflare Worker (FAL_PROXY_URL) adds CORS headers, mirroring the
+ * Lightning Observatory proxy pattern (bao-lo-proxy).
  *
- * Fetch order: same-origin `/fal-api/*` (vite dev/preview proxy or a
+ * API fetch order: same-origin `/fal-api/*` (vite dev/preview proxy or a
  * production host rule) → worker proxy → public host (works if fal.ai
  * ever enables CORS).
  */

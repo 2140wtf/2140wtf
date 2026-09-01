@@ -108,11 +108,12 @@ export function restoreJoinedRoom(input) {
  * and read. The reliable post loop delegates to post.ts.
  */
 export class RoomSession {
-    constructor(conn, joined, clock = systemClock, rng = defaultRng) {
+    constructor(conn, joined, clock = systemClock, rng = defaultRng, opts = {}) {
         this.conn = conn;
         this.joined = joined;
         this.clock = clock;
         this.rng = rng;
+        this.opts = opts;
         /** Live subscription to the room's ephemeral stream. P2: envelopes from
          *  the PREVIOUS epoch still decrypt during the roll-over grace window
          *  (P2_EPOCH_WINDOW) when the session has ratcheted.
@@ -179,12 +180,18 @@ export class RoomSession {
                 const deliver = (env) => {
                     // Per-handler isolation: one throwing consumer must not starve the
                     // others (nor trip the previous-epoch fallback below).
+                    // REL-04: isolation is correct — the SILENCE was not. A throwing
+                    // consumer handler was previously undiagnosable. Surface the error
+                    // without breaking the stream. (baocommunity upstream 52c6afc7.)
                     for (const handler of [...(this.liveHandlers ?? [])]) {
                         try {
                             handler(env, event);
                         }
-                        catch {
-                            // consumer bug — never fatal to the stream
+                        catch (err) {
+                            if (this.opts?.onHandlerError)
+                                this.opts.onHandlerError(err, env, event);
+                            else
+                                console.error('[session] live handler threw:', err instanceof Error ? err.message : err);
                         }
                     }
                 };

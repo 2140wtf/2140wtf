@@ -150,10 +150,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
   );
   const feedControlsAnchorId = visibleManagedTabIds.includes('app') ? 'app' : visibleManagedTabIds[0];
 
+  // Users with no follows land on the ALL feed (the 2140.wtf mixed feed with
+  // global discovery) instead of an empty Follows timeline. Users with follows
+  // keep the Follows default; the hook re-reads once the follow list loads.
+  const hasFollows = (followData?.pubkeys?.length ?? 0) > 0;
   const [rawActiveTab, handleSetActiveTab] = useFeedTab<FeedTab>(
     feedId,
     undefined,
-    globalFirst ? 'global' : (user ? 'follows' : 'all'),
+    globalFirst ? 'global' : (user && !hasFollows ? 'all' : (user ? 'follows' : 'all')),
   );
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const { startSignup } = useOnboarding();

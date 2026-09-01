@@ -1,3 +1,9 @@
+/** INFRA-01: cap on a single inbound WS frame (browser/global path — no
+ *  maxPayload option exists here, so we guard in onmessage). Ported from
+ *  baocommunity upstream 52c6afc7 (room-privacy / audit-hardening sync). */
+const MAX_WS_FRAME_BYTES = 1 << 20;
+/** INFRA-01: cap on one query's in-flight accumulation (mirror of wsConn). */
+const MAX_PENDING_EVENTS = 1_000;
 export class WebRelayConn {
     constructor(url) {
         this.url = url;
@@ -120,6 +126,9 @@ export class WebRelayConn {
         this.reconnectTimer.unref?.();
     }
     onMessage(raw) {
+        // INFRA-01: never JSON.parse a frame over the cap.
+        if (raw.length > MAX_WS_FRAME_BYTES)
+            return;
         let msg;
         try {
             msg = JSON.parse(raw);
@@ -131,8 +140,15 @@ export class WebRelayConn {
             const subId = String(msg[1]);
             const ev = msg[2];
             const pending = this.pending.get(subId);
-            if (pending)
-                pending.events.push(ev);
+            if (pending) {
+                // INFRA-01: flood a query past the cap → finish it (like EOSE).
+                if (pending.events.length >= MAX_PENDING_EVENTS) {
+                    pending.resolve(pending.events);
+                }
+                else {
+                    pending.events.push(ev);
+                }
+            }
             this.liveSubs.get(subId)?.onEvent(ev);
         }
         else if (msg[0] === 'EOSE') {

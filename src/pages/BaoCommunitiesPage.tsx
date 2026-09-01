@@ -9,9 +9,9 @@
  * encrypted envelope payload, never on the wire.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
-import { Copy, Hash, IdCard, KeyRound, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, ShieldCheck, X } from "lucide-react";
+import { Copy, ExternalLink, Hash, IdCard, KeyRound, Loader2, PanelRightClose, PanelRightOpen, Plus, Radio, Reply, ShieldCheck, Sparkles, X } from "lucide-react";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
@@ -321,7 +321,9 @@ function BaoSocialChatClient() {
           return {
             roomId: parts.roomId,
             name: added.name ?? `room-${parts.roomId.slice(0, 6)}`,
-            topic: "joined via invite link",
+            // Unlisted room (ghost): reachable only via its invite link — the
+            // link IS the credential; never advertised in any directory.
+            topic: "unlisted · invite link",
             joinLink: added.joinLink,
             agentLink: "",
             welcomerPub: parts.welcomerPub ?? "",
@@ -352,6 +354,7 @@ function BaoSocialChatClient() {
   // rendered inside notes) lands here via router state and pre-fills the
   // paste box — joining stays an explicit human action.
   const location = useLocation();
+  const navigate = useNavigate();
   const handedLink = (location.state as { joinLink?: string } | null)?.joinLink;
   useEffect(() => {
     if (handedLink) {
@@ -528,15 +531,21 @@ function BaoSocialChatClient() {
         const t0 = Date.now();
         log(`#${r.info.name}: burner join…`);
         // Join runs on a throwaway connection, closed immediately after —
-        // the session gets a fresh one (spec §6, unlinkability).
+        // the session gets a fresh one (spec §6, unlinkability). REL-01: the
+        // join connection MUST close even on failure (timeout/wrap mismatch),
+        // or a retry loop leaks one socket per attempt — hence try/finally.
         const joinConn = new WebRelayConn(r.relayUrl);
-        const joined: JoinedRoom = await joinRoom(
-          joinConn,
-          r.info.joinLink,
-          { welcomerPub: r.info.welcomerPub, routingId: r.info.routingId },
-          { joinTimeoutMs: 25_000 },
-        );
-        joinConn.close();
+        let joined: JoinedRoom;
+        try {
+          joined = await joinRoom(
+            joinConn,
+            r.info.joinLink,
+            { welcomerPub: r.info.welcomerPub, routingId: r.info.routingId },
+            { joinTimeoutMs: 25_000 },
+          );
+        } finally {
+          joinConn.close();
+        }
         r.conn = r.conn ?? new WebRelayConn(r.relayUrl);
         r.session = new RoomSession(r.conn, joined);
         stored.current[roomId] = serializeJoinedRoom(joined);
@@ -588,6 +597,9 @@ function BaoSocialChatClient() {
   useEffect(() => {
     let cancelled = false;
     for (const info of roomInfos) {
+      // App-authored public rooms (e.g. Fal Live TV) have no scroll runtime —
+      // they navigate elsewhere, so they must never be joined or auto-opened.
+      if (info.externalUrl) continue;
       if (!runtimes.current.has(info.roomId)) {
         // The production site connects to its attached relay endpoint
         // (wss://<host>/ws); the fragment's direct-relay hint is the fallback.
@@ -604,7 +616,8 @@ function BaoSocialChatClient() {
       }
     }
     const first =
-      roomInfos.find((info) => info.name.toLowerCase() === "general") ?? roomInfos[0];
+      roomInfos.find((info) => info.name.toLowerCase() === "general") ??
+      roomInfos.find((info) => !info.externalUrl);
     if (first && !currentId.current && !cancelled) {
       // Load app framework first (paint layout), then connect content.
       window.setTimeout(() => void selectRoom(first.roomId), 50);
@@ -680,7 +693,8 @@ function BaoSocialChatClient() {
       const info: BaoSocialRoomInfo = {
         roomId: parts.roomId,
         name: `room-${parts.roomId.slice(0, 6)}`,
-        topic: "joined via invite link",
+        // Unlisted room (ghost): the invite link is the only way in.
+        topic: "unlisted · invite link",
         joinLink: link,
         agentLink: "",
         welcomerPub: parts.welcomerPub ?? "",
@@ -770,6 +784,23 @@ function BaoSocialChatClient() {
               {roomInfos.map((info) => {
                 const r = runtimes.current.get(info.roomId);
                 const active = info.roomId === currentId.current;
+                // App-authored public room (externalUrl): opens its surface
+                // instead of joining an encrypted scroll.
+                if (info.externalUrl) {
+                  return (
+                    <button
+                      key={info.roomId}
+                      type="button"
+                      onClick={() => navigate("/fal-live")}
+                      title={`${info.name} — public room`}
+                      className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors text-foreground/80 hover:bg-secondary/60"
+                    >
+                      <Sparkles className="size-3.5 shrink-0 text-primary/70" />
+                      <span className="truncate">{info.name}</span>
+                      <ExternalLink className="ml-auto size-3 opacity-50" />
+                    </button>
+                  );
+                }
                 return (
                   <button
                     key={info.roomId}

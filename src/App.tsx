@@ -161,6 +161,7 @@ const hardcodedConfig: AppConfig = {
   },
   sidebarOrder: [
     "feed",
+    "fal-live",
     "wallet",
     "market",
     "notifications",
@@ -173,11 +174,10 @@ const hardcodedConfig: AppConfig = {
     "media",
     "pets",
     "lightning-observatory",
-    "fal-live",
     "events",
     "btcmap",
   ],
-  sidebarOrderVersion: 15,
+  sidebarOrderVersion: 16,
   themeDefaultVersion: 3,
   nip85StatsPubkey:
     "5f68e85ee174102ca8978eef302129f081f03456c884185d5ec1c1224ab633ea",

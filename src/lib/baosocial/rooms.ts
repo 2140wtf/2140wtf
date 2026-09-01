@@ -10,7 +10,13 @@
  * To refresh: re-fetch /rooms.json (Nostr challenge auth) and regenerate
  * this file, or append a room's directory entry by hand. The shape matches
  * the server's rooms.json exactly.
+ *
+ * App-authored additions: entries with `externalUrl` are NOT scroll rooms
+ * on the 2140.social server — they open an embedded/other surface (e.g.
+ * the Fal Live TV studio page) and are rendered as public-room rows.
  */
+import { FAL_LIVE_URL } from "@/lib/falLive";
+
 export interface BaoSocialRoomInfo {
   roomId: string;
   name: string;
@@ -23,6 +29,8 @@ export interface BaoSocialRoomInfo {
   flushDeadlineMs: number;
   history?: string;
   policy?: string;
+  /** App-authored public room: opens this URL instead of joining a scroll. */
+  externalUrl?: string;
 }
 
 export interface BaoSocialDirectory {
@@ -33,6 +41,21 @@ export interface BaoSocialDirectory {
 export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
   "relayUrl": "wss://2140.social/ws",
   "rooms": [
+    {
+      // App-authored public room — opens the fal.live studio page with its
+      // public chat. Not a scroll room: no joinLink, no welcomer. When the
+      // 2140.social server mints a real "Fal Live TV" scroll room, replace
+      // this entry with its directory row and wire the page to the client.
+      "roomId": "fal-live-tv",
+      "name": "Fal Live TV",
+      "topic": "fal.live AI generation studio — public room",
+      "joinLink": "",
+      "agentLink": "",
+      "welcomerPub": "",
+      "routingId": "",
+      "flushDeadlineMs": 0,
+      "externalUrl": FAL_LIVE_URL
+    },
     {
       "roomId": "4d7a1d40be899f69",
       "name": "General",
