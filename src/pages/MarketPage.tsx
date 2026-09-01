@@ -343,12 +343,21 @@ export function MarketPage(): React.JSX.Element {
             <Gavel className="size-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Design auction</span>
           </Button>
-          {user && (
-            <Button className="h-9 shrink-0 rounded-full px-3" onClick={() => setComposeOpen(true)} aria-label="List product">
-              <Plus className="size-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">List product</span>
-            </Button>
-          )}
+          {/* List product — visible to everyone; prompts login when logged out. */}
+          <Button
+            className="h-9 shrink-0 rounded-full px-3"
+            onClick={() => {
+              if (!user) {
+                setLoginOpen(true);
+                return;
+              }
+              setComposeOpen(true);
+            }}
+            aria-label="List product"
+          >
+            <Plus className="size-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">List product</span>
+          </Button>
         </div>
 
         <p className="text-xs text-muted-foreground pb-2">

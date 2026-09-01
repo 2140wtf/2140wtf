@@ -36,15 +36,14 @@ function ChatGate() {
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <MessageSquare className="size-4 text-primary shrink-0" />
-        <span className="text-sm font-semibold flex-1 truncate">Trollbox FAL TV</span>
+        <span className="text-sm font-semibold flex-1 truncate">Trollbox</span>
       </div>
       <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
         <ShieldCheck className="size-8 text-muted-foreground" />
         <div>
-          <h2 className="text-sm font-semibold">Members-only encrypted chat</h2>
+          <h2 className="text-sm font-semibold">Members-only chat</h2>
           <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-            The trollbox is an encrypted 2140 Social room — sign in to join.
-            Messages never leave the encrypted scroll.
+            The trollbox is a 2140 Social room — sign in to join.
           </p>
         </div>
         <Button size="sm" onClick={() => setLoginOpen(true)}>Join to enter</Button>
