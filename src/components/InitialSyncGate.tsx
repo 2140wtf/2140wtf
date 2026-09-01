@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
+import { useLocation } from "react-router-dom";
 import { saveNsec } from "@/lib/credentialManager";
 import { openUrl } from "@/lib/downloadFile";
 import { fetchFreshEvent } from "@/lib/fetchFreshEvent";
@@ -73,6 +74,7 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   const { user } = useCurrentUser();
   const { phase, markComplete, skipSync } = useInitialSync();
   const { isLoading: settingsLoading } = useEncryptedSettings();
+  const location = useLocation();
   const { config } = useAppContext();
   const [preloadApp, setPreloadApp] = useState(false);
   const [signupActive, setSignupActive] = useState(false);
@@ -108,6 +110,19 @@ export function InitialSyncGate({ children }: InitialSyncGateProps) {
   // Reset hasShownApp so that re-login shows the spinner until settings load.
   if (!user) {
     hasShownApp.current = false;
+    return (
+      <OnboardingContext.Provider value={contextValue}>
+        {children}
+      </OnboardingContext.Provider>
+    );
+  }
+
+  // The Fal Live TV studio page (iframe + trollbox) is self-contained: it
+  // doesn't depend on synced settings, so holding it behind the initial-sync
+  // spinner makes the trollbox feel broken-slow for authed users. Render it
+  // immediately; NostrSync still reconciles settings in the background.
+  if (user && location.pathname.startsWith("/fal-live")) {
+    hasShownApp.current = true;
     return (
       <OnboardingContext.Provider value={contextValue}>
         {children}
