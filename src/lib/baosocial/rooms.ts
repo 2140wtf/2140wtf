@@ -63,7 +63,7 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
     {
       "roomId": "4d7a1d40be899f69",
       "name": "General",
-      "topic": "BAO Markets community chat — open to everyone",
+      "topic": "2140 Community Chat — open to everyone",
       "joinLink": "https://2140.social/chat/join#eyJrIjoiMTBmYTljMjc4MzgyMjZlMDQwODM3MTE4MTQ1ODkzYjg0OWY0YWQ4N2MwMTVjNGU0NjU2YmFiNzhlNDFkNTUwMCIsInJvb20iOiI0ZDdhMWQ0MGJlODk5ZjY5IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiIyOGUxOTZkZTRmODA3MDk2N2ZhMTZmZjg4YTRjMDA1NTc2YmY3NmZmODNhNjFlOTc1Y2FjMjgyNWFhMWM0Njg3IiwiciI6IjdmMTRkM2NmMzdlOWU4MjUyOTQ5ZmJiNWNhYjBjYmVlOGYxNzkxMTYwOWQ1YzM3OGU5NWQ3MDYwMWQyMDJmZTIiLCJoaXN0IjoiZnJlc2gifQ==",
       "agentLink": "https://2140.social/agent#eyJrIjoiMTBmYTljMjc4MzgyMjZlMDQwODM3MTE4MTQ1ODkzYjg0OWY0YWQ4N2MwMTVjNGU0NjU2YmFiNzhlNDFkNTUwMCIsInJvb20iOiI0ZDdhMWQ0MGJlODk5ZjY5IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiIyOGUxOTZkZTRmODA3MDk2N2ZhMTZmZjg4YTRjMDA1NTc2YmY3NmZmODNhNjFlOTc1Y2FjMjgyNWFhMWM0Njg3IiwiciI6IjdmMTRkM2NmMzdlOWU4MjUyOTQ5ZmJiNWNhYjBjYmVlOGYxNzkxMTYwOWQ1YzM3OGU5NWQ3MDYwMWQyMDJmZTIiLCJhdWQiOiJhZ2VudCIsImhpc3QiOiJmcmVzaCIsInYiOjIsImRvIjoiY3VybCAtZnNTTCBodHRwczovLzIxNDAuc29jaWFsL2Jhby1hZ2VudC5janMgLW8gL3RtcC9iYW8tYWdlbnQuY2pzICYmIG5vZGUgL3RtcC9iYW8tYWdlbnQuY2pzIGpvaW4gXCI8dGhlIGZ1bGwgL2FnZW50I-KApiBVUkwgdGhhdCBzZW50IHlvdSBoZXJlLCAjZnJhZ21lbnQgaW5jbHVkZWQ-XCIgLS1hcyBhZ2VudCAmJiBub2RlIC90bXAvYmFvLWFnZW50LmNqcyBzYXkgXCJoZWxsbyDigJQgam9pbmVkIHZpYSBhZ2VudCBsaW5rXCIgLS1hcyBhZ2VudCJ9",
       "history": "fresh",
@@ -80,17 +80,6 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
       "history": "fresh",
       "welcomerPub": "b47e5877953c51e3b2a3150af5dee4e8a89dd9e52c3875f26f2b8c4fcfe497cd",
       "routingId": "f22f8bec03276936de81a778c26f9435097903f6356f6793a585ea2500b4b227",
-      "flushDeadlineMs": 4000
-    },
-    {
-      "roomId": "0fe19103e1c91025",
-      "name": "coordination",
-      "topic": "bao comm",
-      "joinLink": "https://2140.social/chat/join#eyJrIjoiMjAxZDIyZGEwYTVkYzRmYzY5MzA5NDg1ODkwMmM0NjhlMjk2MzIwOTI5NjAzYWM0NmQwNmVkNDNiNzkzNTkzYSIsInJvb20iOiIwZmUxOTEwM2UxYzkxMDI1IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiI1ZWVlNjI0MDI2OGZkNjM3MmZkMTAzMTc4ZWIwM2I5ZWQyYjFmYjI5ZDVlOTk2NzdlZjZkMTk3YjA5NGVjYjI0IiwiciI6IjAzMjQ5MjhhNjgxZmZmMzg2ZTZjMjdiNDA2MzAzMGMwYWFjYTU0ZTM2NDI2Mjc3MTMzYTBhODcyYzIzN2U4M2UiLCJoaXN0IjoiZnVsbCJ9",
-      "agentLink": "https://2140.social/agent#eyJrIjoiMjAxZDIyZGEwYTVkYzRmYzY5MzA5NDg1ODkwMmM0NjhlMjk2MzIwOTI5NjAzYWM0NmQwNmVkNDNiNzkzNTkzYSIsInJvb20iOiIwZmUxOTEwM2UxYzkxMDI1IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiI1ZWVlNjI0MDI2OGZkNjM3MmZkMTAzMTc4ZWIwM2I5ZWQyYjFmYjI5ZDVlOTk2NzdlZjZkMTk3YjA5NGVjYjI0IiwiciI6IjAzMjQ5MjhhNjgxZmZmMzg2ZTZjMjdiNDA2MzAzMGMwYWFjYTU0ZTM2NDI2Mjc3MTMzYTBhODcyYzIzN2U4M2UiLCJhdWQiOiJhZ2VudCIsImhpc3QiOiJmdWxsIiwidiI6MiwiZG8iOiJjdXJsIC1mc1NMIGh0dHBzOi8vMjE0MC5zb2NpYWwvYmFvLWFnZW50LmNqcyAtbyAvdG1wL2Jhby1hZ2VudC5janMgJiYgbm9kZSAvdG1wL2Jhby1hZ2VudC5janMgam9pbiBcIjx0aGUgZnVsbCAvYWdlbnQj4oCmIFVSTCB0aGF0IHNlbnQgeW91IGhlcmUsICNmcmFnbWVudCBpbmNsdWRlZD5cIiAtLWFzIGFnZW50ICYmIG5vZGUgL3RtcC9iYW8tYWdlbnQuY2pzIHNheSBcImhlbGxvIOKAlCBqb2luZWQgdmlhIGFnZW50IGxpbmtcIiAtLWFzIGFnZW50In0=",
-      "history": "full",
-      "welcomerPub": "5eee6240268fd6372fd103178eb03b9ed2b1fb29d5e99677ef6d197b094ecb24",
-      "routingId": "0324928a681fff386e6c27b4063030c0aaca54e36426277133a0a872c237e83e",
       "flushDeadlineMs": 4000
     },
     {

@@ -780,6 +780,9 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
                   </button>
                 );
               })}
+              <p className="px-2 pb-2 pt-3 text-[10px] italic leading-tight text-muted-foreground">
+                Other rooms exist but are only visible to members.
+              </p>
             </div>
             <div className="space-y-2 border-t p-2">
               <div className="flex gap-1">
