@@ -3,45 +3,79 @@
  * X-Frame-Options and no CSP frame-ancestors, so it can be embedded
  * without a proxy).
  *
- * Chat: POSTING IS DISABLED. The earlier "trollbox" published plaintext
- * kind-1 Nostr notes to public relays — a privacy leak for a privacy-first
- * app. The Fal Live TV chat must run as an encrypted 2140 Social scroll
- * room (single relay wss://2140.social/ws, end-to-end encrypted envelopes)
- * once that room is minted on the relay host. Until then the panel shows a
- * notice only: no composer, no publish path, no public Nostr writes.
+ * Chat: the right panel is the REAL 2140 Social encrypted scroll client
+ * (BaoScrollChat) locked to the Trollbox FAL TV room. Every message is an
+ * E2E-encrypted envelope on the single wss://2140.social/ws relay — nothing
+ * is ever published to public Nostr (no kind-1 notes, no hashtags). The
+ * historical kind-1 "#fallive" trollbox is deleted; this panel has no
+ * public publish path by construction.
  */
+import { useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowLeft, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
+import { ArrowLeft, ExternalLink, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useAppContext } from "@/hooks/useAppContext";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
+import { BaoScrollChat } from "@/components/bao/BaoScrollChat";
+import LoginDialog from "@/components/auth/LoginDialog";
+import SignupDialog from "@/components/auth/SignupDialog";
+import { BAO_TROLLBOX_ROOM } from "@/lib/baosocial/rooms";
 import { FAL_LIVE_URL } from "@/lib/falLive";
 
-/** Static panel — see file header for why there is no composer here. */
-function ChatNotice() {
+/** Members-only gate for the chat panel (2140 Social parity — entering the
+ *  encrypted chat requires an account; the identity module then decides how
+ *  to appear inside the envelope). */
+function ChatGate() {
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [signupOpen, setSignupOpen] = useState(false);
+
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-muted/30">
+    <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <MessageSquare className="size-4 text-primary shrink-0" />
-        <span className="text-sm font-semibold flex-1">Fal Live TV chat</span>
+        <span className="text-sm font-semibold flex-1 truncate">Trollbox FAL TV</span>
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Chat is coming back as an encrypted 2140 Social room — messages are
-          end-to-end encrypted and never touch the public Nostr network.
-        </p>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          Posting is temporarily disabled while the room is being set up.
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 px-4 text-center">
+        <ShieldCheck className="size-8 text-muted-foreground" />
+        <div>
+          <h2 className="text-sm font-semibold">Members-only encrypted chat</h2>
+          <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+            The trollbox is an encrypted 2140 Social room — sign in to join.
+            Messages never leave the encrypted scroll.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setLoginOpen(true)}>Join to enter</Button>
+        <p className="text-[11px] text-muted-foreground">
+          No account yet?{" "}
+          <button
+            type="button"
+            className="font-medium text-primary underline-offset-2 hover:underline"
+            onClick={() => setSignupOpen(true)}
+          >
+            Create account
+          </button>
         </p>
       </div>
-    </aside>
+      <LoginDialog
+        isOpen={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onLogin={() => setLoginOpen(false)}
+        onSignupClick={() => {
+          setLoginOpen(false);
+          setSignupOpen(true);
+        }}
+      />
+      <SignupDialog isOpen={signupOpen} onClose={() => setSignupOpen(false)} />
+    </div>
   );
 }
 
 export function FalLivePage() {
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
 
   // Expanded mode: collapse the left sidebar to its icon rail and hide the
   // right sidebar so the studio gets the full width (same pattern as
@@ -84,7 +118,17 @@ export function FalLivePage() {
           allow="fullscreen; clipboard-write"
         />
       </div>
-      <ChatNotice />
+      <aside className="flex w-80 shrink-0 flex-col border-l bg-muted/30">
+        {user ? (
+          // Authed: the real encrypted 2140 Social scroll client, locked to
+          // the Trollbox FAL TV room. No kind-1 publish path exists here.
+          <div className="flex-1 min-h-0">
+            <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} />
+          </div>
+        ) : (
+          <ChatGate />
+        )}
+      </aside>
     </main>
   );
 }
