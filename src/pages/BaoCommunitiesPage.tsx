@@ -248,8 +248,8 @@ function newRuntime(info: BaoSocialRoomInfo, relayUrl: string): RoomRuntime {
  *  ever made until `user` exists. */
 export function BaoCommunitiesPage() {
   useSeoMeta({
-    title: "2140 Social",
-    description: "2140 Social — encrypted community scroll on Nostr, inside 2140.",
+    title: "2140 Community Chat",
+    description: "2140 Community Chat — encrypted community scroll on Nostr, inside 2140.",
   });
 
   const { user } = useCurrentUser();
@@ -260,14 +260,14 @@ export function BaoCommunitiesPage() {
     return (
       <main className="flex-1 min-w-0">
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-3">
-          <h1 className="text-lg font-semibold">2140 Social</h1>
+          <h1 className="text-lg font-semibold">2140 Community Chat</h1>
         </div>
         <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-20 text-center">
           <ShieldCheck className="size-10 text-muted-foreground" />
           <div>
             <h2 className="text-base font-semibold">Members-only encrypted chat</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              2140 Social is an encrypted, burner-keyed community scroll. Sign in
+              2140 Community Chat is an encrypted, burner-keyed community scroll. Sign in
               to join the rooms — your identity key never touches the chat wire.
             </p>
           </div>
@@ -817,6 +817,9 @@ function BaoSocialChatClient() {
                   </button>
                 );
               })}
+              <p className="px-2 pb-2 pt-3 text-[10px] italic leading-tight text-muted-foreground">
+                Other rooms exist but are only visible to members.
+              </p>
             </div>
             <div className="space-y-2 border-t p-2">
               <div className="flex gap-1">
