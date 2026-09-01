@@ -470,13 +470,25 @@ export function useInitialSync() {
   const skipSync = useCallback(() => {
     abortSyncRef.current?.();
     markSyncComplete();
+    // Persist a local sync timestamp so InitialSyncGate's re-gate check
+    // (phase === 'complete' && settingsLoading && !hasLocalSync) falls
+    // through to the app. Without this, a user who skips sync while the
+    // encrypted-settings query is still pending (e.g. relays not answering)
+    // gets re-shown "Syncing your settings..." forever — the skip button
+    // appears to do nothing because settingsLoading never resolves.
+    if (user) setLocalSettingsSync(config.appId, user.pubkey, Date.now());
     setPhase("complete");
-  }, [markSyncComplete]);
+  }, [user, config.appId, markSyncComplete]);
 
   const markComplete = useCallback(() => {
     markSyncComplete();
+    // Same as skipSync: completing the questionnaire (or skipping it) while
+    // the settings query is still pending must not re-gate the user behind
+    // the sync spinner. A local timestamp makes the gate treat local state
+    // as authoritative for this session.
+    if (user) setLocalSettingsSync(config.appId, user.pubkey, Date.now());
     setPhase("complete");
-  }, [markSyncComplete]);
+  }, [user, config.appId, markSyncComplete]);
 
   return { phase, markComplete, skipSync };
 }

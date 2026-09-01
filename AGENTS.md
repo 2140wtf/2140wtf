@@ -27,7 +27,29 @@ Rules:
 4. **Anything user-visible on shared infrastructure needs the same care:**
    public relays, shared caches, production databases, third-party APIs.
 
-## 2. Money safety (MANDATORY)
+## 2. Chat privacy — NEVER leak to public Nostr (MANDATORY)
+
+**Mistake that caused this rule:** the Fal Live TV "trollbox" chat published
+plaintext **kind-1 notes to public relays** (ditto, primal, …), signed with
+the user's **real key**, bypassing the 2140 Social identity-privacy module
+(nip05 / hashed / anon). The user's real npub was publicly attached to chat
+messages in a privacy-first product — a critical incident.
+
+Rules:
+
+1. **Chat surfaces must use the encrypted scroll protocol**, never kind-1
+   notes. 2140 Social rooms are end-to-end encrypted envelopes on the single
+   2140.social relay (wss://2140.social/ws). A chat that is not an encrypted
+   room must not post anything to Nostr at all (read-only or local-only).
+2. **Never sign a user's message with their real key** unless the UI
+   explicitly shows the real identity and the user chose it. Identity modes
+   (anon / hashed / nip05) must be honored on the wire, not just displayed.
+3. **No "test" or debug chat messages to public relays** — same rule as
+   section 1; test chat on a local relay or don't send.
+4. If a chat's storage relay is not confirmed writable/private, the safe
+   default is: no composer, no publish path.
+
+## 3. Money safety (MANDATORY)
 
 1. **Never publish or log nsec/seed/private keys** — not in code, not in
    terminal output, not in screenshots, not in commit messages.
@@ -38,7 +60,7 @@ Rules:
    are saved to gitignored local storage with mode 0600 and a backup copy
    outside the repo. Losing keys = losing funds. This is unacceptable.
 
-## 3. Relay/event hygiene
+## 4. Relay/event hygiene
 
 1. **Deleting Nostr events requires the original author's key** (NIP-09).
    A deletion from any other key is accepted by relays but has zero effect.
@@ -47,7 +69,7 @@ Rules:
    code does NOT clean up the Nostr ecosystem. Cleanup must happen on the
    relays, and must be verified there (query the relays afterward).
 
-## 4. Session memory is volatile — verify claims, don't recall them
+## 5. Session memory is volatile — verify claims, don't recall them
 
 **Mistake that caused this rule:** sessions repeatedly claimed work was
 "done" when it wasn't (events left on relays, files not deleted, scripts
@@ -60,7 +82,7 @@ committed then re-added as debug garbage).
 3. If you cannot verify (no auth, no network), say so explicitly instead of
    assuming success.
 
-## 5. Ephemeral key patterns
+## 6. Ephemeral key patterns
 
 Any key generated in a script (`generateSecretKey()`) is a liability:
 
@@ -69,7 +91,7 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 - Never print the full secret; print at most a prefix for identification.
 - Record event ids alongside the key that can delete them.
 
-## 6. Debug/test scripts lifecycle
+## 7. Debug/test scripts lifecycle
 
 1. One-off debug scripts must never be committed. Delete them (or place
    them in gitignored paths) before the commit stage of any task.
@@ -78,13 +100,13 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 3. Before pushing a branch, run `git status --porcelain -uall` and clean
    untracked leftovers. The working tree must be clean at PR time.
 
-## 7. Language
+## 8. Language
 
 The user works in English. All responses, comments, and commit messages
 are English. No other languages, even by accident from mixed training
 data — check your own output.
 
-## 8. Verify before merge
+## 9. Verify before merge
 
 The pre-merge checklist (run it, paste the tail of the output):
 

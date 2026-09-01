@@ -127,6 +127,30 @@ export function useFeedSettings() {
     [orderedItems],
   );
 
+  // Migration: make sure FAL LIVE TV is visible in the sidebar right below
+  // Feed. It was added after many accounts synced their sidebarOrder, so
+  // their stored order lacks it and the item vanished for logged-in users
+  // (logged-out users get the default order and always see it). Re-inserts
+  // whenever a stale synced order arrives without it, then syncs the fixed
+  // order back so the account heals.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0 || order.includes("fal-live")) return;
+
+    const next = [...order];
+    const feedIdx = next.indexOf("feed");
+    if (feedIdx !== -1) {
+      next.splice(feedIdx + 1, 0, "fal-live");
+    } else {
+      next.unshift("fal-live");
+    }
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
+
   // Migration: make sure Polls is visible in the sidebar right below Merchants.
   // This only runs once for users whose saved order predates the Polls item.
   useEffect(() => {

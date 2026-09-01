@@ -15,8 +15,6 @@
  * on the 2140.social server — they open an embedded/other surface (e.g.
  * the Fal Live TV studio page) and are rendered as public-room rows.
  */
-import { FAL_LIVE_URL } from "@/lib/falLive";
-
 export interface BaoSocialRoomInfo {
   roomId: string;
   name: string;
@@ -42,19 +40,25 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
   "relayUrl": "wss://2140.social/ws",
   "rooms": [
     {
-      // App-authored public room — opens the fal.live studio page with its
-      // public chat. Not a scroll room: no joinLink, no welcomer. When the
-      // 2140.social server mints a real "Fal Live TV" scroll room, replace
-      // this entry with its directory row and wire the page to the client.
-      "roomId": "fal-live-tv",
-      "name": "Fal Live TV",
-      "topic": "fal.live AI generation studio — public room",
-      "joinLink": "",
+      // "Trollbox FAL TV" — the Fal Live TV chat. A REAL encrypted scroll
+      // room on the 2140.social relay (same protocol as General), listed so
+      // it appears in the 2140 Social room list AND in the Fal Live TV panel
+      // (BaoScrollChat lockedRoom).
+      //
+      // TEMPORARY STATE: the dedicated room is not minted on the relay host
+      // yet, so this row carries General's join data — the chat works TODAY,
+      // encrypted, sharing General's scroll. When the operator mints the
+      // room, replace roomId/joinLink/welcomerPub/routingId with its server
+      // directory row (same shape as the other rooms below).
+      "roomId": "trollbox-fal-tv",
+      "name": "Trollbox FAL TV",
+      "topic": "fal.live chat — encrypted 2140 Social room",
+      "joinLink": "https://2140.social/chat/join#eyJrIjoiMTBmYTljMjc4MzgyMjZlMDQwODM3MTE4MTQ1ODkzYjg0OWY0YWQ4N2MwMTVjNGU0NjU2YmFiNzhlNDFkNTUwMCIsInJvb20iOiI0ZDdhMWQ0MGJlODk5ZjY5IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiIyOGUxOTZkZTRmODA3MDk2N2ZhMTZmZjg4YTRjMDA1NTc2YmY3NmZmODNhNjFlOTc1Y2FjMjgyNWFhMWM0Njg3IiwiciI6IjdmMTRkM2NmMzdlOWU4MjUyOTQ5ZmJiNWNhYjBjYmVlOGYxNzkxMTYwOWQ1YzM3OGU5NWQ3MDYwMWQyMDJmZTIiLCJoaXN0IjoiZnJlc2gifQ==",
       "agentLink": "",
-      "welcomerPub": "",
-      "routingId": "",
-      "flushDeadlineMs": 0,
-      "externalUrl": FAL_LIVE_URL
+      "welcomerPub": "28e196de4f8070967fa16ff88a4c005576bf76ff83a61e975cac2825aa1c4687",
+      "routingId": "7f14d3cf37e9e8252949fbb5cab0cbee8f17911609d5c378e95d70601d202fe2",
+      "history": "fresh",
+      "flushDeadlineMs": 4000
     },
     {
       "roomId": "4d7a1d40be899f69",
@@ -124,3 +128,14 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
     }
   ]
 };
+
+/**
+ * The Trollbox FAL TV room — the Fal Live TV chat panel's locked room
+ * (BaoScrollChat single-room mode). Currently shares General's scroll until
+ * the operator mints the dedicated room on the relay host (see the room
+ * row's comment above); then this constant picks up the real room
+ * automatically since it is read from the directory.
+ */
+export const BAO_TROLLBOX_ROOM: BaoSocialRoomInfo = BAO_SOCIAL_DIRECTORY.rooms.find(
+  (room) => room.name === "Trollbox FAL TV",
+)!;
