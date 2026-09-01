@@ -486,10 +486,14 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     return () => window.clearTimeout(timer);
   }, [shouldRetryEmpty, emptyRetryKey, emptyRetryAttempt, refetch]);
 
+  // Show the skeleton only while the very first fetch is in flight. Once a
+  // settled-empty result exists, render the empty state even while the
+  // cold-start retries are still running in the background — a live
+  // "couldn't find posts / retrying" state instead of an unbounded skeleton
+  // (which read as a dead page and outlasted the old 3-attempt budget).
   const showSkeleton =
     isPending ||
-    (isLoading && !rawData) ||
-    (feedItems.length === 0 && shouldRetryEmpty);
+    (isLoading && !rawData);
 
 
 
