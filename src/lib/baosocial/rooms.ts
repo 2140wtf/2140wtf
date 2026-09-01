@@ -15,8 +15,6 @@
  * on the 2140.social server — they open an embedded/other surface (e.g.
  * the Fal Live TV studio page) and are rendered as public-room rows.
  */
-import { FAL_LIVE_URL } from "@/lib/falLive";
-
 export interface BaoSocialRoomInfo {
   roomId: string;
   name: string;
