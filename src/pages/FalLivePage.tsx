@@ -91,8 +91,10 @@ export function FalLivePage() {
   useSeoMeta({ title: `fal.live | ${config.appName}` });
 
   return (
-    <main className="flex h-[100dvh]">
-      <div className="flex flex-col flex-1 min-w-0">
+    // Mobile: stack — studio on top, chat below (video keeps ~55dvh, chat
+    // takes the rest). Desktop: side-by-side — studio flex-1, chat w-80.
+    <main className="flex h-[100dvh] flex-col overflow-hidden lg:flex-row">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex items-center gap-3 px-4 py-2 border-b shrink-0">
           <Button variant="ghost" size="sm" asChild>
             <Link to="/">
@@ -114,17 +116,16 @@ export function FalLivePage() {
         <iframe
           src={FAL_LIVE_URL}
           title="fal.live AI generation studio"
-          className="flex-1 w-full border-0 bg-black"
+          className="h-[55dvh] w-full flex-none border-0 bg-black lg:h-auto lg:flex-1"
           allow="fullscreen; clipboard-write"
         />
       </div>
-      <aside className="flex w-80 shrink-0 flex-col border-l bg-muted/30">
+      <aside className="flex min-h-0 flex-1 flex-col border-t bg-muted/30 lg:w-80 lg:flex-none lg:border-l lg:border-t-0">
         {user ? (
           // Authed: the real encrypted 2140 Social scroll client, locked to
-          // the Trollbox FAL TV room. No kind-1 publish path exists here.
-          <div className="flex-1 min-h-0">
-            <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} />
-          </div>
+          // the Trollbox FAL TV room (embedded — parent provides the height).
+          // No kind-1 publish path exists here.
+          <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} embedded />
         ) : (
           <ChatGate />
         )}

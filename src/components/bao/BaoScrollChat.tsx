@@ -251,10 +251,16 @@ interface BaoScrollChatProps {
    * omitted, the full directory sidebar (multi-room) is shown.
    */
   lockedRoom?: BaoSocialRoomInfo;
+  /**
+   * Embedded mode: the parent (e.g. the Fal Live TV panel) provides the
+   * height, so the chat must not apply the mobile full-viewport class
+   * (max-lg:livestream-height) that standalone pages need.
+   */
+  embedded?: boolean;
 }
 
 /** The chat client itself — mounted only for authed users. */
-export function BaoScrollChat({ lockedRoom }: BaoScrollChatProps) {
+export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
   const { user, metadata } = useCurrentUser();
   // Identity preferences are scoped to this account (see loadIdentityModeFor).
   const accountPubkey = user?.pubkey;
@@ -697,8 +703,9 @@ export function BaoScrollChat({ lockedRoom }: BaoScrollChatProps) {
         // On mobile the chat pane needs a real viewport height (the parent
         // chain has none), otherwise the column collapses and content hides
         // behind the fixed top bar and bottom nav. Same tool class
-        // LiveStreamPage uses successfully.
-        "max-lg:livestream-height",
+        // LiveStreamPage uses successfully. Embedded panels (Fal Live TV)
+        // get their height from the parent instead.
+        !embedded && "max-lg:livestream-height",
       )}
       data-room={roomKey}
     >
