@@ -470,11 +470,15 @@ export function Feed({ kinds, tagFilters, header, hideCompose, emptyMessage, fee
     !!rawData &&
     feedItems.length === 0 &&
     !isFetching &&
-    emptyRetryAttempt < 3;
+    emptyRetryAttempt < 6;
 
   useEffect(() => {
     if (!shouldRetryEmpty) return;
-    const delays = [750, 2_500, 6_000];
+    // Cold-start relay connects can take 10-30s on slow networks; the old
+    // 3-attempt budget (~9s) exhausted before useful relays came up, leaving
+    // a dead "No posts found" that only a manual refresh cured. Retry with a
+    // longer backoff so the first paint of the feed lands content on its own.
+    const delays = [750, 1_500, 3_000, 6_000, 10_000, 15_000];
     const timer = window.setTimeout(() => {
       setEmptyRetry({ key: emptyRetryKey, attempt: emptyRetryAttempt + 1 });
       void refetch();
