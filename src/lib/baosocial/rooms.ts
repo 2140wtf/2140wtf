@@ -51,8 +51,8 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
       // room, replace roomId/joinLink/welcomerPub/routingId with its server
       // directory row (same shape as the other rooms below).
       "roomId": "trollbox-fal-tv",
-      "name": "Trollbox FAL TV",
-      "topic": "fal.live chat — encrypted 2140 Social room",
+      "name": "Trollbox",
+      "topic": "Trollbox",
       "joinLink": "https://2140.social/chat/join#eyJrIjoiMTBmYTljMjc4MzgyMjZlMDQwODM3MTE4MTQ1ODkzYjg0OWY0YWQ4N2MwMTVjNGU0NjU2YmFiNzhlNDFkNTUwMCIsInJvb20iOiI0ZDdhMWQ0MGJlODk5ZjY5IiwicmVsYXkiOiJ3c3M6Ly8yMTQwLnNvY2lhbC93cyIsInciOiIyOGUxOTZkZTRmODA3MDk2N2ZhMTZmZjg4YTRjMDA1NTc2YmY3NmZmODNhNjFlOTc1Y2FjMjgyNWFhMWM0Njg3IiwiciI6IjdmMTRkM2NmMzdlOWU4MjUyOTQ5ZmJiNWNhYjBjYmVlOGYxNzkxMTYwOWQ1YzM3OGU5NWQ3MDYwMWQyMDJmZTIiLCJoaXN0IjoiZnJlc2gifQ==",
       "agentLink": "",
       "welcomerPub": "28e196de4f8070967fa16ff88a4c005576bf76ff83a61e975cac2825aa1c4687",
@@ -137,5 +137,5 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
  * automatically since it is read from the directory.
  */
 export const BAO_TROLLBOX_ROOM: BaoSocialRoomInfo = BAO_SOCIAL_DIRECTORY.rooms.find(
-  (room) => room.name === "Trollbox FAL TV",
+  (room) => room.name === "Trollbox",
 )!;
