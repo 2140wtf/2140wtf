@@ -97,8 +97,10 @@ export function absorbLink(raw) {
     link = link.replace(/^[<"'`]+/, '').replace(/[>"'`]+$/, '');
     // Markdown escapes before # and inside the fragment.
     link = link.replace(/\\([_#])/g, '$1');
-    // Trailing punctuation glued to the fragment by prose.
-    link = link.replace(/[.,;:!?]+$/, '');
+    // Trailing punctuation glued to the fragment by prose. Whitespace is
+    // included so `"…0=, "` (punct + space before the closing quote) is
+    // stripped too — prose punctuation rarely sits flush against the link.
+    link = link.replace(/[.,;:!?\s]+$/, '');
     const hashIndex = link.indexOf('#');
     if (hashIndex < 0)
         return link; // nothing to repair inside the fragment

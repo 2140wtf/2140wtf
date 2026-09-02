@@ -9,8 +9,14 @@ import { dedupeNip99Listings, isArtListing, NIP99_CLASSIFIED_KIND } from '@/lib/
 
 const QUERY_LIMIT = 500;
 const LOOKBACK_DAYS = 180;
-const DEFAULT_TIMEOUT_MS = 10_000;
-const EXTRA_TIMEOUT_MS = 12_000;
+/**
+ * Relay queries resolve when relays EOSE or the timeout fires — so the
+ * timeout IS the perceived load time. Keep it tight: the fastest relays
+ * answer well under a second, and anything slower is not worth waiting for
+ * on first paint. Default and extra relay sets run in parallel.
+ */
+const DEFAULT_TIMEOUT_MS = 3_000;
+const EXTRA_TIMEOUT_MS = 3_500;
 
 export type Nip99Category = 'art' | 'all' | string;
 
@@ -75,28 +81,30 @@ export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
         relayFilter['#t'] = [tag];
       }
 
+      // Run both relay sets in parallel — the extra-relay query used to run
+      // strictly after the default one, which doubled the time to first card.
       const defaultSignal = AbortSignal.any([signal, AbortSignal.timeout(DEFAULT_TIMEOUT_MS)]);
-      const defaultResults = await nostr.query([relayFilter], { signal: defaultSignal });
+      const defaultPromise = nostr.query([relayFilter], { signal: defaultSignal });
 
-      let extraResults: NostrEvent[] = [];
-      if (extraRelays.length > 0) {
-        try {
-          const extraSignal = AbortSignal.any([signal, AbortSignal.timeout(EXTRA_TIMEOUT_MS)]);
-          extraResults = await nostr
-            .group(extraRelays)
-            .query([relayFilter], { signal: extraSignal });
-        } catch {
-          // best-effort: extra relays are not required
-        }
-      }
+      const extraPromise =
+        extraRelays.length > 0
+          ? nostr
+              .group(extraRelays)
+              .query([relayFilter], {
+                signal: AbortSignal.any([signal, AbortSignal.timeout(EXTRA_TIMEOUT_MS)]),
+              })
+              .catch(() => [] as NostrEvent[]) // best-effort: extra relays are not required
+          : Promise.resolve([] as NostrEvent[]);
+
+      const [defaultResults, extraResults] = await Promise.all([defaultPromise, extraPromise]);
 
       const all = new Map<string, NostrEvent>();
       for (const ev of defaultResults) all.set(ev.id, ev);
       for (const ev of extraResults) all.set(ev.id, ev);
       return Array.from(all.values()).sort((a, b) => b.created_at - a.created_at);
     },
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000, // 10 minutes — revisits render instantly from cache
+    gcTime: 30 * 60 * 1000,
   });
 
   const listings = useMemo(() => {
