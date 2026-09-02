@@ -136,7 +136,17 @@ describe('summarizeBids', () => {
       1000,
     );
     expect(state.highest!.amountSats).toBe(2500);
-    expect(state.minNextBid).toBe(2501);
+    // Tiered increments: 2500 sits in the 1k–5k band → +500 (was flat +1).
+    expect(state.minNextBid).toBe(3000);
+    // First-mover tie rule: an equal bid from a later bidder never displaces.
+    const tie = summarizeBids(
+      [
+        { eventId: '3', pubkey: BIDDER1, amountSats: 2500, auctionAddress: addr, createdAt: NOW },
+        { eventId: '4', pubkey: BIDDER2, amountSats: 2500, auctionAddress: addr, createdAt: NOW + 10 },
+      ],
+      1000,
+    );
+    expect(tie.highest!.eventId).toBe('3');
   });
 
   it('falls back to the starting price with no bids', () => {
@@ -145,7 +155,7 @@ describe('summarizeBids', () => {
     expect(state.minNextBid).toBe(1000);
   });
 
-  it('keeps a bidder\'s highest bid when they bid twice', () => {
+  it('keeps the full raise history (multiple bids per bidder are distinct events)', () => {
     const state = summarizeBids(
       [
         { eventId: '1', pubkey: BIDDER1, amountSats: 1200, auctionAddress: addr, createdAt: NOW },
@@ -153,8 +163,11 @@ describe('summarizeBids', () => {
       ],
       1000,
     );
-    expect(state.sorted).toHaveLength(1);
-    expect(state.sorted[0]!.amountSats).toBe(1800);
+    // Proxy raises publish unique slots, so history is preserved — the
+    // standing/highest bid is the max, ties by earliest.
+    expect(state.sorted).toHaveLength(2);
+    expect(state.highest!.amountSats).toBe(1800);
+    expect(state.highest!.eventId).toBe('2');
   });
 });
 
@@ -174,9 +187,10 @@ describe('isAuctionClosed / validateBidAmount', () => {
     expect(validateBidAmount(999, auction, null, NOW)).toMatch(/at least 1,000/);
   });
 
-  it('rejects bids below highest + increment', () => {
+  it('rejects bids below highest + tiered increment', () => {
     const highest = { eventId: 'x', pubkey: BIDDER2, amountSats: 1500, auctionAddress: '', createdAt: NOW };
-    expect(validateBidAmount(1500, auction, highest, NOW)).toMatch(/at least 1,501/);
+    // 1500 is in the 1k–5k band → increment 500 → floor 2000.
+    expect(validateBidAmount(1500, auction, highest, NOW)).toMatch(/at least 2,000/);
   });
 
   it('rejects bids above buy-now', () => {
@@ -228,8 +242,9 @@ describe('canBuyNow', () => {
     // After that bid lands, Buy It Now must disappear (bidding reached it).
     const atBuyNow = { eventId: 'x', pubkey: BIDDER2, amountSats: 50000, auctionAddress: '', createdAt: NOW };
     expect(canBuyNow(auction, atBuyNow, NOW)).toBe(false);
-    // ...but the bid itself stays valid against the closed floor.
-    expect(validateBidAmount(50000, auction, atBuyNow, NOW)).toMatch(/at least 50,001/);
+    // ...but the NEXT bid must clear the tiered floor: 50k is in the
+    // 20k–100k band → increment 2,500 → floor 52,500.
+    expect(validateBidAmount(50000, auction, atBuyNow, NOW)).toMatch(/at least 52,500/);
   });
 });
 

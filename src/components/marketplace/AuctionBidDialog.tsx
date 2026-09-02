@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Gavel, Loader2, ShoppingCart } from 'lucide-react';
+import { Gavel, Loader2, ShoppingCart, Zap } from 'lucide-react';
 
 /** Live countdown label to the close time, e.g. "2d 4h 3m 12s left". */
 function timeLeftLabel(closesAt: number): string {
@@ -34,6 +34,8 @@ import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useWot } from '@/hooks/useWot';
 import { canBidWot, validateBidAmount, type AuctionBid, type AuctionListing, auctionAddress } from '@/lib/cashu/auction';
+import { bidIncrementSats } from '@/lib/cashu/auctionRules';
+import { createCommitment, saveCommitSecret } from '@/lib/cashu/auctionCommit';
 import { savePendingBidDeposit } from '@/lib/cashu/auctionSettlement';
 import { MULTISIG_REFUND_PERIOD_SECONDS } from '@/lib/cashu/escrowMultisig';
 import { formatSats } from '@/lib/bitcoin';
@@ -51,6 +53,13 @@ interface AuctionBidDialogProps {
    * input locked; on confirm the auction is closed (status=sold) so the
    * buyer becomes the winner and settlement proceeds as usual. */
   buyNowMode?: boolean;
+  /**
+   * Proxy mode (eBay-style max bid): the entered amount is the bidder's
+   * SECRET maximum. The event publishes only a hash commitment to it; the
+   * client auto-raises by minimal increments while online. Escrow locks the
+   * max so funds are always covered.
+   */
+  proxyMode?: boolean;
 }
 
 /**
@@ -70,6 +79,7 @@ export function AuctionBidDialog({
   onOpenChange,
   onBidPlaced,
   buyNowMode = false,
+  proxyMode = false,
 }: AuctionBidDialogProps) {
   const { user } = useCurrentUser();
   const wallet = useCashuWalletContext();
@@ -81,6 +91,7 @@ export function AuctionBidDialog({
   const wotGate = useMemo(() => canBidWot(auction, wotScore), [auction, wotScore]);
 
   const [amount, setAmount] = useState(String(minNextBid));
+  const [proxyOn, setProxyOn] = useState(proxyMode);
 
   // Buy-now mode: snap the amount to the fixed price each open.
   useEffect(() => {
@@ -149,16 +160,29 @@ export function AuctionBidDialog({
       });
 
       // Publish the bid event (amount + P2PK key only — no proofs on relay).
+      // Proxy mode: the event also carries a sealed commitment to the bidder's
+      // max; the secret stays in the local journal for auto-raise + reveal.
+      const addr = auctionAddress(auction.pubkey, auction.dTag);
+      const tags: string[][] = [
+        ['d', `bid-${auction.pubkey.slice(0, 8)}-${auction.dTag}`],
+        ['a', addr],
+        ['amount', String(numericAmount), 'sats'],
+        ['p2pk', bidderP2pk],
+        ['alt', `Bid ${formatSats(numericAmount)} sats on ${auction.title}`],
+      ];
+      if (proxyOn) {
+        const { commitment, secret } = createCommitment({
+          auctionAddress: addr,
+          pubkey: user.pubkey,
+          valueSats: numericAmount,
+        });
+        saveCommitSecret({ pubkey: user.pubkey, auctionAddress: addr, scope: 'max', secret });
+        tags.push(['max_commit', commitment]);
+      }
       await publishEvent({
         kind: 30401,
         content: '',
-        tags: [
-          ['d', `bid-${auction.pubkey.slice(0, 8)}-${auction.dTag}`],
-          ['a', `30402:${auction.pubkey}:${auction.dTag}`],
-          ['amount', String(numericAmount), 'sats'],
-          ['p2pk', bidderP2pk],
-          ['alt', `Bid ${formatSats(numericAmount)} sats on ${auction.title}`],
-        ],
+        tags,
       });
 
       // Buy-now: end the auction immediately (status=sold) so the buyer
@@ -218,7 +242,9 @@ export function AuctionBidDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="bid-amount">{buyNowMode ? 'Fixed price (sats)' : 'Your bid (sats)'}</Label>
+            <Label htmlFor="bid-amount">
+              {buyNowMode ? 'Fixed price (sats)' : proxyOn ? 'Your MAXIMUM bid (sats)' : 'Your bid (sats)'}
+            </Label>
             <Input
               id="bid-amount"
               type="number"
@@ -236,10 +262,31 @@ export function AuctionBidDialog({
             </p>
           </div>
 
+          {!buyNowMode && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={proxyOn}
+                onChange={(e) => setProxyOn(e.target.checked)}
+              />
+              <Zap className="size-3" />
+              Proxy bidding — others see only your current bid, never this max.
+              Your device auto-raises by minimum increments while the app is open.
+            </label>
+          )}
+
           <div className="rounded-lg bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-            Your bid locks {Number.isFinite(numericAmount) ? formatSats(numericAmount) : '—'} sats
+            {proxyOn ? 'Your maximum' : 'Your bid'} locks{' '}
+            {Number.isFinite(numericAmount) ? formatSats(numericAmount) : '—'} sats
             in Cashu escrow (2-of-3: you, seller, operator). Outbid or losing bids refund
             automatically after the 24h locktime.
+            {proxyOn && currentHighest && (
+              <p className="mt-1">
+                Next auto-raise would be{' '}
+                {formatSats(currentHighest.amountSats + bidIncrementSats(currentHighest.amountSats))} sats.
+              </p>
+            )}
             {insufficient && (
               <p className="mt-1 text-destructive">
                 Wallet balance too low ({formatSats(balance)} sats available).
@@ -264,7 +311,13 @@ export function AuctionBidDialog({
                 Locking escrow…
               </>
             ) : (
-              wotGate.allowed ? (buyNowMode ? 'Confirm Buy It Now' : 'Lock bid in escrow') : 'WoT score too low'
+              wotGate.allowed
+                ? buyNowMode
+                  ? 'Confirm Buy It Now'
+                  : proxyOn
+                    ? 'Seal max bid & lock escrow'
+                    : 'Lock bid in escrow'
+                : 'WoT score too low'
             )}
           </Button>
         </DialogFooter>

@@ -104,6 +104,18 @@ export function MarketPage(): React.JSX.Element {
     onlyActive: true,
   });
 
+  // Hand the auction registry to the detail page: a deep link to
+  // /market/auction/:seller/:d needs the parsed listing; the grid is the
+  // natural owner of that data. Best-effort sessionStorage handoff.
+  useMemo(() => {
+    if (auctions.length === 0) return;
+    try {
+      sessionStorage.setItem('bao_auction_registry', JSON.stringify(auctions));
+    } catch {
+      // quota/private mode — detail page will show its not-found state
+    }
+  }, [auctions]);
+
   const { data: authors } = useAuthors(
     sort === 'merchant' ? listings.map((listing) => listing.pubkey) : [],
   );

@@ -27,6 +27,7 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
+import { bidIncrementSats } from '@/lib/cashu/auctionRules';
 
 /** Kind for individual auction bids (parameterized-replaceable). */
 export const AUCTION_BID_KIND = 30401;
@@ -327,38 +328,32 @@ export interface AuctionBidState {
 
 /**
  * Reduce a list of parsed bids for one auction into display state.
- * Duplicate per-bidder slots resolve to the bidder's latest event.
+ *
+ * History preservation: bids are deduped by event id only (relay copies of
+ * the same event share an id). Multiple bids per bidder are EXPECTED now —
+ * proxy raises each publish a unique slot (`d = proxy-…`), and manual raises
+ * are distinct events too — so the full raise sequence stays visible.
+ * `highest` is the max-amount bid; ties go to the EARLIEST (eBay rule:
+ * first-mover keeps the lead at equal price).
  */
 export function summarizeBids(
   bids: AuctionBid[],
   startingSats: number,
 ): AuctionBidState {
-  // Keep only the latest bid per (pubkey, d-tag) pair — kind 30401 is
-  // parameterized-replaceable, so relays may serve stale versions.
-  const latest = new Map<string, AuctionBid>();
+  const unique = new Map<string, AuctionBid>();
   for (const bid of bids) {
-    const key = bid.auctionAddress;
-    const existing = latest.get(key);
-    // Same bidder targeting the same auction: keep the higher amount, or the
-    // more recent event when amounts tie.
-    if (
-      !existing ||
-      bid.amountSats > existing.amountSats ||
-      (bid.amountSats === existing.amountSats && bid.createdAt > existing.createdAt)
-    ) {
-      latest.set(key, bid);
-    }
+    if (!unique.has(bid.eventId)) unique.set(bid.eventId, bid);
   }
 
-  const sorted = Array.from(latest.values()).sort(
+  const sorted = Array.from(unique.values()).sort(
     (a, b) =>
       b.amountSats - a.amountSats ||
-      b.createdAt - a.createdAt,
+      a.createdAt - b.createdAt,
   );
 
   const highest = sorted[0] ?? null;
   const minNextBid = highest
-    ? highest.amountSats + MIN_BID_INCREMENT_SATS
+    ? highest.amountSats + bidIncrementSats(highest.amountSats)
     : Math.max(1, startingSats);
 
   return {
@@ -437,7 +432,7 @@ export function validateBidAmount(
     return 'This auction has closed.';
   }
   const floor = currentHighest
-    ? currentHighest.amountSats + MIN_BID_INCREMENT_SATS
+    ? currentHighest.amountSats + bidIncrementSats(currentHighest.amountSats)
     : Math.max(1, auction.startingSats);
   if (amountSats < floor) {
     return `Bid must be at least ${floor.toLocaleString()} sats.`;
