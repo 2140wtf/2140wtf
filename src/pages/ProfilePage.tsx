@@ -1360,9 +1360,12 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   const isEmojiShape = !!avatarShape && isEmoji(avatarShape);
   const profileStatus = useUserStatus(pubkey);
 
-  // Refetch the author's profile whenever we navigate to this profile page.
+  // Refetch the author's profile on navigation — but only when we don't
+  // already have it. `refetchQueries` on every visit forced a full relay
+  // round-trip even for a profile cached seconds ago, which is what made the
+  // first render sit on the skeleton until the slowest relay answered.
   useEffect(() => {
-    if (pubkey) {
+    if (pubkey && !queryClient.getQueryData(['author', pubkey])) {
       queryClient.refetchQueries({ queryKey: ['author', pubkey] });
     }
   }, [pubkey, queryClient]);

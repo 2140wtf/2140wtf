@@ -602,6 +602,26 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
     };
   }, []);
 
+  // Catch-up on tab focus / visibility: browsers throttle background timers
+  // (and the relay may drop the socket while hidden), so messages that
+  // arrived while away only appeared after the next slow poll — or not at
+  // all if the live sub was down. Refresh the open room immediately when the
+  // user comes back.
+  useEffect(() => {
+    const catchUp = () => {
+      const roomId = currentId.current;
+      if (roomId && document.visibilityState === 'visible') {
+        void refreshScroll(roomId);
+      }
+    };
+    window.addEventListener('focus', catchUp);
+    document.addEventListener('visibilitychange', catchUp);
+    return () => {
+      window.removeEventListener('focus', catchUp);
+      document.removeEventListener('visibilitychange', catchUp);
+    };
+  }, [refreshScroll]);
+
   // ── Send ─────────────────────────────────────────────────────────────────
 
   const send = useCallback(async () => {

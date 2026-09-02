@@ -248,6 +248,33 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
                   <span className="truncate max-w-[80px]">{listing.location}</span>
                 </div>
               )}
+              {listing.status === 'active' && !isSeller && (
+                <button
+                  type="button"
+                  aria-label={`Buy ${listing.title}`}
+                  title={
+                    user
+                      ? canBuy
+                        ? 'Buy this item'
+                        : 'Buy unavailable — unsupported currency or inactive listing'
+                      : 'Log in to buy'
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!user) {
+                      toast({ title: 'Log in required', description: 'You need to log in to buy this item.' });
+                      setLoginOpen(true);
+                      return;
+                    }
+                    if (canBuy) setBuyOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={!canBuy}
+                >
+                  <ShoppingCart className="size-3" />
+                  Buy
+                </button>
+              )}
               {listing.status === 'active' && (
                 <button
                   type="button"
