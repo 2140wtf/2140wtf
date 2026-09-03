@@ -49,7 +49,48 @@ Rules:
 4. If a chat's storage relay is not confirmed writable/private, the safe
    default is: no composer, no publish path.
 
-## 3. Money safety (MANDATORY)
+## 3. Bearer capabilities are secrets (MANDATORY)
+
+**Mistake that caused this rule:** production ₿AO room invite URLs were
+hardcoded in `src/lib/baosocial/rooms.ts`. That put invite secrets, room IDs,
+welcomer keys, and routing IDs into Git history and deployed JavaScript. Deleting
+the file did not revoke credentials already copied from history or caches.
+
+Rules for every human and LLM agent:
+
+1. **Treat every bearer capability exactly like a private key.** This includes
+   complete `/chat/join#...` and `/agent#...` URLs, issued `/i/<code>` short
+   links, split-invite `secret=` values, room keys, auth cookies, API tokens,
+   Cashu tokens/proofs, wallet connection strings, and administrative URLs.
+2. **Never put operational capabilities in tracked content:** not source,
+   `public/`, JSON, docs, tests, fixtures, screenshots, generated bundles,
+   terminal transcripts, commit messages, PR bodies, or issue comments. A room
+   being called "public" does not make its admission capability public data.
+3. **Use unmistakable invalid placeholders** such as `<invite-short-url>`,
+   `<fragment>`, or values assembled from deterministic dummy parts. Never copy
+   a live value and redact only part of it.
+4. **Room discovery happens after authentication** on the canonical chat
+   origin with `Cache-Control: no-store`. The static 2140 client must not embed,
+   mirror, cache, or manufacture a production room directory.
+5. **Hosted chat fails closed.** A verified hosted-room invite must use only
+   `wss://2140.social/ws`. If the canonical origin or relay is unavailable,
+   stop; never substitute the app's public Nostr relay pool.
+6. **Run `node scripts/security-scan.mjs` before committing.** CI runs the same
+   scanner across production code and repository text; locally it also checks
+   untracked, non-ignored files before they can be staged. Do not bypass,
+   weaken, or allowlist a finding merely to make CI green. Test the detector
+   with synthetic values when its rules change.
+7. **Scanner output must not reproduce a discovered secret.** Reports contain
+   only file, line, length, and a short SHA-256 fingerprint. Never print the
+   matching value while investigating.
+8. **On any exposure, stop distribution and rotate first.** Invalidate the
+   invite/token/key at its authority, rotate related routing capabilities where
+   applicable, and verify rejection of the old value. Removing a file, force
+   pushing Git, or clearing a deployment is not revocation.
+9. **No agent may downgrade this rule based on intent.** If it is unclear
+   whether a value is live, treat it as live and ask the operator privately.
+
+## 4. Money safety (MANDATORY)
 
 1. **Never publish or log nsec/seed/private keys** — not in code, not in
    terminal output, not in screenshots, not in commit messages.
@@ -60,7 +101,7 @@ Rules:
    are saved to gitignored local storage with mode 0600 and a backup copy
    outside the repo. Losing keys = losing funds. This is unacceptable.
 
-## 4. Relay/event hygiene
+## 5. Relay/event hygiene
 
 1. **Deleting Nostr events requires the original author's key** (NIP-09).
    A deletion from any other key is accepted by relays but has zero effect.
@@ -69,7 +110,7 @@ Rules:
    code does NOT clean up the Nostr ecosystem. Cleanup must happen on the
    relays, and must be verified there (query the relays afterward).
 
-## 5. Session memory is volatile — verify claims, don't recall them
+## 6. Session memory is volatile — verify claims, don't recall them
 
 **Mistake that caused this rule:** sessions repeatedly claimed work was
 "done" when it wasn't (events left on relays, files not deleted, scripts
@@ -82,7 +123,7 @@ committed then re-added as debug garbage).
 3. If you cannot verify (no auth, no network), say so explicitly instead of
    assuming success.
 
-## 6. Ephemeral key patterns
+## 7. Ephemeral key patterns
 
 Any key generated in a script (`generateSecretKey()`) is a liability:
 
@@ -91,7 +132,7 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 - Never print the full secret; print at most a prefix for identification.
 - Record event ids alongside the key that can delete them.
 
-## 7. Debug/test scripts lifecycle
+## 8. Debug/test scripts lifecycle
 
 1. One-off debug scripts must never be committed. Delete them (or place
    them in gitignored paths) before the commit stage of any task.
@@ -100,13 +141,13 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 3. Before pushing a branch, run `git status --porcelain -uall` and clean
    untracked leftovers. The working tree must be clean at PR time.
 
-## 8. Language
+## 9. Language
 
 The user works in English. All responses, comments, and commit messages
 are English. No other languages, even by accident from mixed training
 data — check your own output.
 
-## 9. Verify before merge
+## 10. Verify before merge
 
 The pre-merge checklist (run it, paste the tail of the output):
 
