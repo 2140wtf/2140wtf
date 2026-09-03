@@ -1,105 +1,86 @@
 import { useSeoMeta } from '@unhead/react';
 import { ExternalLink, ShieldCheck } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { openUrl } from '@/lib/downloadFile';
 import { BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
-import {
-  buildChatAuthErrorResponse,
-  buildChatAuthOffer,
-  buildChatAuthResponse,
-  buildChatAuthTemplate,
-  CHAT_TARGET_ORIGIN,
-  isChatAuthRequest,
-} from '@/lib/baosocial/chatParentAuth';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
-/**
- * 2140 Community Chat, embedded.
- *
- * The hosted origin serves a server-side auth gate when there is no
- * `bao_auth` session cookie — and inside an iframe that cookie is
- * third-party partitioned, so the gate's own login can loop forever. The
- * deployed gate therefore listens for an auth OFFER from its parent and
- * answers with a challenge for the parent's signer (see chatParentAuth.ts).
- * Completing the handshake sets the chat session and reloads the iframe
- * into the real chat.
- */
+const CHAT_AUTH_REQUEST = '2140-chat-auth-request';
+const CHAT_AUTH_RESPONSE = '2140-chat-auth-response';
+const CHAT_AUTH_OFFER = '2140-chat-auth-offer';
+
+interface ChatAuthRequest {
+  type: typeof CHAT_AUTH_REQUEST;
+  requestId: string;
+  challenge: string;
+}
+
+function parseChatAuthRequest(data: unknown): ChatAuthRequest | null {
+  if (!data || typeof data !== 'object') return null;
+  const value = data as Record<string, unknown>;
+  if (
+    value.type !== CHAT_AUTH_REQUEST ||
+    typeof value.requestId !== 'string' ||
+    !/^[0-9a-f]{32}$/.test(value.requestId) ||
+    typeof value.challenge !== 'string' ||
+    !/^[0-9a-f]{32}$/.test(value.challenge)
+  ) return null;
+  return value as unknown as ChatAuthRequest;
+}
+
 export function BaoCommunitiesPage(): React.JSX.Element {
+  const { user } = useCurrentUser();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const offerParentAuth = useCallback(() => {
+    if (!user) return;
+    iframeRef.current?.contentWindow?.postMessage({
+      type: CHAT_AUTH_OFFER,
+      pubkey: user.pubkey,
+    }, BAO_HOSTED_ORIGIN);
+  }, [user]);
+
+  useEffect(() => {
+    const receiveChatAuthRequest = (message: MessageEvent<unknown>) => {
+      if (message.origin !== BAO_HOSTED_ORIGIN || message.source !== iframeRef.current?.contentWindow) return;
+      const request = parseChatAuthRequest(message.data);
+      if (!request || !user) return;
+
+      void user.signer.signEvent({
+        kind: 22242,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['challenge', request.challenge],
+          ['relay', `${BAO_HOSTED_ORIGIN.replace(/^http/, 'ws')}/ws`],
+        ],
+        content: '',
+      }).then((event) => {
+        iframeRef.current?.contentWindow?.postMessage({
+          type: CHAT_AUTH_RESPONSE,
+          requestId: request.requestId,
+          event,
+        }, BAO_HOSTED_ORIGIN);
+      }).catch(() => {
+        iframeRef.current?.contentWindow?.postMessage({
+          type: CHAT_AUTH_RESPONSE,
+          requestId: request.requestId,
+          error: 'signature declined',
+        }, BAO_HOSTED_ORIGIN);
+      });
+    };
+
+    window.addEventListener('message', receiveChatAuthRequest);
+    return () => window.removeEventListener('message', receiveChatAuthRequest);
+  }, [user]);
+
+  useEffect(offerParentAuth, [offerParentAuth]);
+
   useSeoMeta({
     title: '2140 Community Chat',
     description: '2140 Community Chat — the authenticated, encrypted community scroll.',
   });
-
-  const { user } = useCurrentUser();
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  /** Pubkey we already offered to this frame load, so we don't loop the handshake. */
-  const offeredPubkeyRef = useRef<string | null>(null);
-
-  const [frameKey, setFrameKey] = useState(0);
-
-  useEffect(() => {
-    const onMessage = (message: MessageEvent) => {
-      if (message.origin !== BAO_HOSTED_ORIGIN) return;
-      if (message.source !== frameRef.current?.contentWindow) return;
-      if (!isChatAuthRequest(message.data)) return;
-
-      const { requestId, challenge } = message.data;
-
-      if (!user) {
-        frameRef.current?.contentWindow?.postMessage(
-          buildChatAuthErrorResponse(requestId, 'not logged in on 2140.wtf'),
-          CHAT_TARGET_ORIGIN,
-        );
-        return;
-      }
-
-      const signer = user.signer;
-      void (async () => {
-        try {
-          const event = await signer.signEvent(buildChatAuthTemplate(challenge));
-          frameRef.current?.contentWindow?.postMessage(
-            buildChatAuthResponse(requestId, event),
-            CHAT_TARGET_ORIGIN,
-          );
-        } catch (error) {
-          frameRef.current?.contentWindow?.postMessage(
-            buildChatAuthErrorResponse(
-              requestId,
-              error instanceof Error ? error.message : 'signing failed',
-            ),
-            CHAT_TARGET_ORIGIN,
-          );
-        }
-      })();
-    };
-
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [user]);
-
-  // Offer the current identity to the chat gate once per frame load. The gate
-  // only consumes the FIRST valid offer (it removes its listener after the
-  // first), so re-offer on the same load is a no-op by design.
-  useEffect(() => {
-    if (!user) return;
-    if (offeredPubkeyRef.current === user.pubkey) return;
-    offeredPubkeyRef.current = user.pubkey;
-    const win = frameRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage(buildChatAuthOffer(user.pubkey), CHAT_TARGET_ORIGIN);
-  }, [user, frameKey]);
-
-  const handleIframeLoad = () => {
-    // New document: reset the offer bookkeeping, then offer again.
-    offeredPubkeyRef.current = null;
-  };
-
-  // Re-run the offer after each (re)load — frameKey bumps force a remount.
-  useEffect(() => {
-    offeredPubkeyRef.current = null;
-  }, [frameKey]);
 
   return (
     <main className="flex h-[calc(100dvh-4rem)] min-h-[36rem] flex-col overflow-hidden bg-background">
@@ -116,10 +97,7 @@ export function BaoCommunitiesPage(): React.JSX.Element {
           variant="ghost"
           size="sm"
           className="shrink-0"
-          onClick={() => {
-            setFrameKey((k) => k + 1);
-            void openUrl(BAO_HOSTED_ORIGIN);
-          }}
+          onClick={() => void openUrl(BAO_HOSTED_ORIGIN)}
         >
           Open separately
           <ExternalLink className="ml-2 size-4" aria-hidden="true" />
@@ -127,14 +105,13 @@ export function BaoCommunitiesPage(): React.JSX.Element {
       </header>
 
       <iframe
-        key={frameKey}
-        ref={frameRef}
-        src={`${BAO_HOSTED_ORIGIN}/?embed=${frameKey}`}
+        ref={iframeRef}
+        onLoad={offerParentAuth}
+        src={BAO_HOSTED_ORIGIN}
         title="2140 Community Chat"
         className="min-h-0 flex-1 border-0 bg-black"
         allow="clipboard-read; clipboard-write"
         referrerPolicy="no-referrer"
-        onLoad={handleIframeLoad}
       />
     </main>
   );
