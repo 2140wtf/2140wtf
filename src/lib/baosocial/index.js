@@ -21,6 +21,7 @@ export * from './shield.js';
 export * from './agents.js';
 export * from './provision.js';
 export * from './credential.js';
+export * from './campaignPreset.js';
 export * from './attestation.js';
 export * from './disclosure.js';
 export * from './tier2.js';

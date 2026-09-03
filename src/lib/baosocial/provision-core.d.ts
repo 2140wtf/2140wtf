@@ -11,6 +11,7 @@
  */
 import { type RelayClass } from './crypto.js';
 import type { AgentAccessPolicy } from './access.js';
+import type { AdmissionMenu } from './admission.js';
 import { type JoinLinkOptions } from './join.js';
 export type RoomPolicy = 'open' | 'cap-pow' | 'invite';
 /** Retention in object form (the form daemons consume after parsing). */
@@ -51,6 +52,10 @@ export interface ChatRoomEntry {
      *  'selected' accepts only agentAllowlist / founder-attested pubkeys. */
     agentPolicy?: AgentAccessPolicy;
     agentAllowlist?: string[];
+    /** Human-owner pubkeys whose NIP-OA attestations may admit agents. */
+    agentOaOwners?: string[];
+    /** Optional composable admission gate evaluated inside the welcomer. */
+    admissionMenu?: AdmissionMenu;
     retention: Retention;
     flushDeadlineMs: number;
     governancePubkey: string;
@@ -74,6 +79,10 @@ export interface BuildRoomEntryOptions {
     /** Room-provisioned agent allowlist — honored when agentPolicy is
      *  'selected' (plus founder attestations). */
     agentAllowlist?: string[];
+    /** Optional human-owner roots for advanced NIP-OA agent admission. */
+    agentOaOwners?: string[];
+    /** Optional composable admission gate, including private-offer credentials. */
+    admissionMenu?: AdmissionMenu;
     retention?: Retention;
     /** hex 32B operator master — when set, the entry's scribes list names the
      *  exact pubkeys the scribe daemon derives (HKDF(master,'scribe',roomId)). */

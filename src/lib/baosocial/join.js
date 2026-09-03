@@ -170,8 +170,9 @@ export function parseSplitJoinLines(text) {
 /**
  * partsToJoinLink — rebuild a fat-fragment link from parsed parts (used to
  * turn verified split lines back into something joinRoom consumes, and by
- * `invite --one-line`). Always re-stamps a fresh `cs` over the FINAL field
- * values. Host is cosmetic — parseJoinLink reads only the fragment.
+ * `invite --one-line`). A supplied checksum is verified before rebuilding;
+ * absent checksums are stamped over the final values. Host is cosmetic —
+ * parseJoinLink reads only the fragment.
  */
 export function partsToJoinLink(parts, host = 'bao.chat') {
     // A split invite's checksum came from the issuer. Verify it before
@@ -227,6 +228,108 @@ export function normalizeJoinInput(raw) {
     if (/^[A-Za-z0-9_-]+$/.test(text))
         return `#${text}`; // bare fragment
     return text; // anything else → parseJoinLink's canonical error (e.g. 'no fragment')
+}
+/**
+ * parseShortInviteRef — recognize the SMALL shapes harnesses actually pass
+ * around without mangling: a bare short code (`abc123xyzz`), a fetchable
+ * short-invite URL (`https://<host>/i/<code>`), or a short agent URL
+ * (`https://<host>/agent/<room-id>`). Returns null for every shape
+ * normalizeJoinInput already owns (fat links, fragments, split lines).
+ *
+ * Rationale: chat layers and harness link-sanitizers shred ~900-char
+ * fragments (or strip `#…` outright), then agents get blamed for "rejecting"
+ * the link. A 10-char code or short URL survives everything — and both
+ * resolve through ONE server path (`GET <origin>/i/<id>?format=split`,
+ * which accepts codes AND full room ids), so every app sharing this chat
+ * exposes the identical resolving path with zero per-app work.
+ */
+export function parseShortInviteRef(raw) {
+    const text = String(raw ?? '').trim();
+    if (!text || text.includes('\n'))
+        return null;
+    // Server-ref URLs (no fragment — fetchable as-is). The trailing segment
+    // is whatever roomByCode accepts server-side (HMAC code, legacy code, or
+    // full room id), so /i/ and /agent/ collapse to ONE resolution path.
+    const m = text.match(/^(https?:\/\/[^\s/#?]+)\/(?:i|agent)\/([^\s#?/]+)(?:[?#].*)?$/i);
+    if (m)
+        return { kind: 'server-ref', origin: m[1], code: m[2] };
+    // Bare code: short opaque token. A minimal fat-fragment link CAN also be
+    // this short, so try the fragment reading first — a real fragment wins.
+    if (/^[A-Za-z0-9]{8,64}$/.test(text)) {
+        try {
+            const parsed = JSON.parse(new TextDecoder().decode(base64url.decode(text)));
+            if (parsed && typeof parsed.room === 'string')
+                return null; // genuine bare fragment — not a code
+        }
+        catch { /* not a fragment → falls through to code */ }
+        return { kind: 'bare-code', code: text };
+    }
+    return null;
+}
+/**
+ * resolveJoinInput — the UNIFIED agent-join entry point. Accepts everything
+ * normalizeJoinInput does, PLUS the small harness-proof shapes:
+ * short-invite URLs, agent short URLs, and bare codes (with --origin).
+ * Server refs resolve via the deployment's own /i/ endpoint and return a
+ * full fat-fragment link ready for parseJoinLink/joinFromLink — identical
+ * admission material to a pasted fat link, so every harness and every app
+ * sharing this chat joins through the same path.
+ */
+export async function resolveJoinInput(raw, opts = {}) {
+    const ref = parseShortInviteRef(raw);
+    if (!ref)
+        return normalizeJoinInput(raw);
+    let origin = ref.kind === 'server-ref' ? ref.origin : (opts.origin ?? opts.envOrigin);
+    if (!origin) {
+        throw new Error(`that looks like a short invite code (${ref.code.length} chars) but carries no host — ` +
+            `re-run as: join "${ref.kind === 'bare-code' ? ref.code : raw}" --origin https://<chat-host> ` +
+            `(or set BAO_CHAT_ORIGIN). Prefer piping: curl -fsSL <host>/i/<code> | join -`);
+    }
+    origin = origin.trim().replace(/\/+$/, ''); // harnesses paste trailing slashes
+    if (!/^https?:\/\/[^\s/#?]+$/i.test(origin))
+        throw new Error('join --origin must be an http(s) origin (e.g. https://chat.example)');
+    const fetchFn = opts.fetchFn;
+    if (!fetchFn)
+        throw new Error(`join code resolution needs network fetch — pipe instead: curl -fsSL ${origin}/i/<code> | join -`);
+    const url = `${origin}/i/${encodeURIComponent(ref.code)}?format=split`;
+    let res;
+    try {
+        res = await fetchFn(url);
+    }
+    catch (err) {
+        throw new Error(`join code lookup failed (${origin} unreachable: ${String(err?.message ?? err).slice(0, 120)}) — check the host and retry`);
+    }
+    if (!res || !res.ok) {
+        throw new Error(`join code not recognized by ${origin} (http ${res?.status ?? '???'}) — ask the issuer for a fresh code or the full link`);
+    }
+    const body = await res.text();
+    if (body.length > 32768)
+        throw new Error('join code answer too large — refusing to parse');
+    try {
+        return partsToJoinLink(parseSplitJoinLines(body));
+    }
+    catch (err) {
+        throw new Error(`join code answer unparseable: ${err.message}`);
+    }
+}
+/** Compare relay endpoints without treating an insignificant trailing slash
+ * as authority to redirect encrypted room traffic. */
+export function sameRelayEndpoint(a, b) {
+    try {
+        const normalize = (raw) => {
+            const u = new URL(raw);
+            if (u.protocol !== 'ws:' && u.protocol !== 'wss:')
+                throw new Error('relay must use ws(s)');
+            u.hash = '';
+            u.search = '';
+            u.pathname = u.pathname.replace(/\/+$/, '') || '/';
+            return u.href;
+        };
+        return normalize(a) === normalize(b);
+    }
+    catch {
+        return false;
+    }
 }
 /**
  * agentDoRecipe — the CANONICAL zero-repo bootstrap command for AI agents
@@ -288,6 +391,7 @@ export function createJoinLink(host, inviteSecret, roomId, opts = {}) {
             if (opts.do !== undefined) {
                 if (typeof opts.do !== 'string' || opts.do.length === 0 || opts.do.length > 640)
                     throw new Error('join link: do must be 1–640 chars');
+                // eslint-disable-next-line no-control-regex
                 if (/[\u0000-\u001f]/.test(opts.do))
                     throw new Error('join link: do must not contain control characters');
             }
@@ -429,6 +533,15 @@ const defaultSleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * it is generated, used, and discarded here.
  */
 export async function joinRoom(conn, link, roomInfo, opts = {}) {
+    if (opts.agentPub && !opts.agentSecretKey) {
+        throw new Error('agent identity claim requires its nsec signer — refusing an unproven npub');
+    }
+    if (opts.agentSecretKey && !opts.agentPub) {
+        throw new Error('agent nsec signer requires its npub');
+    }
+    if (opts.agentPub && opts.agentSecretKey && getPublicKey(opts.agentSecretKey) !== opts.agentPub.toLowerCase()) {
+        throw new Error('agent npub does not match the supplied nsec signer');
+    }
     const clock = opts.clock ?? systemClock;
     const rng = opts.rng ?? defaultRng;
     const sleep = opts.sleep ?? defaultSleep;
@@ -458,6 +571,7 @@ export async function joinRoom(conn, link, roomInfo, opts = {}) {
         ...(opts.agentPub ? { agent: opts.agentPub } : {}),
         ...(opts.agentAuth ? { agentAuth: opts.agentAuth } : {}),
         ...(agentProof ? { agentProof } : {}),
+        ...(opts.proofs ? { proofs: opts.proofs } : {}),
         ...(linkParts.linkId ? { lid: linkParts.linkId } : {}),
         ...(linkParts.history ? { history: linkParts.history } : {}),
         wantChallenge: roomInfo.policy === 'cap-pow' && !challenge ? true : undefined,
@@ -591,7 +705,14 @@ export async function joinFromLink(link, opts = {}) {
             + 'or is a stale inner link. Fix: re-run join with the FULL original /agent#… URL you received, #fragment included.');
     }
     const makeConn = opts.connFactory ?? ((url) => new WsRelayConn(url));
-    const relayUrl = opts.relay ?? parts.relay;
+    // A caller override used to permit an invite for relay A to be joined and
+    // subsequently posted through relay B. That is an exfiltration primitive,
+    // not a liveness feature. Keep the option for API compatibility but only
+    // accept the same endpoint.
+    if (opts.relay !== undefined && !sameRelayEndpoint(opts.relay, parts.relay)) {
+        throw new Error('relay override does not match the invite relay — refusing cross-relay room traffic');
+    }
+    const relayUrl = parts.relay;
     const joinConn = makeConn(relayUrl);
     // REL-01: the join connection MUST be closed even on the common failure
     // path (join timeout, wrap mismatch, PoW rejection). Without try/finally a
