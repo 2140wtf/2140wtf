@@ -104,7 +104,6 @@ const FalLivePage = lazy(() => import("./pages/FalLivePage").then(m => ({ defaul
 const CourtPage = lazy(() => import("./pages/CourtPage").then(m => ({ default: m.CourtPage })));
 const WikipediaPage = lazy(() => import("./pages/WikipediaPage").then(m => ({ default: m.WikipediaPage })));
 const FollowPage = lazy(() => import("./pages/FollowPage").then(m => ({ default: m.FollowPage })));
-const GroupChatPage = lazy(() => import("./pages/GroupChatPage").then(m => ({ default: m.GroupChatPage })));
 const RemoteLoginSuccessPage = lazy(() => import("./pages/RemoteLoginSuccessPage").then(m => ({ default: m.RemoteLoginSuccessPage })));
 
 const pollsDef = getExtraKindDef("polls")!;
@@ -370,7 +369,11 @@ export function AppRouter() {
               <Route path="/mints/details" element={<MintDetailsPage />} />
               <Route path="/court" element={<CourtPage />} />
               <Route path="/bookmarks" element={<BookmarksPage />} />
-              <Route path="/groups" element={<GroupChatPage />} />
+              {/* Legacy NIP-104 group chat could fall back to the app's public
+                  relay pool. Keep old links working, but never mount its
+                  composer: all room chat now uses the encrypted 2140.social
+                  scroll transport and its single scoped relay. */}
+              <Route path="/groups" element={<Navigate to="/bao/community" replace />} />
 
               <Route path="/pets" element={<PetsPage />} />
               <Route path="/pets/battle" element={<PetsBattlePage />} />
