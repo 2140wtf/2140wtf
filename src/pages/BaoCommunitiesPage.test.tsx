@@ -21,7 +21,7 @@ describe('BaoCommunitiesPage', () => {
       </TestApp>,
     );
 
-    const chat = await screen.findByTitle('2140 Community Chat');
+    const chat = await screen.findByTitle('2140 Social Chat');
     expect(chat).toBeInstanceOf(HTMLIFrameElement);
     expect(chat).toHaveAttribute('src', BAO_HOSTED_ORIGIN);
     expect(screen.queryByText(/Room discovery and authentication run/)).not.toBeInTheDocument();
@@ -31,7 +31,7 @@ describe('BaoCommunitiesPage', () => {
     const signed = { id: 'b'.repeat(64), pubkey: 'a'.repeat(64), sig: 'c'.repeat(128) };
     signEvent.mockResolvedValueOnce(signed);
     render(<TestApp><BaoCommunitiesPage /></TestApp>);
-    const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Community Chat');
+    const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Social Chat');
 
     window.dispatchEvent(new MessageEvent('message', {
       origin: BAO_HOSTED_ORIGIN,
@@ -49,7 +49,7 @@ describe('BaoCommunitiesPage', () => {
   it('ignores authentication requests from any other origin', async () => {
     signEvent.mockClear();
     render(<TestApp><BaoCommunitiesPage /></TestApp>);
-    const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Community Chat');
+    const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Social Chat');
     window.dispatchEvent(new MessageEvent('message', {
       origin: 'https://attacker.example',
       source: chat.contentWindow,

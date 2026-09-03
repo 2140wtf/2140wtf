@@ -1,16 +1,78 @@
 import { useSeoMeta } from '@unhead/react';
-import { ArrowLeft, ExternalLink, MessageSquare, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { openUrl } from '@/lib/downloadFile';
 import { BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
 import { FAL_LIVE_URL } from '@/lib/falLive';
 
+const CHAT_AUTH_REQUEST = '2140-chat-auth-request';
+const CHAT_AUTH_RESPONSE = '2140-chat-auth-response';
+const CHAT_AUTH_OFFER = '2140-chat-auth-offer';
+
+function parseChatAuthRequest(data: unknown): { requestId: string; challenge: string } | null {
+  if (!data || typeof data !== 'object') return null;
+  const value = data as Record<string, unknown>;
+  if (
+    value.type !== CHAT_AUTH_REQUEST ||
+    typeof value.requestId !== 'string' ||
+    !/^[0-9a-f]{32}$/.test(value.requestId) ||
+    typeof value.challenge !== 'string' ||
+    !/^[0-9a-f]{32}$/.test(value.challenge)
+  ) return null;
+  return { requestId: value.requestId, challenge: value.challenge };
+}
+
 export function FalLivePage(): React.JSX.Element {
   const { config } = useAppContext();
+  const { user } = useCurrentUser();
+  const chatFrameRef = useRef<HTMLIFrameElement>(null);
+
+  const offerParentAuth = useCallback(() => {
+    if (!user) return;
+    chatFrameRef.current?.contentWindow?.postMessage({
+      type: CHAT_AUTH_OFFER,
+      pubkey: user.pubkey,
+    }, BAO_HOSTED_ORIGIN);
+  }, [user]);
+
+  useEffect(() => {
+    const receiveChatAuthRequest = (message: MessageEvent<unknown>) => {
+      if (message.origin !== BAO_HOSTED_ORIGIN || message.source !== chatFrameRef.current?.contentWindow || !user) return;
+      const request = parseChatAuthRequest(message.data);
+      if (!request) return;
+      void user.signer.signEvent({
+        kind: 22242,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [
+          ['challenge', request.challenge],
+          ['relay', `${BAO_HOSTED_ORIGIN.replace(/^http/, 'ws')}/ws`],
+        ],
+        content: '',
+      }).then((event) => {
+        chatFrameRef.current?.contentWindow?.postMessage({
+          type: CHAT_AUTH_RESPONSE,
+          requestId: request.requestId,
+          event,
+        }, BAO_HOSTED_ORIGIN);
+      }).catch(() => {
+        chatFrameRef.current?.contentWindow?.postMessage({
+          type: CHAT_AUTH_RESPONSE,
+          requestId: request.requestId,
+          error: 'signature declined',
+        }, BAO_HOSTED_ORIGIN);
+      });
+    };
+    window.addEventListener('message', receiveChatAuthRequest);
+    return () => window.removeEventListener('message', receiveChatAuthRequest);
+  }, [user]);
+
+  useEffect(offerParentAuth, [offerParentAuth]);
 
   useLayoutOptions({
     collapseLeftSidebar: true,
@@ -43,18 +105,16 @@ export function FalLivePage(): React.JSX.Element {
           allow="fullscreen; clipboard-write"
         />
       </div>
-      <aside className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 border-t bg-muted/30 px-6 text-center lg:w-80 lg:flex-none lg:border-l lg:border-t-0">
-        <MessageSquare className="size-8 text-primary" aria-hidden="true" />
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold">Trollbox</h2>
-          <p className="text-muted-foreground">
-            Chat opens on its authenticated origin. No room key or message is routed through the
-            app's public Nostr relays.
-          </p>
-        </div>
-        <Button onClick={() => void openUrl(BAO_HOSTED_ORIGIN)}>
-          <ShieldCheck className="mr-2 size-4" />Open encrypted chat
-        </Button>
+      <aside className="flex min-h-0 flex-1 flex-col border-t bg-black lg:w-96 lg:flex-none lg:border-l lg:border-t-0">
+        <iframe
+          ref={chatFrameRef}
+          onLoad={offerParentAuth}
+          src={`${BAO_HOSTED_ORIGIN}/?room=trollbox`}
+          title="2140 Social Chat Trollbox"
+          className="min-h-0 flex-1 border-0"
+          allow="clipboard-read; clipboard-write"
+          referrerPolicy="no-referrer"
+        />
       </aside>
     </main>
   );
