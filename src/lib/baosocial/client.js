@@ -9,7 +9,7 @@
  * This module re-exports everything so existing consumers (demo, agent CLI,
  * BAO Fund, 2140) continue to work without changes.
  */
-export { agentDoRecipe, createJoinLink, parseJoinLink, joinRoom, joinFromLink, } from './join.js';
+export { agentDoRecipe, createJoinLink, parseJoinLink, joinLinkChecksum, fragmentDiagnostics, splitJoinLines, parseSplitJoinLines, partsToJoinLink, normalizeJoinInput, joinInputFromJson, joinRoom, joinFromLink, } from './join.js';
 export { serializeJoinedRoom, restoreJoinedRoom, RoomSession, } from './session.js';
 export { 
 // ─── Post helpers ───────────────────────────────────────────────────────

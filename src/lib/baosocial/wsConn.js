@@ -14,6 +14,14 @@
  */
 import WebSocket from 'ws';
 import { createLadder } from './reconnect.js';
+/** INFRA-01: cap on a single inbound WS frame (node-ws buffers the whole
+ *  frame before onmessage). 1 MiB is far above any legitimate NIP-01 message
+ *  and stops a hostile/low relay from OOM-buffering us. */
+const MAX_WS_FRAME_BYTES = 1 << 20;
+/** INFRA-01: cap on one query's in-flight accumulation. A relay that streams
+ *  endless EVENT frames for an open REQ (or never sends EOSE) must not grow
+ *  `pending.events` without bound — beyond this we resolve (finish) the query. */
+const MAX_PENDING_EVENTS = 1_000;
 export class WsRelayConn {
     constructor(url, opts = {}) {
         this.url = url;
@@ -47,7 +55,7 @@ export class WsRelayConn {
     connect() {
         if (this.openPromise)
             return this.openPromise;
-        const sock = new WebSocket(this.url);
+        const sock = new WebSocket(this.url, { maxPayload: MAX_WS_FRAME_BYTES });
         this.ws = sock;
         this.openPromise = new Promise((resolve, reject) => {
             this.openReject = reject;
@@ -139,6 +147,11 @@ export class WsRelayConn {
         this.reconnectTimer.unref?.();
     }
     onMessage(raw) {
+        // INFRA-01: never JSON.parse a frame over the cap (defense-in-depth —
+        // maxPayload already rejects it at the ws layer, this guards the
+        // global-WebSocket path too).
+        if (raw.length > MAX_WS_FRAME_BYTES)
+            return;
         let msg;
         try {
             msg = JSON.parse(raw);
@@ -150,8 +163,16 @@ export class WsRelayConn {
             const subId = String(msg[1]);
             const ev = msg[2];
             const pending = this.pending.get(subId);
-            if (pending)
-                pending.events.push(ev);
+            if (pending) {
+                // INFRA-01: stop accumulating if the relay floods a query past the cap
+                // (resolve = finish = cleanup + CLOSE, like a synthetic EOSE).
+                if (pending.events.length >= MAX_PENDING_EVENTS) {
+                    pending.resolve(pending.events);
+                }
+                else {
+                    pending.events.push(ev);
+                }
+            }
             this.liveSubs.get(subId)?.onEvent(ev);
         }
         else if (msg[0] === 'EOSE') {

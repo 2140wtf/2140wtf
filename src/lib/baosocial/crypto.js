@@ -129,6 +129,47 @@ export function deriveIdentityKey(nostrSecretKey) {
 export function hmacSha256(key, ...msgs) {
     return hmac(sha256, key, concatBytes(...msgs));
 }
+/**
+ * Length-framed HMAC-SHA256 — each message is prefixed by its length as a
+ * 4-byte big-endian integer before concatenation (CRYPTO-04).
+ *
+ * Why it exists: `hmacSha256`'s bare concatenation is ambiguous whenever a
+ * message boundary matters — HMAC(k, "ab"‖"c") === HMAC(k, "a"‖"bc"). The
+ * framing makes the tag a uniquely-decodable function of the message LIST.
+ * Use it for NEW multi-part MAC constructions; do NOT change `hmacSha256`
+ * itself (its single-argument wire semantics are pinned by the wrap-dtag
+ * vectors and welcomer-core). Messages here may be at most 2^32-1 bytes
+ * (the length prefix is 32-bit).
+ */
+export function hmacSha256Framed(key, ...msgs) {
+    const framed = msgs.map((m) => {
+        const out = new Uint8Array(4 + m.length);
+        new DataView(out.buffer).setUint32(0, m.length, false);
+        out.set(m, 4);
+        return out;
+    });
+    return hmac(sha256, key, concatBytes(...framed));
+}
+/**
+ * Constant-time byte comparison for SECRET material (CRYPTO-01/CRYPTO-02).
+ *
+ * JS string `===`/`!==` halts at the first differing byte, so comparing
+ * hex-encoded secrets with `!==` is a timing oracle on the matching prefix
+ * (CWE-208). This walks the FULL length and folds every differing byte into
+ * a single accumulator, so the returned boolean reveals nothing about where
+ * the mismatch is. Best-effort constant-time in JS (JIT-dependent), like
+ * every JS constant-time primitive; noble's `equalBytes` is not exported by
+ * the @noble/hashes version in use here, so we keep a dependency-free
+ * equivalent. Non-secret equality should stay on `===`.
+ */
+export function constantTimeEqual(a, b) {
+    if (a.length !== b.length)
+        return false; // lengths are non-secret in all uses
+    let diff = 0;
+    for (let i = 0; i < a.length; i++)
+        diff |= a[i] ^ b[i];
+    return diff === 0;
+}
 /** Rotating g label (§11): HMAC(label_k, roomId). */
 export function rotatingLabel(labelKey, roomId) {
     return bytesToHex(hmacSha256(labelKey, utf8ToBytes(roomId)));

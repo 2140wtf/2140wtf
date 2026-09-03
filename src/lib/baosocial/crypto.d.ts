@@ -56,6 +56,32 @@ export declare function deriveChain(seed: Uint8Array, throughEpoch: number): Epo
  */
 export declare function deriveIdentityKey(nostrSecretKey: Uint8Array): Uint8Array;
 export declare function hmacSha256(key: Uint8Array, ...msgs: Uint8Array[]): Uint8Array;
+/**
+ * Length-framed HMAC-SHA256 — each message is prefixed by its length as a
+ * 4-byte big-endian integer before concatenation (CRYPTO-04).
+ *
+ * Why it exists: `hmacSha256`'s bare concatenation is ambiguous whenever a
+ * message boundary matters — HMAC(k, "ab"‖"c") === HMAC(k, "a"‖"bc"). The
+ * framing makes the tag a uniquely-decodable function of the message LIST.
+ * Use it for NEW multi-part MAC constructions; do NOT change `hmacSha256`
+ * itself (its single-argument wire semantics are pinned by the wrap-dtag
+ * vectors and welcomer-core). Messages here may be at most 2^32-1 bytes
+ * (the length prefix is 32-bit).
+ */
+export declare function hmacSha256Framed(key: Uint8Array, ...msgs: Uint8Array[]): Uint8Array;
+/**
+ * Constant-time byte comparison for SECRET material (CRYPTO-01/CRYPTO-02).
+ *
+ * JS string `===`/`!==` halts at the first differing byte, so comparing
+ * hex-encoded secrets with `!==` is a timing oracle on the matching prefix
+ * (CWE-208). This walks the FULL length and folds every differing byte into
+ * a single accumulator, so the returned boolean reveals nothing about where
+ * the mismatch is. Best-effort constant-time in JS (JIT-dependent), like
+ * every JS constant-time primitive; noble's `equalBytes` is not exported by
+ * the @noble/hashes version in use here, so we keep a dependency-free
+ * equivalent. Non-secret equality should stay on `===`.
+ */
+export declare function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean;
 /** Rotating g label (§11): HMAC(label_k, roomId). */
 export declare function rotatingLabel(labelKey: Uint8Array, roomId: string): string;
 export declare const PADDING_BUCKETS: readonly [256, 1024, 4096, 16384];

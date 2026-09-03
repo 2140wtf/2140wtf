@@ -1,6 +1,5 @@
 /** INFRA-01: cap on a single inbound WS frame (browser/global path — no
- *  maxPayload option exists here, so we guard in onmessage). Ported from
- *  baocommunity upstream 52c6afc7 (room-privacy / audit-hardening sync). */
+ *  maxPayload option exists here, so we guard in onmessage). */
 const MAX_WS_FRAME_BYTES = 1 << 20;
 /** INFRA-01: cap on one query's in-flight accumulation (mirror of wsConn). */
 const MAX_PENDING_EVENTS = 1_000;
@@ -13,6 +12,7 @@ export class WebRelayConn {
         this.okWaiters = new Map();
         this.counter = 0;
         this.openPromise = null;
+        this.openReject = null;
         this.closedByUser = false;
         this.reconnectAttempts = 0;
         this.reconnectTimer = null;
@@ -38,6 +38,7 @@ export class WebRelayConn {
         const sock = new WebSocket(this.url);
         this.ws = sock;
         this.openPromise = new Promise((resolve, reject) => {
+            this.openReject = reject;
             sock.binaryType = 'arraybuffer';
             sock.onopen = () => {
                 if (sock !== this.ws)
@@ -169,6 +170,7 @@ export class WebRelayConn {
         return `bao-${++this.counter}-${Math.random().toString(36).slice(2, 8)}`;
     }
     async publish(event) {
+        this.assertNotClosed();
         await this.connect();
         await new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -192,6 +194,7 @@ export class WebRelayConn {
         });
     }
     async query(filter, timeoutMs = 10_000) {
+        this.assertNotClosed();
         await this.connect();
         return new Promise((resolve) => {
             const subId = this.nextSubId();
@@ -213,6 +216,7 @@ export class WebRelayConn {
         });
     }
     subscribe(filter, onEvent) {
+        this.assertNotClosed(); // REL-02b: never silently reopen a user-closed conn
         const subId = this.nextSubId();
         this.liveSubs.set(subId, { filter, onEvent });
         // Fire-and-forget BUT rejection-safe (audit R1): a failed first connect
@@ -240,8 +244,34 @@ export class WebRelayConn {
             clearInterval(this.keepaliveTimer);
             this.keepaliveTimer = null;
         }
+        // REL-02a: close() cannot rely on the socket's onclose to settle waiters
+        // — it fires AFTER this.ws = null, and the stale-socket guard (sock !==
+        // this.ws) then swallows it. Fail every in-flight publish/query NOW so
+        // nothing hangs on a socket that will never answer, and settle a
+        // CONNECTING openPromise so a mid-dial publish/query rejects fast.
+        const pendingOpen = this.openPromise;
         this.ws?.close();
         this.ws = null;
         this.openPromise = null;
+        if (pendingOpen)
+            this.openReject?.(new Error('relay connection closed by user'));
+        for (const [id, w] of this.okWaiters) {
+            clearTimeout(w.timer);
+            w.resolve(false);
+            this.okWaiters.delete(id);
+        }
+        for (const [id, p] of this.pending) {
+            clearTimeout(p.timer);
+            p.resolve(p.events);
+            this.pending.delete(id);
+        }
+        // Live subs belong to the closed socket — drop them so no late reconnect
+        // (or caller bookkeeping) can resurrect interest on a dead connection.
+        this.liveSubs.clear();
+    }
+    /** REL-02b: after close(), every op must throw instead of re-dialing. */
+    assertNotClosed() {
+        if (this.closedByUser)
+            throw new Error('relay connection closed by user');
     }
 }

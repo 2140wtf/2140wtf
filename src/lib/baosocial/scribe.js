@@ -17,6 +17,33 @@ import { EPHEMERAL_MESSAGE, scrollDTag } from './kinds.js';
 /** NIP-44 ciphertext of a max-bucket (16 KB) envelope is ~21.9k chars; an
  *  event whose content exceeds this can never scroll — reject at ingest. */
 export const MAX_ENVELOPE_CONTENT_CHARS = 22_000;
+/** Cheap NIP-44 v2 structural precheck for the blind scribe. The wire
+ *  format is `base64(version_byte(1) || nonce(32) || ciphertext || mac(32))`
+ *  = at least 65 bytes raw → 88 base64 chars; the version byte is "2" so
+ *  the decoded first byte must be 0x32. The decrypt side will validate
+ *  the MAC — this is purely an "is this plausible NIP-44 at all?" check
+ *  to drop obvious garbage and pre-MAC-corrupted ciphertext at ingest
+ *  before it ever reaches the segment pipeline (SEG-01). */
+export function looksLikeNip44V2(s) {
+    // NIP-44 v2 ciphertext bounds: minimum payload is 1B + 32B nonce + 32B MAC
+    // = 65B raw → 88 base64 chars; max-envelope cap is 22000 chars; allow
+    // a wide band but reject cleartext and short strings.
+    if (s.length < 88 || s.length > MAX_ENVELOPE_CONTENT_CHARS)
+        return false;
+    // base64 alphabet (NIP-44 uses standard b64, no URL-safe variant)
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s))
+        return false;
+    // decode first byte → must be 0x32 (ASCII '2')
+    try {
+        const decoded = Buffer.from(s, 'base64');
+        if (decoded.length < 65)
+            return false;
+        return decoded[0] === 0x02;
+    }
+    catch {
+        return false;
+    }
+}
 /** Cap on in-memory dedup sets; oldest entries evicted (insertion order). */
 const SEEN_SET_CAP = 20_000;
 // ─── Per-author-key token bucket rate limiter (§5.1) ───────────────────────
@@ -192,6 +219,15 @@ export class Scribe {
         if (event.kind !== EPHEMERAL_MESSAGE)
             return null;
         if (typeof event.content !== 'string' || event.content.length > MAX_ENVELOPE_CONTENT_CHARS)
+            return null;
+        // SEG-01 defense-in-depth (scribe-side): cheap NIP-44 v2 structural
+        // precheck at ingest. The blind scribe cannot decrypt, but it can
+        // reject obvious garbage: base64 shape + version byte "2" prefix +
+        // a sensible length window. Catches random bytes and unkeyed
+        // ciphertext long before they reach the per-message salvage path
+        // in decodeSegmentContent. The per-message salvage is still the
+        // authoritative defense against wrong-key-but-well-formed content.
+        if (!looksLikeNip44V2(event.content))
             return null;
         // 1. Exact replay: reject without charging the author's rate budget.
         if (this.seenEventIds.has(event.id))
