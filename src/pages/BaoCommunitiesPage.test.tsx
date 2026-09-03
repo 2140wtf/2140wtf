@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
+import { LayoutStore, LayoutStoreContext } from '@/contexts/LayoutContext';
 import { BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
 import { BaoCommunitiesPage } from './BaoCommunitiesPage';
 
@@ -16,9 +17,11 @@ vi.mock('@/hooks/useCurrentUser', () => ({
 describe('BaoCommunitiesPage', () => {
   it('embeds the canonical encrypted chat instead of showing a launcher card', async () => {
     render(
-      <TestApp>
-        <BaoCommunitiesPage />
-      </TestApp>,
+      <LayoutStoreContext.Provider value={new LayoutStore()}>
+        <TestApp>
+          <BaoCommunitiesPage />
+        </TestApp>
+      </LayoutStoreContext.Provider>,
     );
 
     const chat = await screen.findByTitle('2140 Social Chat');
@@ -30,7 +33,13 @@ describe('BaoCommunitiesPage', () => {
   it('signs only well-formed authentication requests from the embedded chat window', async () => {
     const signed = { id: 'b'.repeat(64), pubkey: 'a'.repeat(64), sig: 'c'.repeat(128) };
     signEvent.mockResolvedValueOnce(signed);
-    render(<TestApp><BaoCommunitiesPage /></TestApp>);
+    render(
+      <LayoutStoreContext.Provider value={new LayoutStore()}>
+        <TestApp>
+          <BaoCommunitiesPage />
+        </TestApp>
+      </LayoutStoreContext.Provider>,
+    );
     const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Social Chat');
 
     window.dispatchEvent(new MessageEvent('message', {
@@ -48,7 +57,13 @@ describe('BaoCommunitiesPage', () => {
 
   it('ignores authentication requests from any other origin', async () => {
     signEvent.mockClear();
-    render(<TestApp><BaoCommunitiesPage /></TestApp>);
+    render(
+      <LayoutStoreContext.Provider value={new LayoutStore()}>
+        <TestApp>
+          <BaoCommunitiesPage />
+        </TestApp>
+      </LayoutStoreContext.Provider>,
+    );
     const chat = await screen.findByTitle<HTMLIFrameElement>('2140 Social Chat');
     window.dispatchEvent(new MessageEvent('message', {
       origin: 'https://attacker.example',

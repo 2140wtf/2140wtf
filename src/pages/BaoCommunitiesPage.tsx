@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { openUrl } from '@/lib/downloadFile';
 import { BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useLayoutOptions } from '@/contexts/LayoutContext';
 
 const CHAT_AUTH_REQUEST = '2140-chat-auth-request';
 const CHAT_AUTH_RESPONSE = '2140-chat-auth-response';
@@ -31,6 +32,18 @@ function parseChatAuthRequest(data: unknown): ChatAuthRequest | null {
 }
 
 export function BaoCommunitiesPage(): React.JSX.Element {
+  // Full-bleed: the embedded chat needs viewport-width, not the 600px center
+  // column. 2140.social renders its mobile layout below 800px CSS width —
+  // squeezing the iframe into the feed column makes a desktop visit look
+  // like a phone.
+  useLayoutOptions({
+    collapseLeftSidebar: true,
+    rightSidebar: null,
+    noMaxWidth: true,
+    noOverscroll: true,
+    wrapperClassName: 'max-w-none w-full',
+  });
+
   const { user } = useCurrentUser();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
