@@ -1,3 +1,10 @@
+/**
+ * Browser-safe public entrypoint.
+ *
+ * Deliberately excludes Node-only websocket (`wsConn`), filesystem
+ * provisioning, and relay testkit modules. Browser applications should import
+ * `@bao/community/browser` instead of maintaining a copied export facade.
+ */
 export * from './kinds.js';
 export * from './crypto.js';
 export * from './envelope.js';
@@ -19,9 +26,11 @@ export * from './shield.js';
 export * from './agents.js';
 export * from './provision-core.js';
 export * from './credential.js';
+export * from './campaignPreset.js';
 export * from './attestation.js';
 export * from './disclosure.js';
 export * from './tier2.js';
+export * from './qr.js';
 export { buildMention, mentionTargets, isMentioned } from './mention.js';
 export { AgentFleet } from './fleet.js';
 export { buildReply, replyTarget, buildReaction, parseReaction, buildCodeBlock, parseCodeBlock } from './message.js';

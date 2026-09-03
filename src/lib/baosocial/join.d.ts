@@ -1,4 +1,5 @@
 import { type NostrEvent, type Clock, type Rng, type RelayClass, type PrivacyPolicy } from './crypto.js';
+import type { AdmissionProofs } from './admission.js';
 export interface RelayConn {
     publish(event: NostrEvent): Promise<void>;
     /**
@@ -146,7 +147,57 @@ export declare function partsToJoinLink(parts: JoinLinkParts, host?: string): st
  * Returns a full link string ready for parseJoinLink/joinFromLink.
  */
 export declare function normalizeJoinInput(raw: string): string;
+export type ShortInviteRef = {
+    kind: 'bare-code';
+    code: string;
+} | {
+    kind: 'server-ref';
+    origin: string;
+    code: string;
+};
+/**
+ * parseShortInviteRef — recognize the SMALL shapes harnesses actually pass
+ * around without mangling: a bare short code (`abc123xyzz`), a fetchable
+ * short-invite URL (`https://<host>/i/<code>`), or a short agent URL
+ * (`https://<host>/agent/<room-id>`). Returns null for every shape
+ * normalizeJoinInput already owns (fat links, fragments, split lines).
+ *
+ * Rationale: chat layers and harness link-sanitizers shred ~900-char
+ * fragments (or strip `#…` outright), then agents get blamed for "rejecting"
+ * the link. A 10-char code or short URL survives everything — and both
+ * resolve through ONE server path (`GET <origin>/i/<id>?format=split`,
+ * which accepts codes AND full room ids), so every app sharing this chat
+ * exposes the identical resolving path with zero per-app work.
+ */
+export declare function parseShortInviteRef(raw: string): ShortInviteRef | null;
+export interface ResolveJoinInputOpts {
+    /** Fetch implementation (global fetch in prod; stub in tests). Only ever
+     *  called against the origin embedded in the input or explicitly passed
+     *  via `origin` — never a derived/guessed host (containment). */
+    fetchFn?: (url: string) => Promise<{
+        ok: boolean;
+        status: number;
+        text(): Promise<string>;
+    }>;
+    /** Deployment origin for bare codes (`--origin` flag). */
+    origin?: string;
+    /** Env fallback for origin (`BAO_CHAT_ORIGIN`). */
+    envOrigin?: string;
+}
+/**
+ * resolveJoinInput — the UNIFIED agent-join entry point. Accepts everything
+ * normalizeJoinInput does, PLUS the small harness-proof shapes:
+ * short-invite URLs, agent short URLs, and bare codes (with --origin).
+ * Server refs resolve via the deployment's own /i/ endpoint and return a
+ * full fat-fragment link ready for parseJoinLink/joinFromLink — identical
+ * admission material to a pasted fat link, so every harness and every app
+ * sharing this chat joins through the same path.
+ */
+export declare function resolveJoinInput(raw: string, opts?: ResolveJoinInputOpts): Promise<string>;
 export type ConnFactory = (url: string) => RelayConn;
+/** Compare relay endpoints without treating an insignificant trailing slash
+ * as authority to redirect encrypted room traffic. */
+export declare function sameRelayEndpoint(a: string, b: string): boolean;
 /**
  * agentDoRecipe — the CANONICAL zero-repo bootstrap command for AI agents
  * (grammar v2 `do` payload). Any deploy host serves the bundled CLI at
@@ -272,6 +323,10 @@ export interface JoinOptions {
     /** NIP-OA owner attestation tag (["auth", owner, conditions, sig]) for
      *  the claimed agent identity — the external-agent admission lane. */
     agentAuth?: string[];
+    /** Offer/membership admission evidence carried only inside the encrypted
+     * join request. BAO Fund uses a room-bound blind credential issued after
+     * verified investment/donation; copying the invite alone is insufficient. */
+    proofs?: AdmissionProofs;
     /** How often the ephemeral join request is republished until a welcomer
      *  answers (spec §5.2 jittered retries). Default 2500ms. */
     republishIntervalMs?: number;

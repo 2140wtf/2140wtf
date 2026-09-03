@@ -15,6 +15,22 @@ export const CAMPAIGN_COMMANDS = [
         ],
     },
 ];
+/** Admission policy for a private funding-offer room. The creator/fundraising
+ * agent enters through the founder-attestation lane; every investor/donor
+ * must present a one-use blind credential bound to this room. The BAO Fund
+ * issuer releases that credential only after verifying participation in the
+ * specific offer, so possession of a chat invite is never sufficient. */
+export function privateOfferAdmissionMenu(participantIssuers) {
+    if (!Array.isArray(participantIssuers) || participantIssuers.length === 0) {
+        throw new Error('private offer requires at least one participant credential issuer');
+    }
+    return {
+        or: [
+            { and: ['founder-attestation'] },
+            ...participantIssuers.map((issuerPub) => ({ and: [{ checker: 'trade-credential', issuerPub }] })),
+        ],
+    };
+}
 /**
  * Directory row for a PUBLIC campaign room. Campaign rooms are public by
  * nature (fundraising is the point); private campaigns simply never call
