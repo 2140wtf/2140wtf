@@ -813,19 +813,25 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
 
       {/* Room column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b px-4 py-2.5">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold">
-              # {current?.info.name ?? "…"}
-            </h2>
-            <p className="truncate text-xs text-muted-foreground">{current?.info.topic ?? ""}</p>
-          </div>
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden">
-            <Radio className={cn("size-3.5", current?.joinPhase === "ready" ? "text-success" : "text-muted-foreground/50")} />
-            {current?.joinPhase === "ready" ? "relay live" : current?.joinPhase === "joining" ? "joining…" : "idle"}
-          </span>
-          {current?.joinPhase === "ready" && (
+        {/* Header — bare in embedded mini-chat panels: no name/topic line, no
+            invite-link button. The room identity is obvious from context. */}
+        <div className="flex items-center gap-3 border-b px-4 py-2">
+          {!embedded && (
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-base font-semibold">
+                # {current?.info.name ?? "…"}
+              </h2>
+              <p className="truncate text-xs text-muted-foreground">{current?.info.topic ?? ""}</p>
+            </div>
+          )}
+          {embedded && <div className="min-w-0 flex-1" />}
+          {!embedded && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden">
+              <Radio className={cn("size-3.5", current?.joinPhase === "ready" ? "text-success" : "text-muted-foreground/50")} />
+              {current?.joinPhase === "ready" ? "relay live" : current?.joinPhase === "joining" ? "joining…" : "idle"}
+            </span>
+          )}
+          {!embedded && current?.joinPhase === "ready" && (
             <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => copy(current.info.joinLink, "Invite link")}>
               <Copy className="mr-1 size-3" /> invite link
             </Button>
