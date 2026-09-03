@@ -70,6 +70,13 @@ export declare function isAttested(attested: string[], pubkey: string): boolean;
  * strings; the list form carries the room's allowlist inline so operators
  * provisioning via the rooms file need no separate field. Unknown spec →
  * throw (a foreign entry must surface, never silently become 'all').
+ *
+ * DEFAULT = 'all' (2026-08-25, operator call): the CLI and MCP surfaces
+ * ALWAYS claim an agent identity, so a 'none' default made every
+ * default-provisioned room silently drop every agent join — the welcomer
+ * never wraps, the client times out, and real-world onboarding took
+ * minutes of blind retries. Rooms that want agents OUT must now say so
+ * explicitly (agentPolicy: 'none' in the rooms file / UI dropdown).
  */
 export declare function parseAgentPolicy(spec: string | undefined): {
     policy: AgentAccessPolicy;

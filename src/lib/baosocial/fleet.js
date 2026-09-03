@@ -47,13 +47,25 @@ export class AgentFleet {
      */
     async join(link, opts = {}) {
         const { conn, session, joined } = await joinFromLink(link, opts);
-        this.conns.set(joined.roomId, conn);
-        this.sessions.set(joined.roomId, session);
+        this.takeRoom(joined.roomId, conn, session);
         return session;
     }
-    /** Attach an already-created session (e.g. built directly from a joinRoom
+    /**
+     * Attach an already-created session (e.g. built directly from a joinRoom
      *  result when the caller does not use the fat-fragment fast path). */
     attach(roomId, conn, session) {
+        this.takeRoom(roomId, conn, session);
+    }
+    /**
+     * REL-03: adopt (conn, session) for a roomId, closing ANY previous
+     * connection the fleet already holds for that room FIRST. Re-joining or
+     * re-attaching a room must not leak the old socket + reconnect timers, and
+     * the old session's mention/code subscriptions must be unregistered so a
+     * later `close(roomId)` cannot fire stale closures against the dead
+     * session.
+     */
+    takeRoom(roomId, conn, session) {
+        this.close(roomId);
         this.conns.set(roomId, conn);
         this.sessions.set(roomId, session);
     }

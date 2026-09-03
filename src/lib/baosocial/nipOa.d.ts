@@ -12,6 +12,14 @@ export type Condition = {
 } | {
     type: 'created_at>';
     value: number;
+}
+/** CRED-02: explicit unconditional-authorization marker. Signing the bare
+ *  `admit` clause means the owner authorizes the agent with NO condition
+ *  applied at admission. Only this marker rescues a `kind=`-bearing
+ *  attestation from fail-closed rejection — signed constraints are never
+ *  silently dropped. */
+ | {
+    type: 'admit';
 };
 /** Parse an `auth` tag. Null when malformed (wrong arity, bad hex). */
 export declare function parseAuthTag(tag: unknown): OwnerAttestation | null;

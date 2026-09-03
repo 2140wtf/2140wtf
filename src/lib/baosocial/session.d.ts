@@ -23,22 +23,35 @@ import { type JoinedRoom } from './join.js';
  * between page loads / process restarts — the demo previously hand-rolled a
  * lossy subset that dropped chainKey/shieldPub/grace keys, leaving ratcheted
  * members locked out after a refresh. Round-trips exactly.
+ *
+ * This object is PLAINTEXT SECRET BYTES in a JSON envelope: `encKey`,
+ * `authorSecretKey`, `chainKey`, `previousEncKey` and every
+ * `retiredAuthorSecretKeys` entry are full key material. Custody is the
+ * app's job — persist only via `sealSession`/`openSealedSession` when the
+ * storage medium is not already encrypted, and call `zeroizeJoinedRoom`
+ * on the live object once the serialized form has been captured.
  */
 export interface SerializedSession {
     v: 1;
     roomId: string;
     epoch: number;
-    /** hex NIP-44 content key for the current epoch. */
+    /** hex NIP-44 content key for the current epoch. SENSITIVE. */
     encKey: string;
     routingId: string;
     scribes: string[];
     governance: string;
     /** hex per-room author (stream) key. SENSITIVE — custody is the app's job. */
     authorSecretKey: string;
+    /** Hex P2 epoch chain key (§8) — the seed of ALL FUTURE room keys.
+     *  SENSITIVE: whoever holds it can derive every subsequent epoch's
+     *  encKey, so it must be treated as full key material in custody. */
     chainKey?: string;
     shieldPub?: string;
+    /** hex encKey of the previous epoch (grace window, §3.1). SENSITIVE. */
     previousEncKey?: string;
     previousEpoch?: number;
+    /** Retired stream keys retained for kind-5 deletion ownership (§2).
+     *  SENSITIVE — each entry is a full signing key. */
     retiredAuthorSecretKeys: string[];
     /** Relay-class privacy policy (§11) — kept so a restored session keeps
      *  jittering ephemeral timestamps identically (absent/present-ignored on
@@ -48,12 +61,51 @@ export interface SerializedSession {
 /** Capture the FULL join state as a JSON-ready object (see SerializedSession). */
 export declare function serializeJoinedRoom(joined: JoinedRoom): SerializedSession;
 /**
+ * Seal a serialized session for at-rest custody. The protected form is the
+ * NIP-44 v2 ciphertext of the JSON blob under a 32-byte `deviceKey` — the
+ * app persists ONLY this string; the plaintext `SerializedSession` (full
+ * chain/author key material, CRYPTO-03) never reaches storage. `deviceKey`
+ * should live outside the persisted payload (OS keychain / extension). This
+ * is additive: `serializeJoinedRoom` output is unchanged and still usable
+ * directly by apps that own their own encryption.
+ */
+export declare function sealSession(blob: SerializedSession, deviceKey: Uint8Array): string;
+/**
+ * Inverse of `sealSession`: decrypt a sealed session back into a
+ * `SerializedSession` ready for `restoreJoinedRoom`. Throws on a wrong
+ * deviceKey / tampered blob.
+ */
+export declare function openSealedSession(sealed: string, deviceKey: Uint8Array): SerializedSession;
+/**
+ * Scrub the secret bytes out of a live JoinedRoom in place (CRYPTO-03).
+ * Overwrites encKey, chainKey, authorSecretKey, previousEncKey and every
+ * retired author key with zeros AFTER the app has captured whatever it needs
+ * (serialize → seal → store), so key material does not linger in memory.
+ * String forms in a SerializedSession are immutable and cannot be zeroized —
+ * drop those references once sealed.
+ */
+export declare function zeroizeJoinedRoom(joined: JoinedRoom): void;
+/**
  * Restore a JoinedRoom from serializeJoinedRoom output (object or JSON
  * string). Throws on malformed input — fail-closed: a half-restored session
  * would silently decrypt nothing. Restores P2 ratchet state so the member
  * follows future epoch advances and retains grace-window decryption.
+ *
+ * CRYPTO-02 hardening (additive; existing callers pass no opts and get the
+ * same acceptance rules for CONSISTENT snapshots):
+ *  - internal consistency: when chainKey is present, the encKey must match
+ *    `deriveEpochKeys(chainKey, epoch).encKey` (constant-time compare), so a
+ *    mixed-epoch or hand-edited snapshot cannot restore a half-working
+ *    ratchet;
+ *  - `previousEpoch` (when present) is required to be < `epoch` — a snapshot
+ *    with a rolled-back grace window is rejected;
+ *  - `opts.minEpoch`, a caller-supplied high-water mark: snapshots whose
+ *    `epoch` is below it are rejected. Apps that persist a separately-stored
+ *    "last seen epoch" counter use this to defeat snapshot-replay rollback.
  */
-export declare function restoreJoinedRoom(input: SerializedSession | string): JoinedRoom;
+export declare function restoreJoinedRoom(input: SerializedSession | string, opts?: {
+    minEpoch?: number;
+}): JoinedRoom;
 /**
  * RoomSession — the primary abstraction for a client inside a room.
  * provides the user-facing API: post, reply, react, retract, subscribe,
@@ -64,8 +116,10 @@ export declare class RoomSession {
     readonly joined: JoinedRoom;
     private readonly clock;
     private readonly rng;
-    private readonly opts?: { onHandlerError?: (err: unknown, env: import('./envelope.js').Envelope, event: import('@nostrify/nostrify').NostrEvent) => void };
-    constructor(conn: import('./join.js').RelayConn, joined: JoinedRoom, clock?: Clock, rng?: Rng, opts?: { onHandlerError?: (err: unknown, env: import('./envelope.js').Envelope, event: import('@nostrify/nostrify').NostrEvent) => void });
+    private readonly opts;
+    constructor(conn: import('./join.js').RelayConn, joined: JoinedRoom, clock?: Clock, rng?: Rng, opts?: {
+        onHandlerError?: (err: Error, env: Envelope, event: NostrEvent) => void;
+    });
     private ctx;
     publishEvent(event: NostrEvent): Promise<void>;
     /** Publish path: direct for config-A rooms; NIP-59 gift-wrap to the shield

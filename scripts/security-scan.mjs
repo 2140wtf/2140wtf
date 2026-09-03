@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const REPORT_PATH = 'security-scan-report.json';
 const sourceFiles = execFileSync(
@@ -11,6 +11,9 @@ const sourceFiles = execFileSync(
 )
   .split('\n')
   .filter(Boolean)
+  // A worktree may contain tracked files staged or pending deletion. Do not
+  // crash before scanning the files that still exist.
+  .filter((file) => existsSync(file))
   .filter((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file));
 
 const checks = [

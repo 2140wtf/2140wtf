@@ -56,12 +56,39 @@ export function decodeSegmentContent(content, ctx) {
     }
     // Each message is a full signed ephemeral event (blind-scribe format):
     // verify the outer signature, then decrypt + validate the envelope.
-    const envelopes = manifest.messages.map((raw) => {
-        const ev = JSON.parse(raw);
-        if (!verifyEvent(ev))
-            throw new Error('message event signature invalid');
-        return decodeEphemeralEvent(ev, { roomId: ctx.roomId, encKey: ctx.encKey, routingId: ctx.routingId, epoch: ctx.epoch ?? 0 });
-    });
+    //
+    // SEG-01: a member who can encrypt under the room key can publish a
+    // well-formed outer event whose CONTENT is wrong-key ciphertext. The
+    // blind scribe cannot see that. Without per-message salvage here, a
+    // single poison message aborts the whole segment and every other
+    // honest message in it is permanently lost (the scribe already drained
+    // those events from its pending buffer and dedup set). Salvage: wrap
+    // every step in try/catch; on per-message failure drop ONLY that
+    // message and push a `warning`. Manifest-level failures (count
+    // mismatch, segment signature, d-tag/scope) still fail-closed — the
+    // whole segment is the integrity unit at the container level.
+    const envelopes = [];
+    const decodeWarnings = [];
+    for (let i = 0; i < manifest.messages.length; i++) {
+        const raw = manifest.messages[i];
+        try {
+            const ev = JSON.parse(raw);
+            if (!verifyEvent(ev)) {
+                decodeWarnings.push(`segment msg #${i}: outer signature invalid (dropped)`);
+                continue;
+            }
+            envelopes.push(decodeEphemeralEvent(ev, { roomId: ctx.roomId, encKey: ctx.encKey, routingId: ctx.routingId, epoch: ctx.epoch ?? 0 }));
+        }
+        catch (err) {
+            // Per-message salvage (SEG-01). The container signature/d-tag
+            // have already passed; a single bad payload cannot be allowed
+            // to erase its segment siblings. The reason is recorded so a
+            // later audit/UI can surface it; the merge layer dedups across
+            // segments regardless.
+            const reason = err instanceof Error ? err.message : String(err);
+            decodeWarnings.push(`segment msg #${i} dropped: ${reason}`);
+        }
+    }
     // Logical dedup: the SAME (author, msg_id) can legitimately appear twice
     // with different event ids — a client republishing across an epoch
     // ratchet re-stamps the envelope (new epoch, new ciphertext, same
@@ -71,16 +98,21 @@ export function decodeSegmentContent(content, ctx) {
     // whole segment — the merge layer dedups across segments regardless).
     const seen = new Set();
     const kept = [];
-    const warnings = [];
+    const dedupWarnings = [];
     for (const env of envelopes) {
         const k = dedupKey(env);
         if (seen.has(k)) {
-            warnings.push(`duplicate message dropped in segment: ${k}`);
+            dedupWarnings.push(`duplicate message dropped in segment: ${k}`);
             continue;
         }
         seen.add(k);
         kept.push(env);
     }
+    // Merge per-message decode warnings (SEG-01) with per-segment dedup
+    // warnings so a UI/audit can see every reason a message was dropped
+    // while the segment siblings survive. Dedup warnings are surfaced
+    // last so per-message reasons appear in the same order as the manifest.
+    const warnings = [...decodeWarnings, ...dedupWarnings];
     return { manifest, envelopes: kept, warnings };
 }
 /** Build + sign a kind-31145 segment event (monotonic created_at, §11). */
