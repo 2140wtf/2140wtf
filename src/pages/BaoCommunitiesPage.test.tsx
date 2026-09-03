@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
@@ -57,5 +58,12 @@ describe('BaoCommunitiesPage', () => {
     }));
     await Promise.resolve();
     expect(signEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('FalLivePage Trollbox', () => {
+  it('requests the metadata-minimized single-room view', () => {
+    const source = readFileSync('src/pages/FalLivePage.tsx', 'utf8');
+    expect(source).toContain('src={`${BAO_HOSTED_ORIGIN}/?room=trollbox&view=trollbox`}');
   });
 });

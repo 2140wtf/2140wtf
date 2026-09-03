@@ -109,7 +109,7 @@ export function FalLivePage(): React.JSX.Element {
         <iframe
           ref={chatFrameRef}
           onLoad={offerParentAuth}
-          src={`${BAO_HOSTED_ORIGIN}/?room=trollbox`}
+          src={`${BAO_HOSTED_ORIGIN}/?room=trollbox&view=trollbox`}
           title="2140 Social Chat Trollbox"
           className="min-h-0 flex-1 border-0"
           allow="clipboard-read; clipboard-write"
