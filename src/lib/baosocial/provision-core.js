@@ -98,7 +98,12 @@ export function buildRoomEntry(name, topic = '', opts = {}) {
         epoch: 0,
         inviteSecret: bytesToHex(generateSecretKey()),
         policy: opts.policy ?? 'open',
-        ...(opts.agentPolicy ? { agentPolicy: opts.agentPolicy, agentAllowlist: opts.agentAllowlist ?? [] } : {}),
+        ...(opts.agentPolicy ? {
+            agentPolicy: opts.agentPolicy,
+            agentAllowlist: opts.agentAllowlist ?? [],
+            ...(opts.agentOaOwners?.length ? { agentOaOwners: opts.agentOaOwners } : {}),
+        } : {}),
+        ...(opts.admissionMenu ? { admissionMenu: opts.admissionMenu } : {}),
         retention: opts.retention ?? DEFAULT_RETENTION,
         flushDeadlineMs: opts.flushDeadlineMs ?? DEFAULT_FLUSH_MS,
         governancePubkey: getPublicKey(governanceKey),

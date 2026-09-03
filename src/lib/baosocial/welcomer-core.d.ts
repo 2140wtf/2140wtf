@@ -5,8 +5,38 @@ export interface PowChallenge {
     expiry: number;
 }
 export declare function countLeadingZeroBits(hash: Uint8Array): number;
-export declare function solvePow(challenge: PowChallenge, burnerPub: string): string;
+/**
+ * Solve a PoW challenge. ASYNC (JOIN-06): the solver yields to the event
+ * loop every ~2^16 nonces so a high-difficulty challenge never freezes the
+ * caller's event loop (a hostile welcomer can issue difficulty up to the
+ * client clamp 28 ≈ 2^28 SHA-256 calls). Total work is capped at
+ * `maxNonce` (default 2^32) — beyond it the solver throws instead of
+ * running forever.
+ *
+ * IMPORTANT: this is async. Callers MUST `await` the result. Passing the
+ * unawaited promise to a hex-string API (e.g. verifyPow) stringifies the
+ * Promise and silently fails every check. See welcomer-scribe.test.ts and
+ * integration.test.ts for the canonical pattern.
+ */
+export declare function solvePow(challenge: PowChallenge, burnerPub: string, opts?: {
+    maxNonce?: bigint;
+    yieldEvery?: number;
+}): Promise<string>;
+/** Synchronous test-only PoW solver. Exists so test code that calls
+ *  `solvePow(...)` in a non-async body keeps working. Identical math to
+ *  `solvePow`; never yields, never throws on cap. Use ONLY in tests; in
+ *  production always await the async solver. */
+export declare function solvePowSync(challenge: PowChallenge, burnerPub: string): string;
 export declare function verifyPow(challenge: PowChallenge, burnerPub: string, nonceStr: string): boolean;
+/**
+ * Constant-time comparison of two hex strings (JOIN-05): both sides are
+ * SHA-256-digested to FIXED-LENGTH 32-byte buffers FIRST (no length
+ * short-circuit leak), then compared with a data-independent XOR-accumulate
+ * loop — the browser-safe equivalent of crypto.timingSafeEqual over the
+ * digests. welcomer-core rides inside the browser bundle via join.ts, so
+ * node:crypto must not appear here.
+ */
+export declare function constantTimeEqualHex(a: string, b: string): boolean;
 export interface SignedChallenge extends PowChallenge {
     burner: string;
     roomId: string;
@@ -32,6 +62,61 @@ export declare class ReplayCache {
     private sweep;
     get size(): number;
 }
+/**
+ * A Set-with-TTL for per-room dedup (seen join event ids JOIN-01,
+ * ratcheted burners JOIN-07). Instead of the old `Set` whose 4096-cap was
+ * enforced with a `clear()` that dropped ALL dedup state at once, entries
+ * are TTL-evicted per key; when over the size cap, expired keys are dropped
+ * first, then the oldest survivors — never the whole set.
+ */
+export declare class TtlKeySet {
+    private readonly ttlMs;
+    private readonly limit;
+    private readonly nowMs;
+    private readonly entries;
+    constructor(ttlMs: number, limit?: number, nowMs?: () => number);
+    has(key: string): boolean;
+    /** Synchronous dedup insert: true iff the key was NEW (not seen, not expired). */
+    checkAndAdd(key: string): boolean;
+    add(key: string): void;
+    delete(key: string): boolean;
+    get size(): number;
+    private sweep;
+}
+/**
+ * Invite-use ledger (JOIN-01): the welcomer's per-lid use counter with
+ * SYNCHRONOUS reservation. The daemon must reserve a use immediately after
+ * the invite gate passes — BEFORE the first await — and release it only if
+ * a later gate rejects. Concurrently replayed copies of one captured join
+ * event cannot both read the pre-increment count: the first handler's
+ * synchronous `reserve` is visible to everyone after it.
+ */
+export declare class InviteUseLedger {
+    private readonly uses;
+    /** Current consumed count — read-only input for the invite gate. */
+    count(lid: string): number;
+    /** SYNCHRONOUS use reservation. Returns false when the lid is already
+     *  exhausted (`uses >= maxUses`) — callers must treat that as rejection. */
+    reserve(lid: string, maxUses: number): boolean;
+    /** Release a reservation after a later gate rejects (never below zero). */
+    release(lid: string): void;
+}
+/**
+ * JOIN-02 — server-side history binding: `req.history === 'fresh'` is
+ * honored ONLY when the matched invite config (per-lid) OR the room config
+ * provisions it. Without provisioning, a 'fresh' request degrades to the
+ * current epoch (no ratchet) — a joiner can never force a room-wide epoch
+ * ratchet on its own.
+ */
+export declare function freshJoinProvisioned(roomHistory: string | undefined, inviteHistory: string | undefined): boolean;
+/** JOIN-02 — per-room ratchet rate limit (min interval between ratchets). */
+export declare function ratchetAllowed(lastRatchetAtMs: number, nowMs: number, minIntervalMs: number): boolean;
+/** JOIN-07 — durable ratchet-marker d-tag (kind 30078). The daemon
+ *  publishes this marker to the relay BEFORE the jittered wrap (and BEFORE
+ *  the ratchet), so a daemon restart inside the wrap-publish jitter window
+ *  still sees the marker and never ratchets the same join twice. Distinct
+ *  address space from key wraps (wrapDTag) and challenges (challengeDTag). */
+export declare function ratchetMarkerDTag(welcomerEpochKey: Uint8Array, roomId: string, recipientPub: string): string;
 export type AdmissionPolicy = {
     preset: 'open';
 } | {

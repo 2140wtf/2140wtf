@@ -48,9 +48,19 @@ export declare class AgentFleet {
     join(link: string, opts?: JoinOptions & {
         connFactory?: (url: string) => RelayConn;
     }): Promise<RoomSession>;
-    /** Attach an already-created session (e.g. built directly from a joinRoom
+    /**
+     * Attach an already-created session (e.g. built directly from a joinRoom
      *  result when the caller does not use the fat-fragment fast path). */
     attach(roomId: string, conn: RelayConn, session: RoomSession): void;
+    /**
+     * REL-03: adopt (conn, session) for a roomId, closing ANY previous
+     * connection the fleet already holds for that room FIRST. Re-joining or
+     * re-attaching a room must not leak the old socket + reconnect timers, and
+     * the old session's mention/code subscriptions must be unregistered so a
+     * later `close(roomId)` cannot fire stale closures against the dead
+     * session.
+     */
+    private takeRoom;
     private require;
     /** Post a raw payload into a room. */
     post(roomId: string, payload: unknown): Promise<Envelope>;

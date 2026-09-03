@@ -15,6 +15,14 @@ import { type FlushReason } from './segment.js';
 /** NIP-44 ciphertext of a max-bucket (16 KB) envelope is ~21.9k chars; an
  *  event whose content exceeds this can never scroll — reject at ingest. */
 export declare const MAX_ENVELOPE_CONTENT_CHARS = 22000;
+/** Cheap NIP-44 v2 structural precheck for the blind scribe. The wire
+ *  format is `base64(version_byte(1) || nonce(32) || ciphertext || mac(32))`
+ *  = at least 65 bytes raw → 88 base64 chars; the version byte is "2" so
+ *  the decoded first byte must be 0x32. The decrypt side will validate
+ *  the MAC — this is purely an "is this plausible NIP-44 at all?" check
+ *  to drop obvious garbage and pre-MAC-corrupted ciphertext at ingest
+ *  before it ever reaches the segment pipeline (SEG-01). */
+export declare function looksLikeNip44V2(s: string): boolean;
 export declare class RateLimiter {
     private readonly capacity;
     private readonly refillPerSec;

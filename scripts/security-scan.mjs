@@ -1,17 +1,32 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { extname } from 'node:path';
+import { findCapabilityLeaks, redactedEvidence } from './security-scan-core.mjs';
 
 const REPORT_PATH = 'security-scan-report.json';
-const sourceFiles = execFileSync(
+const trackedFiles = execFileSync(
   'git',
-  ['ls-files', 'src/**/*.ts', 'src/**/*.tsx', 'scripts/**/*.js', 'scripts/**/*.mjs'],
+  ['ls-files', '--cached', '--others', '--exclude-standard'],
   { encoding: 'utf8' },
 )
   .split('\n')
   .filter(Boolean)
+  // A worktree may contain tracked files staged or pending deletion. Do not
+  // crash before scanning the files that still exist.
+  .filter((file) => existsSync(file));
+
+const sourceFiles = trackedFiles
+  .filter((file) => /^(?:src|scripts)\//.test(file))
+  .filter((file) => /\.[cm]?[jt]sx?$/.test(file))
   .filter((file) => !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(file));
+
+const textExtensions = new Set([
+  '', '.cjs', '.css', '.env', '.html', '.js', '.json', '.jsx', '.md', '.mjs',
+  '.toml', '.ts', '.tsx', '.txt', '.yaml', '.yml',
+]);
+const capabilityFiles = trackedFiles.filter((file) => textExtensions.has(extname(file).toLowerCase()));
 
 const checks = [
   {
@@ -22,7 +37,7 @@ const checks = [
   {
     severity: 'CRITICAL',
     category: 'Leaked PEM private key',
-    pattern: /-----BEGIN[^\n]*(?:PRIVATE|RSA|EC) KEY-----/g,
+    pattern: /-----BEGIN[^\n]*(?:PRIVATE|RSA|EC) KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}\r?\n-----END[^\n]*(?:PRIVATE|RSA|EC) KEY-----/g,
   },
   {
     severity: 'CRITICAL',
@@ -37,7 +52,7 @@ const checks = [
   {
     severity: 'HIGH',
     category: 'Dynamic code execution',
-    pattern: /\b(?:eval|Function)\s*\(/g,
+    pattern: /(?:^|[;=(:,]\s*)\b(?:eval|new\s+Function|Function)\s*\(/gm,
   },
   {
     severity: 'HIGH',
@@ -47,19 +62,32 @@ const checks = [
 ];
 
 const findings = [];
+
+function addFinding(severity, category, file, content, index, value) {
+  findings.push({
+    severity,
+    category,
+    file,
+    line: content.slice(0, index).split('\n').length,
+    // Never copy a discovered credential into CI output or its retained
+    // artifact. A fingerprint is enough to correlate and rotate it.
+    evidence: redactedEvidence(value),
+  });
+}
+
 for (const file of sourceFiles) {
   const content = readFileSync(file, 'utf8');
   for (const check of checks) {
     for (const match of content.matchAll(check.pattern)) {
-      const line = content.slice(0, match.index).split('\n').length;
-      findings.push({
-        severity: check.severity,
-        category: check.category,
-        file,
-        line,
-        match: match[0].slice(0, 160),
-      });
+      addFinding(check.severity, check.category, file, content, match.index ?? 0, match[0]);
     }
+  }
+}
+
+for (const file of capabilityFiles) {
+  const content = readFileSync(file, 'utf8');
+  for (const leak of findCapabilityLeaks(content)) {
+    addFinding('CRITICAL', leak.category, file, content, leak.index, leak.value);
   }
 }
 
@@ -74,7 +102,7 @@ for (const file of trackedEnvironmentFiles) {
     category: 'Committed environment file',
     file,
     line: 1,
-    match: 'Environment files may contain deployment secrets',
+    evidence: { chars: 0, sha256: 'not-applicable' },
   });
 }
 
@@ -84,13 +112,13 @@ const counts = {
 };
 const report = {
   timestamp: new Date().toISOString(),
-  scannedFiles: sourceFiles.length,
+  scannedFiles: new Set([...sourceFiles, ...capabilityFiles]).size,
   counts,
   findings,
 };
 writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
 
-process.stdout.write(`Scanned ${sourceFiles.length} source files.\n`);
+process.stdout.write(`Scanned ${report.scannedFiles} repository text/source files.\n`);
 process.stdout.write(`Critical: ${counts.critical}; high: ${counts.high}.\n`);
 for (const finding of findings) {
   process.stdout.write(`::warning file=${finding.file},line=${finding.line}::${finding.severity}: ${finding.category}\n`);
@@ -99,7 +127,7 @@ for (const finding of findings) {
 if (process.env.GITHUB_STEP_SUMMARY) {
   writeFileSync(
     process.env.GITHUB_STEP_SUMMARY,
-    `## BAO Security Scan\n\n- Files scanned: ${sourceFiles.length}\n- Critical: ${counts.critical}\n- High: ${counts.high}\n`,
+    `## BAO Security Scan\n\n- Files scanned: ${report.scannedFiles}\n- Critical: ${counts.critical}\n- High: ${counts.high}\n`,
     { flag: 'a' },
   );
 }

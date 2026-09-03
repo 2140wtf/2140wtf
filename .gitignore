@@ -110,3 +110,4 @@ grant-proposal-experiment/
 
 # Agent rules ARE tracked (exception to any ignore pattern)
 !AGENTS.md
+security-scan-report.json

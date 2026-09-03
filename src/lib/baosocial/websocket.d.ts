@@ -19,6 +19,7 @@ export declare class WebRelayConn implements RelayConn {
     private readonly okWaiters;
     private counter;
     private openPromise;
+    private openReject;
     private closedByUser;
     private reconnectAttempts;
     private reconnectTimer;
@@ -44,4 +45,6 @@ export declare class WebRelayConn implements RelayConn {
     query(filter: Record<string, unknown>, timeoutMs?: number): Promise<NostrEvent[]>;
     subscribe(filter: Record<string, unknown>, onEvent: (ev: NostrEvent) => void): () => void;
     close(): void;
+    /** REL-02b: after close(), every op must throw instead of re-dialing. */
+    private assertNotClosed;
 }

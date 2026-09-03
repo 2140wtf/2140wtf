@@ -8,7 +8,7 @@
  */
 export interface ClassifiedError {
     code: 1 | 3 | 4;
-    token: 'ERROR' | 'LINK_INVALID' | 'LINK_EXHAUSTED' | 'ADMISSION_UNREACHABLE';
+    token: 'ERROR' | 'LINK_INVALID' | 'LINK_EXHAUSTED' | 'ADMISSION_UNREACHABLE' | 'DUPLICATE_POST';
 }
 /** Order matters: retryable-admission beats link-shape when both could match. */
 export declare function classifyCliError(message: string): ClassifiedError;

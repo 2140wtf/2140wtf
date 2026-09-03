@@ -7,6 +7,8 @@
  * conventions (botCommands manifest, P6b directory tags).
  */
 import type { BotCommand } from './botCommands.js';
+import type { AdmissionMenu } from './admission.js';
+import type { RsaPublicKey } from './credential.js';
 /** Suggested slash commands every campaign room publishes as a manifest. */
 export declare const CAMPAIGN_COMMANDS: BotCommand[];
 export interface CampaignRoomOptions {
@@ -16,6 +18,12 @@ export interface CampaignRoomOptions {
     goalSats?: number;
     topic?: string;
 }
+/** Admission policy for a private funding-offer room. The creator/fundraising
+ * agent enters through the founder-attestation lane; every investor/donor
+ * must present a one-use blind credential bound to this room. The BAO Fund
+ * issuer releases that credential only after verifying participation in the
+ * specific offer, so possession of a chat invite is never sufficient. */
+export declare function privateOfferAdmissionMenu(participantIssuers: RsaPublicKey[]): AdmissionMenu;
 /**
  * Directory row for a PUBLIC campaign room. Campaign rooms are public by
  * nature (fundraising is the point); private campaigns simply never call

@@ -98,6 +98,11 @@ export function parseConditions(conditions) {
             out.push({ type: m[1] === '<' ? 'created_at<' : 'created_at>', value: v });
             continue;
         }
+        if (part === 'admit') {
+            // CRED-02: explicit unconditional-authorization marker (additive clause).
+            out.push({ type: 'admit' });
+            continue;
+        }
         return null; // unknown clause
     }
     return out;

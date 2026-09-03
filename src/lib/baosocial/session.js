@@ -8,7 +8,7 @@
  * It handles encryption/decryption of the stream, epoch advances, and
  * delegates post+retry to post.ts.
  */
-import { systemClock, defaultRng, bytesToHex, hexToBytes, generateSecretKey, deriveEpochKeys, ratchetEpoch, deriveScrollWrapperKey, scrollScope, privacyPolicyFor, } from './crypto.js';
+import { systemClock, defaultRng, bytesToHex, hexToBytes, generateSecretKey, deriveEpochKeys, ratchetEpoch, deriveScrollWrapperKey, scrollScope, privacyPolicyFor, encryptToRoomKey, decryptWithRoomKey, constantTimeEqual, } from './crypto.js';
 import { encodeEphemeralEvent, encodeEnvelopeEvent, decodeEphemeralEvent, P2_EPOCH_WINDOW } from './envelope.js';
 import { giftWrapEnvelope } from './shield.js';
 import { mergeScrolls } from './merge.js';
@@ -45,6 +45,44 @@ export function serializeJoinedRoom(joined) {
         privacy: joined.privacy,
     };
 }
+/**
+ * Seal a serialized session for at-rest custody. The protected form is the
+ * NIP-44 v2 ciphertext of the JSON blob under a 32-byte `deviceKey` — the
+ * app persists ONLY this string; the plaintext `SerializedSession` (full
+ * chain/author key material, CRYPTO-03) never reaches storage. `deviceKey`
+ * should live outside the persisted payload (OS keychain / extension). This
+ * is additive: `serializeJoinedRoom` output is unchanged and still usable
+ * directly by apps that own their own encryption.
+ */
+export function sealSession(blob, deviceKey) {
+    return encryptToRoomKey(JSON.stringify(blob), deviceKey);
+}
+/**
+ * Inverse of `sealSession`: decrypt a sealed session back into a
+ * `SerializedSession` ready for `restoreJoinedRoom`. Throws on a wrong
+ * deviceKey / tampered blob.
+ */
+export function openSealedSession(sealed, deviceKey) {
+    return JSON.parse(decryptWithRoomKey(sealed, deviceKey));
+}
+/**
+ * Scrub the secret bytes out of a live JoinedRoom in place (CRYPTO-03).
+ * Overwrites encKey, chainKey, authorSecretKey, previousEncKey and every
+ * retired author key with zeros AFTER the app has captured whatever it needs
+ * (serialize → seal → store), so key material does not linger in memory.
+ * String forms in a SerializedSession are immutable and cannot be zeroized —
+ * drop those references once sealed.
+ */
+export function zeroizeJoinedRoom(joined) {
+    joined.encKey.fill(0);
+    if (joined.chainKey)
+        joined.chainKey.fill(0);
+    joined.authorSecretKey.fill(0);
+    if (joined.previousEncKey)
+        joined.previousEncKey.fill(0);
+    for (const k of joined.retiredAuthorSecretKeys)
+        k.fill(0);
+}
 function requireHex(value, field) {
     if (typeof value !== 'string' || !HEX64.test(value))
         throw new Error(`serialized session: bad ${field}`);
@@ -55,8 +93,20 @@ function requireHex(value, field) {
  * string). Throws on malformed input — fail-closed: a half-restored session
  * would silently decrypt nothing. Restores P2 ratchet state so the member
  * follows future epoch advances and retains grace-window decryption.
+ *
+ * CRYPTO-02 hardening (additive; existing callers pass no opts and get the
+ * same acceptance rules for CONSISTENT snapshots):
+ *  - internal consistency: when chainKey is present, the encKey must match
+ *    `deriveEpochKeys(chainKey, epoch).encKey` (constant-time compare), so a
+ *    mixed-epoch or hand-edited snapshot cannot restore a half-working
+ *    ratchet;
+ *  - `previousEpoch` (when present) is required to be < `epoch` — a snapshot
+ *    with a rolled-back grace window is rejected;
+ *  - `opts.minEpoch`, a caller-supplied high-water mark: snapshots whose
+ *    `epoch` is below it are rejected. Apps that persist a separately-stored
+ *    "last seen epoch" counter use this to defeat snapshot-replay rollback.
  */
-export function restoreJoinedRoom(input) {
+export function restoreJoinedRoom(input, opts = {}) {
     let s;
     try {
         s = typeof input === 'string' ? JSON.parse(input) : input;
@@ -72,6 +122,12 @@ export function restoreJoinedRoom(input) {
         throw new Error('serialized session: bad roomId');
     if (!Number.isSafeInteger(s.epoch) || s.epoch < 0)
         throw new Error('serialized session: bad epoch');
+    if (opts.minEpoch !== undefined && (!Number.isSafeInteger(opts.minEpoch) || opts.minEpoch < 0)) {
+        throw new Error('serialized session: bad minEpoch');
+    }
+    if (opts.minEpoch !== undefined && s.epoch < opts.minEpoch) {
+        throw new Error(`serialized session: stale snapshot (epoch ${s.epoch} below high-water mark ${opts.minEpoch})`);
+    }
     if (typeof s.routingId !== 'string' || !HEX64.test(s.routingId))
         throw new Error('serialized session: bad routingId');
     if (!Array.isArray(s.scribes) || !s.scribes.every((k) => typeof k === 'string' && HEX64.test(k))) {
@@ -82,15 +138,37 @@ export function restoreJoinedRoom(input) {
     const retired = s.retiredAuthorSecretKeys ?? [];
     if (!Array.isArray(retired))
         throw new Error('serialized session: bad retiredAuthorSecretKeys');
+    const encKey = requireHex(s.encKey, 'encKey');
+    const chainKey = s.chainKey !== undefined ? requireHex(s.chainKey, 'chainKey') : undefined;
+    // CRYPTO-02: the snapshot's encKey must be EXACTLY what the chainKey ratchet
+    // derives for this epoch, else the object mixes states (e.g. a chainKey from
+    // epoch n with an encKey from epoch m) and would decrypt a confusing subset.
+    if (chainKey !== undefined) {
+        const derived = deriveEpochKeys(chainKey, s.epoch);
+        if (!constantTimeEqual(derived.encKey, encKey)) {
+            throw new Error('serialized session: encKey does not match chainKey/epoch (inconsistent ratchet state)');
+        }
+    }
+    if (s.previousEncKey !== undefined || s.previousEpoch !== undefined) {
+        if (s.previousEncKey === undefined || s.previousEpoch === undefined) {
+            throw new Error('serialized session: previousEncKey and previousEpoch must appear together');
+        }
+        if (!Number.isSafeInteger(s.previousEpoch) || s.previousEpoch < 0) {
+            throw new Error('serialized session: bad previousEpoch');
+        }
+        if (s.previousEpoch >= s.epoch) {
+            throw new Error('serialized session: previousEpoch must be < epoch (rolled-back grace window)');
+        }
+    }
     return {
         roomId: s.roomId,
         epoch: s.epoch,
-        encKey: requireHex(s.encKey, 'encKey'),
+        encKey,
         routingId: s.routingId,
         scribes: [...s.scribes],
         governance: s.governance,
         authorSecretKey: requireHex(s.authorSecretKey, 'authorSecretKey'),
-        ...(s.chainKey !== undefined ? { chainKey: requireHex(s.chainKey, 'chainKey') } : {}),
+        ...(chainKey !== undefined ? { chainKey } : {}),
         ...(s.shieldPub !== undefined && (typeof s.shieldPub !== 'string' || !HEX64.test(s.shieldPub)
             ? (() => { throw new Error('serialized session: bad shieldPub'); })()
             : { shieldPub: s.shieldPub })),
@@ -181,14 +259,14 @@ export class RoomSession {
                     // Per-handler isolation: one throwing consumer must not starve the
                     // others (nor trip the previous-epoch fallback below).
                     // REL-04: isolation is correct — the SILENCE was not. A throwing
-                    // consumer handler was previously undiagnosable. Surface the error
-                    // without breaking the stream. (baocommunity upstream 52c6afc7.)
+                    // fleet-bot mention handler was previously undiagnosable. Surface
+                    // the error without breaking the stream.
                     for (const handler of [...(this.liveHandlers ?? [])]) {
                         try {
                             handler(env, event);
                         }
                         catch (err) {
-                            if (this.opts?.onHandlerError)
+                            if (this.opts.onHandlerError)
                                 this.opts.onHandlerError(err, env, event);
                             else
                                 console.error('[session] live handler threw:', err instanceof Error ? err.message : err);
@@ -248,8 +326,8 @@ export class RoomSession {
         if (epoch !== this.joined.epoch + 1)
             return false;
         const expected = ratchetEpoch(deriveEpochKeys(this.joined.chainKey, this.joined.epoch));
-        if (bytesToHex(expected.chainKey) !== chainKey)
-            return false; // forged notice
+        if (!constantTimeEqual(expected.chainKey, hexToBytes(chainKey)))
+            return false; // forged notice (CRYPTO-01: constant-time)
         this.advanceEpoch();
         return true;
     }

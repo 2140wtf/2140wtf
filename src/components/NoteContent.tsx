@@ -27,6 +27,8 @@ import { HASHTAG_PATTERN } from '@/lib/hashtag';
 import { highlightSourceAttrs } from '@/lib/highlightSource';
 import { cn } from '@/lib/utils';
 import { parseJoinLink } from '@/lib/baosocial/browser.js';
+import { assertBaoHostedRelay, BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
+import { openUrl } from '@/lib/downloadFile';
 import type { AddrCoords } from '@/hooks/useEvent';
 
 interface NoteContentProps {
@@ -901,24 +903,30 @@ function PlainLinkFallback({ url }: { url: string }) {
  */
 function JoinLinkChip({ url }: { url: string }) {
   let label = '₿AO room';
+  let verified = false;
   try {
     const parts = parseJoinLink(url);
+    assertBaoHostedRelay(parts.relay);
+    verified = new URL(url).origin === BAO_HOSTED_ORIGIN;
     if (parts.label) label = parts.label;
     else if (parts.roomId) label = `room-${parts.roomId.slice(0, 6)}`;
   } catch {
     /* unparseable — keep the generic label */
   }
+  if (!verified) return <PlainLinkFallback url={url} />;
   return (
-    <Link
-      to="/bao-social"
-      state={{ joinLink: url }}
+    <button
+      type="button"
       className="inline-flex items-center gap-1.5 my-1 mr-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-      onClick={(e) => e.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        void openUrl(url);
+      }}
       title="₿AO room invite — open in 2140 Social to join"
     >
       <Hash className="size-3" />
       {label}
-    </Link>
+    </button>
   );
 }
 
