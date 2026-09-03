@@ -354,9 +354,10 @@ export function AppRouter() {
               <Route path="/market/auction/:sellerPubkey/:dTag" element={<AuctionDetailPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/bao/community" element={<BaoCommunitiesPage />} />
-              <Route path="/bao/baocommunity" element={<Navigate to="/bao/community" replace />} />
-              <Route path="/bao/chat" element={<Navigate to="/bao/community" replace />} />
+              <Route path="/community" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/community" element={<Navigate to="/community" replace />} />
+              <Route path="/bao/baocommunity" element={<Navigate to="/community" replace />} />
+              <Route path="/bao/chat" element={<Navigate to="/community" replace />} />
               <Route path="/bao/markets" element={<PredictionMarketsPage />} />
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
@@ -375,7 +376,7 @@ export function AppRouter() {
                   relay pool. Keep old links working, but never mount its
                   composer: all room chat now uses the encrypted 2140.social
                   scroll transport and its single scoped relay. */}
-              <Route path="/groups" element={<Navigate to="/bao/community" replace />} />
+              <Route path="/groups" element={<Navigate to="/community" replace />} />
 
               <Route path="/pets" element={<PetsPage />} />
               <Route path="/pets/battle" element={<PetsBattlePage />} />
