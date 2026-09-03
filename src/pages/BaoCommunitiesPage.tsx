@@ -8,28 +8,38 @@ import { BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
 export function BaoCommunitiesPage(): React.JSX.Element {
   useSeoMeta({
     title: '2140 Community Chat',
-    description: 'Open the authenticated, encrypted ₿AO Chat application.',
+    description: '2140 Community Chat — the authenticated, encrypted community scroll.',
   });
 
   return (
-    <main className="flex min-h-[70dvh] items-center justify-center px-4 py-12">
-      <section className="w-full max-w-xl space-y-6 rounded-xl border bg-card p-8 text-center shadow-sm">
-        <ShieldCheck className="mx-auto size-12 text-primary" aria-hidden="true" />
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold tracking-tight">2140 Community Chat</h1>
-          <p className="text-lg text-muted-foreground">
-            Room discovery and authentication run on the dedicated chat origin so private room
-            capabilities are never bundled into this public Nostr client.
-          </p>
+    <main className="flex h-[calc(100dvh-4rem)] min-h-[36rem] flex-col overflow-hidden bg-background">
+      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <ShieldCheck className="size-5 shrink-0 text-primary" aria-hidden="true" />
+          <h1 className="truncate text-base font-semibold">2140 Community Chat</h1>
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            Encrypted on the dedicated chat relay
+          </span>
         </div>
-        <Button size="lg" onClick={() => void openUrl(BAO_HOSTED_ORIGIN)}>
-          Open encrypted chat <ExternalLink className="ml-2 size-4" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          onClick={() => void openUrl(BAO_HOSTED_ORIGIN)}
+        >
+          Open separately
+          <ExternalLink className="ml-2 size-4" aria-hidden="true" />
         </Button>
-        <p className="text-sm text-muted-foreground">
-          Chat uses only <code>wss://2140.social/ws</code>. If it is unavailable, the app will not
-          fall back to a public relay.
-        </p>
-      </section>
+      </header>
+
+      <iframe
+        src={BAO_HOSTED_ORIGIN}
+        title="2140 Community Chat"
+        className="min-h-0 flex-1 border-0 bg-black"
+        allow="clipboard-read; clipboard-write"
+        referrerPolicy="no-referrer"
+      />
     </main>
   );
 }
