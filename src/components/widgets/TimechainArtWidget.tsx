@@ -17,7 +17,7 @@
  * `javascript:` or `http://localhost` URIs can never render.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -147,17 +147,20 @@ interface TimechainArtWidgetProps {
   className?: string;
 }
 
-/** How often the gallery rotates to the next image (21 min 40 s). */
-export const ROTATE_INTERVAL_MS = 21 * 60 * 1000 + 40 * 1000;
+/** How often the gallery rotates to the next image (2 min 14 s). */
+export const ROTATE_INTERVAL_MS = 2 * 60 * 1000 + 14 * 1000;
 
 /** Max time to wait for an image before swapping to a fallback Blossom server. */
 const LOAD_TIMEOUT_MS = 8_000;
 
 /**
- * Exact byte size of nostr.build's "image not found" placeholder JPEG that it
- * serves (with HTTP 200) for missing blobs. Real images never match this size.
+ * Byte sizes of CDN "image not found" placeholder JPEGs. cdn.nostr.build
+ * re-encodes everything to 512x512 — including its placeholder, which is
+ * 53319 bytes (not the 64096 of the original full-res placeholder). Real
+ * art re-encoded to 512x512 varies in size (58345, 65294, etc.) so a size
+ * match against the known placeholder set is the only reliable signal.
  */
-const PLACEHOLDER_SIZE = '64096';
+const PLACEHOLDER_SIZES = new Set(['64096', '53319']);
 
 /**
  * Compact art gallery widget.
@@ -204,7 +207,7 @@ export function TimechainArtWidget({
   // Flatten, de-duplicate globally, drop CW images per policy, cap the grid.
   const images = useMemo(() => {
     const seen = new Set<string>();
-    const all = (events ?? [])
+    return (events ?? [])
       .flatMap((ev) => {
         const cw = getContentWarning(ev);
         const imgs = extractImagesFromEvent(ev);
@@ -219,10 +222,9 @@ export function TimechainArtWidget({
         if (seen.has(img.url)) return false;
         seen.add(img.url);
         return true;
-      });
-    // Newest first so the freshest art tops the grid.
-    all.sort((a, b) => b.createdAt - a.createdAt);
-    return all.slice(0, MAX_IMAGES);
+      })
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, MAX_IMAGES);
   }, [events, config.contentWarningPolicy]);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -336,12 +338,15 @@ export function TimechainArtWidget({
       {/* Attribution strip: artist name + a link to the source note. */}
       <div className="flex items-center justify-between px-1 py-1.5 text-xs text-muted-foreground">
         <Link to={`/${npub}`} className="hover:text-foreground hover:underline">
-          @ {displayName}
+          @{displayName}
         </Link>
         <Link
-          to={`/${sourceNote}`}
+          to={sourceNote ? `/${sourceNote}` : '#'}
           onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-1 hover:text-foreground hover:underline"
+          className={cn(
+            'flex items-center gap-1 hover:text-foreground hover:underline',
+            !sourceNote && 'pointer-events-none opacity-50',
+          )}
         >
           Source note
           <ExternalLink className="size-3" />
@@ -396,93 +401,70 @@ function ArtTile({
   onClick: () => void;
 }) {
   const { candidates } = useBlossomFallback(img.url);
+  // Index into `candidates` currently rendered by the <img> below. The first
+  // candidate (the original URL) renders immediately — <img> is not subject
+  // to CORS, so it displays exactly like the Lightbox does.
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  // Only set once a mirror has been verified to return a real image response.
-  const [verifiedSrc, setVerifiedSrc] = useState<string | null>(null);
   const [allFailed, setAllFailed] = useState(false);
 
-  // Missing blobs are served by nostr.build as a fixed, always-64096-byte
-  // "image not found" placeholder, and blossom.primal.net (where the account's
-  // originals live) accepts TCP but never responds from some networks — both
-  // make <img> fire onLoad/onError uselessly. So preflight each candidate URL
-  // with fetch and only render the <img> for a genuine non-placeholder image.
-  //
-  // Crucially the mirrors are probed IN PARALLEL: the first mirror that returns
-  // a real image (usually cdn.nostr.build, ~150ms) wins immediately, while the
-  // hung primal request burns its own 8s timeout in the background and is
-  // aborted once a winner is found. Serial probing (the previous behavior)
-  // forced every image to wait out primal's full timeout before the working
-  // mirror was even tried, leaving the gallery blank for 8+ seconds.
+  const src = candidates[Math.min(candidateIndex, candidates.length - 1)];
+
+  // Reset the mirror ladder when the underlying image changes.
   useEffect(() => {
-    let cancelled = false;
-    setVerifiedSrc(null);
+    setCandidateIndex(0);
     setLoaded(false);
     setAllFailed(false);
+  }, [img.url]);
 
-    const controllers: AbortController[] = [];
-    const probe = (url: string): Promise<boolean> =>
-      new Promise((resolve) => {
-        const ac = new AbortController();
-        controllers.push(ac);
-        const timer = setTimeout(() => ac.abort(), LOAD_TIMEOUT_MS);
-        fetch(url, { signal: ac.signal })
-          .then(async (res) => {
-            clearTimeout(timer);
-            if (!res.ok) return resolve(false);
-            // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
-            // "image not found" placeholder JPEG that is always exactly 64096
-            // bytes. Detect by content length (header when present, body size
-            // otherwise) and treat it as a miss. Real images are re-encoded by
-            // nostr.build (e.g. to 512x512), so dimension checks would wrongly
-            // reject them — only the exact placeholder byte size is a miss.
-            const length = res.headers.get('content-length');
-            if (length === PLACEHOLDER_SIZE) return resolve(false);
-            if (length === null) {
-              const blob = await res.blob();
-              return resolve(blob.size !== Number(PLACEHOLDER_SIZE));
-            }
-            return resolve(true);
-          })
-          .catch(() => {
-            clearTimeout(timer);
-            resolve(false);
-          });
-      });
+  // Show the skeleton again until the newly selected candidate decodes.
+  useEffect(() => {
+    setLoaded(false);
+  }, [src]);
 
-    void (async () => {
-      const winner = await new Promise<number | null>((resolve) => {
-        let settled = 0;
-        let done = false;
-        candidates.forEach((url, index) => {
-          probe(url)
-            .then((ok) => {
-              if (done) return;
-              if (ok) {
-                done = true;
-                resolve(index);
-                return;
-              }
-              settled += 1;
-              if (settled === candidates.length) resolve(null);
-            });
-        });
-      });
-      // A winner (or total failure) is known — cancel any probes still in
-      // flight, e.g. the hung primal request.
-      controllers.forEach((ac) => ac.abort());
-      if (cancelled) return;
-      if (winner === null) {
-        setAllFailed(true);
-        return;
-      }
-      setVerifiedSrc(candidates[winner]);
-    })();
+  /** Advance to the next mirror, or mark the tile unavailable when exhausted. */
+  const advance = useCallback(() => {
+    if (candidateIndex + 1 < candidates.length) {
+      setCandidateIndex(candidateIndex + 1);
+    } else {
+      setAllFailed(true);
+    }
+  }, [candidateIndex, candidates.length]);
 
+  // Background placeholder check for the currently displayed URL. Unlike a
+  // render-gating preflight, this never blocks the <img>: the image is already
+  // on screen (exactly like the Lightbox, which loads the same URL without
+  // CORS). fetch() IS CORS-bound — e.g. blossom.primal.net sends no
+  // Access-Control-Allow-Origin — so a blocked or failed probe is ignored and
+  // the working <img> is left alone. Only a confirmed "image not found"
+  // placeholder (see PLACEHOLDER_SIZES) advances to the next mirror.
+  useEffect(() => {
+    if (!src || allFailed) return;
+    let cancelled = false;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), LOAD_TIMEOUT_MS);
+    fetch(src, { signal: ac.signal })
+      .then(async (res) => {
+        if (!res.ok) return;
+        // nostr.build serves HTTP 200 for missing blobs — a fixed 512x512
+        // "image not found" placeholder. The placeholder byte size varies by
+        // CDN edge (53319 on cdn.nostr.build, 64096 on the original endpoint).
+        // Real art re-encoded to 512x512 varies in size (58345, 65294, etc.)
+        // so a set match is the only reliable signal.
+        const length = res.headers.get('content-length');
+        const size = length ?? String((await res.blob()).size);
+        if (!cancelled && PLACEHOLDER_SIZES.has(size)) advance();
+      })
+      .catch(() => {
+        // CORS rejection, network failure, or abort: leave the <img> as-is.
+      })
+      .finally(() => clearTimeout(timer));
     return () => {
       cancelled = true;
-      controllers.forEach((ac) => ac.abort());
+      clearTimeout(timer);
+      ac.abort();
     };
-  }, [candidates]);
+  }, [src, allFailed, advance]);
 
   return (
     <button
@@ -503,16 +485,14 @@ function ArtTile({
       {!loaded && !allFailed && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-lg" />
       )}
-      {verifiedSrc && (
+      {!allFailed && (
         <img
-          src={verifiedSrc}
+          key={src}
+          src={src}
           alt={img.alt ?? 'Art'}
           loading="lazy"
           onLoad={() => setLoaded(true)}
-          onError={() => {
-            setVerifiedSrc(null);
-            setAllFailed(true);
-          }}
+          onError={advance}
           className={cn(
             'absolute inset-0 h-full w-full transition-opacity duration-200',
             fill ? 'object-contain' : 'object-cover',
@@ -520,7 +500,7 @@ function ArtTile({
           )}
         />
       )}
-      {allFailed && !verifiedSrc && (
+      {allFailed && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/60"
           aria-label="Artwork unavailable"
