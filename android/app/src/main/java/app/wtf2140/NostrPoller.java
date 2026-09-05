@@ -337,7 +337,10 @@ public class NostrPoller {
         if (manager == null) return;
 
         Intent intent = new Intent(context, MainActivity.class);
-        intent.setData(Uri.parse("https://ditto.pub/notifications"));
+        // Must use the app's own https host: MainActivity.handleNotificationIntent
+        // only routes intents whose data host is "2140.wtf". The previous value
+        // (ditto.pub) silently broke notification-tap navigation.
+        intent.setData(Uri.parse("https://2140.wtf/notifications"));
         intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 context, id, intent,

@@ -53,7 +53,10 @@ jobs:
           GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
           GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
         run: |
-          npm install
+          # Use the lockfile exactly: npm install would silently pick up newer
+          # transitive versions, making deploys non-reproducible and widening
+          # the supply-chain attack surface.
+          npm ci
           npm run build
           cp dist/index.html dist/404.html
 

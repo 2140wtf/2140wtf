@@ -75,13 +75,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         let userInfo = response.notification.request.content.userInfo
         let path = userInfo["url"] as? String ?? "/notifications"
 
-        // Navigate the Capacitor WebView to the notifications page.
+        // The path comes from the push payload (potentially attacker-influenced
+        // via a compromised/relay-injected notification), so it must be embedded
+        // as a fully JSON-quoted string literal rather than interpolated raw.
+        // JSON string escaping is also valid JavaScript string escaping, and it
+        // escapes backslashes and control characters that raw interpolation
+        // would turn into a JS injection vector.
+        let pathLiteral: String = {
+            if let data = try? JSONEncoder().encode([path]),
+               let array = try? JSONDecoder().decode([String].self, from: data),
+               let quoted = array.first {
+                return quoted
+            }
+            return "/notifications"
+        }()
+
+        // Navigate the Capacitor WebView to the notifications page. Assigning
+        // the pathname only when it differs mirrors Android's behavior: when the
+        // app is already showing /notifications, no navigation (and no reload)
+        // happens; when opening from a cold start, the SPA boots at /notifications
+        // either way, so no reload is needed.
         DispatchQueue.main.async { [weak self] in
             guard let rootVC = self?.window?.rootViewController as? DittoBridgeViewController else {
                 completionHandler()
                 return
             }
-            let js = "window.location.pathname !== '\(path)' && (window.location.pathname = '\(path)');"
+            let js = "window.location.pathname !== \"\(pathLiteral)\" && (window.location.pathname = \"\(pathLiteral)\");"
             rootVC.webView?.evaluateJavaScript(js) { _, _ in }
         }
 

@@ -29,7 +29,9 @@ const sk = generateSecretKey();
 const pk = getPublicKey(sk);
 console.log("Test pubkey:", pk);
 
-const catalogRaw = await readFile(resolve(root, "..", "catalog.json"), "utf-8");
+// The catalog lives inside this repo (root-level catalog.json); the previous
+// path pointed one directory ABOVE the repo, so the script could never find it.
+const catalogRaw = await readFile(resolve(root, "catalog.json"), "utf-8");
 const catalog = JSON.parse(catalogRaw);
 
 const now = Math.floor(Date.now() / 1000);

@@ -112,10 +112,18 @@ public class MainActivity extends BridgeActivity {
         if (data != null && "2140.wtf".equals(data.getHost())) {
             String path = data.getPath();
             if (path != null && !path.isEmpty()) {
-                // Wait for WebView to be ready, then navigate
+                // Wait for WebView to be ready, then navigate.
+                // The path is attacker-influenced (MainActivity handles exported
+                // https://2140.wtf App Links), so it must be embedded as a fully
+                // JSON-quoted string literal. Manual quote escaping is not enough:
+                // a backslash would escape the escape and allow arbitrary JS to
+                // run in the privileged WebView. JSONObject.quote() escapes " and
+                // \\ plus all control characters, making the literal injection-proof.
+                final String safePath = path;
                 getBridge().getWebView().post(() -> {
+                    String literal = org.json.JSONObject.quote(safePath);
                     getBridge().getWebView().evaluateJavascript(
-                        "window.location.pathname = '" + path.replace("'", "\\'") + "';",
+                        "window.location.pathname = " + literal + ";",
                         null
                     );
                 });
