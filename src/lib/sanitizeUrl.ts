@@ -121,6 +121,27 @@ export function isAllowedHttpsUrl(url: string | undefined | null): boolean {
 }
 
 /**
+ * Validate a Blossom origin supplied by untrusted event data.
+ *
+ * Unlike general service configuration, nsite server tags must never point at
+ * local/private network addresses or carry credentials. This prevents a
+ * malicious nsite from turning every preview into a browser-side local-network
+ * probe or leaking credentials through an embedded URL.
+ */
+export function isAllowedBlossomUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' &&
+      !parsed.username &&
+      !parsed.password &&
+      !isLocalNetworkUrl(url);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Validate a share/canonical-origin URL.
  *
  * Must be `https://`, must not contain a path, query, or fragment, and must
