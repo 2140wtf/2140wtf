@@ -9,6 +9,7 @@ import {
 } from "@/lib/audioPlaybackQueue";
 import { formatTime } from "@/lib/formatTime";
 import { cn } from "@/lib/utils";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 
 import type { ImetaEncryption } from "@/lib/imeta";
 
@@ -160,9 +161,13 @@ export function AudioMessage({ src, mime, encryption, waveform, duration, classN
 
   // Decrypt failure (bad key, blob gone): fall back to a plain link.
   if (resolved.status === "error") {
+    const safeFallbackUrl = sanitizeUrl(src);
+    if (!safeFallbackUrl) {
+      return <span className="text-muted-foreground break-all">{src}</span>;
+    }
     return (
       <a
-        href={src}
+        href={safeFallbackUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="text-primary hover:underline break-all"
