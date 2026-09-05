@@ -29,6 +29,8 @@ import DOMPurify from 'dompurify';
 import { useWikipediaSearch, type WikipediaSearchResult } from '@/hooks/useWikipediaSearch';
 import { WikipediaIcon } from '@/components/icons/WikipediaIcon';
 import { cn } from '@/lib/utils';
+import { SafeImage } from '@/components/SafeImage';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,8 +192,8 @@ function ArticleCard({ page, badge, badgeIcon }: {
       {/* Thumbnail */}
       <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
         {page.thumbnail ? (
-          <img
-            src={page.thumbnail.source}
+          <SafeImage
+            src={sanitizeUrl(page.thumbnail.source)}
             alt={page.normalizedtitle}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -237,8 +239,8 @@ function FeaturedArticleCard({ page }: { page: WikiPage }) {
     >
       <div className="relative aspect-[16/9] overflow-hidden bg-gradient-to-br from-amber-500/10 to-orange-500/10">
         {page.thumbnail ? (
-          <img
-            src={page.originalimage?.source ?? page.thumbnail.source}
+          <SafeImage
+            src={sanitizeUrl(page.originalimage?.source ?? page.thumbnail.source)}
             alt={page.normalizedtitle}
             loading="lazy"
             className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -293,8 +295,8 @@ function OnThisDayCard({ event }: { event: OnThisDayEvent }) {
         </div>
         {mainPage?.thumbnail && (
           <Link to={appWikiUrl(mainPage)} className="shrink-0">
-            <img
-              src={mainPage.thumbnail.source}
+            <SafeImage
+              src={sanitizeUrl(mainPage.thumbnail.source)}
               alt=""
               className="w-14 h-14 rounded-lg object-cover"
               loading="lazy"
@@ -340,8 +342,8 @@ function NewsCard({ item }: { item: NewsItem }) {
         </div>
         {mainLink?.thumbnail && (
           <Link to={appWikiUrl(mainLink)} className="shrink-0">
-            <img
-              src={mainLink.thumbnail.source}
+            <SafeImage
+              src={sanitizeUrl(mainLink.thumbnail.source)}
               alt=""
               className="w-14 h-14 rounded-lg object-cover"
               loading="lazy"
@@ -479,8 +481,8 @@ function WikipediaSearchBar() {
                   onClick={() => handleSelect(result)}
                 >
                   {result.thumbnail ? (
-                    <img
-                      src={result.thumbnail}
+                    <SafeImage
+                      src={sanitizeUrl(result.thumbnail)}
                       alt=""
                       className="w-10 h-10 rounded object-cover bg-secondary shrink-0"
                       loading="lazy"
