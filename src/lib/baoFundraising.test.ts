@@ -4,6 +4,7 @@ import {
   BAO_FUNDRAISER_CREATE_KIND,
   contributeToFundraiser,
   createFundraiserRelayFirst,
+  fetchScoreJobEvents,
   fetchVerificationModels,
   fetchVerificationStats,
   fundingProgressPct,
@@ -329,6 +330,40 @@ describe('scoreMilestone', () => {
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ evidence: 'see commit abc123' });
     expect(init?.headers).toMatchObject({ Authorization: expect.stringMatching(/^Nostr /) });
+  });
+});
+
+describe('fetchScoreJobEvents', () => {
+  it('parses valid frames and ignores malformed or schema-invalid frames', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(
+          'data: {"type":"accepted","job_id":42}\n\n' +
+          'data: {"type":"unknown","job_id":42}\n\n' +
+          'data: not-json\n\n' +
+          'data: {"type":"token","job_id":42,"delta":"progress"}\n\n',
+        ));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })));
+
+    await expect(fetchScoreJobEvents('fr_1', 'm_1', 42)).resolves.toEqual([
+      { type: 'accepted', job_id: 42 },
+      { type: 'token', job_id: 42, delta: 'progress' },
+    ]);
+  });
+
+  it('fails closed when an API stream exceeds its byte limit', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(513 * 1024));
+        controller.close();
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })));
+
+    await expect(fetchScoreJobEvents('fr_1', 'm_1', 42)).rejects.toThrow(/size limit/i);
   });
 });
 
