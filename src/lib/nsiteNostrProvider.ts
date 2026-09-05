@@ -8,21 +8,24 @@
  *
  * A serial queue ensures only one RPC is in flight at a time, preventing
  * the parent from being overwhelmed with concurrent permission prompts.
+ *
+ * @param pubkey - The user's Nostr pubkey (hex), embedded in the provider.
+ * @param parentOrigin - The parent app's exact origin (e.g. `window.location.origin`).
+ *   The provider only accepts RPC responses from, and targets messages to, this
+ *   origin. This must be passed explicitly: the app ships a global
+ *   `<meta name="referrer" content="no-referrer">`, so `document.referrer` is
+ *   always empty inside the sandbox and can never be used to infer the parent.
+ *   When omitted, the script falls back to `*` (unrestricted) for backwards
+ *   compatibility — callers in this app always pass the origin.
  */
-export function getNsiteNostrProviderScript(pubkey: string): string {
+export function getNsiteNostrProviderScript(pubkey: string, parentOrigin?: string): string {
   return `(function() {
   'use strict';
 
   // ------------------------------------------------------------------
-  // Origin restriction — only talk to the frame that loaded us
+  // Origin restriction — only talk to the parent app's origin
   // ------------------------------------------------------------------
-  var parentOrigin = (function() {
-    try {
-      return document.referrer ? new URL(document.referrer).origin : '*';
-    } catch (e) {
-      return '*';
-    }
-  })();
+  var parentOrigin = ${JSON.stringify(parentOrigin ?? '*')};
 
   // ------------------------------------------------------------------
   // Serial queue — one RPC at a time to avoid concurrent prompts

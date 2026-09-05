@@ -25,6 +25,8 @@ import { useBirdSong } from '@/hooks/useBirdSong';
 import { EXTRA_KINDS } from '@/lib/extraKinds';
 import { getKindLabel } from '@/lib/kindLabels';
 import { CONTENT_KIND_ICONS } from '@/lib/sidebarItems';
+import { SafeImage } from '@/components/SafeImage';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 // ---------------------------------------------------------------------------
 // Full-size content headers (used on /i/ page)
@@ -131,14 +133,14 @@ function WikipediaArticleHeader({ title, url }: { title: string; url: string }) 
     return <LinkEmbed url={url} showActions={false} />;
   }
 
-  const heroImage = wiki.originalImage?.source ?? wiki.thumbnail?.source;
+  const heroImage = sanitizeUrl(wiki.originalImage?.source ?? wiki.thumbnail?.source);
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden">
       {/* Hero image */}
       {heroImage && (
         <div className="relative w-full overflow-hidden bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
-          <img
+          <SafeImage
             src={heroImage}
             alt={wiki.title}
             className="w-full max-h-[320px] object-cover"
@@ -507,7 +509,7 @@ export function CountryContentHeader({ code }: { code: string }) {
         <div className="flex items-center gap-4">
           {info.subdivision && wiki?.thumbnail ? (
             <img
-              src={wiki.thumbnail.source}
+              src={sanitizeUrl(wiki.thumbnail.source)}
               alt={info.subdivisionName ?? info.subdivision}
               className="size-16 sm:size-20 rounded-md object-cover shadow-sm border border-border"
             />

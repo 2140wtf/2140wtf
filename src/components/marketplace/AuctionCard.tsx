@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HandCoins, ShoppingCart } from 'lucide-react';
 import { Gavel, Loader2, RotateCcw } from 'lucide-react';
 
@@ -9,6 +10,7 @@ import { SafeImage } from '@/components/SafeImage';
 import { AuctionBidDialog } from '@/components/marketplace/AuctionBidDialog';
 import LoginDialog from '@/components/auth/LoginDialog';
 import { useAuctionBids } from '@/hooks/useAuctions';
+import { useProxyBidding } from '@/hooks/useProxyBidding';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useOnboarding } from '@/hooks/useOnboarding';
 import { useToast } from '@/hooks/useToast';
@@ -62,6 +64,7 @@ function exactClose(closesAt: number): string {
  * (close now → settle with winner), and the bidder's refund reclaim.
  */
 export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX.Element {
+  const navigate = useNavigate();
   const { user } = useCurrentUser();
   const { toast } = useToast();
   const { config } = useAppContext();
@@ -91,6 +94,33 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
   const highest = bidState.highest;
   const iAmHighest = !!highest && user?.pubkey === highest.pubkey;
 
+  // In-app outbid notification: when the standing bid changes away from us,
+  // toast once per outbid event. Tracked by highest event id so re-renders
+  // and refetches never re-fire the same toast.
+  const lastSeenTopRef = useRef<string | null>(null);
+  const outbidToastShownRef = useRef<string | null>(null);
+  useEffect(() => {
+    const topId = highest?.eventId ?? null;
+    // Only fire when: we previously saw ourselves on top (or had bid at all),
+    // the top is now someone else, and we haven't toasted this event yet.
+    if (
+      topId &&
+      highest &&
+      user &&
+      !isSeller &&
+      highest.pubkey !== user.pubkey &&
+      lastSeenTopRef.current === user.pubkey && // we WERE the top (by id proxy)
+      outbidToastShownRef.current !== topId
+    ) {
+      outbidToastShownRef.current = topId;
+      toast({
+        title: 'You have been outbid',
+        description: `${auction.title} — new highest bid is ${formatSats(highest.amountSats)} sats. Raise your max to stay in.`,
+      });
+    }
+    lastSeenTopRef.current = highest?.pubkey ?? lastSeenTopRef.current;
+  }, [highest, user, isSeller, auction.title, toast]);
+
   // The user's own journaled deposit for THIS auction (refund reclaim UI).
   const myDeposit: PendingAuctionBidDeposit | undefined = useMemo(() => {
     if (!user) return undefined;
@@ -100,6 +130,38 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
 
   const canReclaimRefund =
     !!myDeposit && !iAmHighest && !!highest && highest.pubkey !== user?.pubkey;
+
+  // Proxy auto-bid engine: while the user has a sealed max on this auction,
+  // publish minimal raises to hold the lead. Toasts on each raise.
+  useProxyBidding({
+    auction,
+    bids: bidState.sorted,
+    bidderPubkey: user?.pubkey,
+    escrowPubkey: user?.pubkey,
+    publishRaise: async ({ auctionAddress: addr, amountSats, bidSlot, escrowPubkey }) => {
+      await publishEvent({
+        kind: 30401,
+        content: '',
+        tags: [
+          ['d', bidSlot],
+          ['a', addr],
+          ['amount', String(amountSats), 'sats'],
+          ['p2pk', escrowPubkey],
+          ['alt', `Proxy raise to ${formatSats(amountSats)} sats on ${auction.title}`],
+        ],
+      });
+    },
+    onRaised: (amount) => {
+      toast({ title: 'Proxy raise placed', description: `Auto-bid raised to ${formatSats(amount)} sats.` });
+      void refetchBids();
+    },
+    onOutbid: (standing) => {
+      toast({
+        title: 'Outbid beyond your max',
+        description: `${auction.title} — standing bid ${formatSats(standing)} sats exceeds your sealed maximum.`,
+      });
+    },
+  });
 
   const handleBidClick = () => {
     if (!user) {
@@ -281,7 +343,13 @@ export function AuctionCard({ auction }: { auction: AuctionListing }): React.JSX
 
       <div className="p-4 space-y-3">
         <div className="flex items-start justify-between gap-2">
-          <span className="font-semibold text-sm line-clamp-2 flex-1">{auction.title}</span>
+          <button
+            type="button"
+            className="font-semibold text-sm line-clamp-2 flex-1 text-left hover:underline"
+            onClick={() => navigate(`/market/auction/${auction.pubkey}/${encodeURIComponent(auction.dTag)}`)}
+          >
+            {auction.title}
+          </button>
           <Badge variant="outline" className="text-xs shrink-0">
             <Gavel className="size-3 mr-1" />
             Auction

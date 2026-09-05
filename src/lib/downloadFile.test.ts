@@ -15,7 +15,11 @@ vi.mock('@capacitor/filesystem', () => ({
   Encoding: { UTF8: 'utf8' },
 }));
 
-import { downloadDataUrlFile } from './downloadFile';
+vi.mock('@capacitor/share', () => ({
+  Share: { share: vi.fn() },
+}));
+
+import { downloadDataUrlFile, openUrl, sanitizeOpenUrl } from './downloadFile';
 
 describe('downloadDataUrlFile', () => {
   beforeEach(() => {
@@ -51,5 +55,37 @@ describe('downloadDataUrlFile', () => {
     await expect(downloadDataUrlFile('pet.png', 'data:image/png,not-base64'))
       .rejects.toThrow('Invalid base64 data URL');
     expect(mocks.writeFile).not.toHaveBeenCalled();
+  });
+});
+
+describe('sanitizeOpenUrl', () => {
+  it('allows safe external HTTPS URLs and app-relative paths', () => {
+    expect(sanitizeOpenUrl('https://example.com/path')).toBe('https://example.com/path');
+    expect(sanitizeOpenUrl('/i/bitcoin:tx:abc')).toBe('/i/bitcoin:tx:abc');
+  });
+
+  it('allows supported payment and signer deep links', () => {
+    expect(sanitizeOpenUrl('lightning:lnbc1abc')).toBe('lightning:lnbc1abc');
+    const address = 'bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5';
+    expect(sanitizeOpenUrl(`bitcoin:${address}?amount=1`)).toBe(`bitcoin:${address}?amount=1`);
+    expect(sanitizeOpenUrl(`nostrconnect://${'a'.repeat(64)}?secret=abc`)).toContain('nostrconnect://');
+    expect(sanitizeOpenUrl('simplex:/contact#/?v=1')).toBe('simplex:/contact#/?v=1');
+  });
+
+  it('rejects executable, private-network, and unknown schemes', () => {
+    expect(sanitizeOpenUrl('javascript:alert(1)')).toBeUndefined();
+    expect(sanitizeOpenUrl('data:text/html,<script>alert(1)</script>')).toBeUndefined();
+    expect(sanitizeOpenUrl('https://127.0.0.1/admin')).toBeUndefined();
+    expect(sanitizeOpenUrl('ftp://example.com/file')).toBeUndefined();
+    expect(sanitizeOpenUrl('//example.com')).toBeUndefined();
+  });
+});
+
+describe('openUrl', () => {
+  it('does not call window.open for an unsafe URL', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    await expect(openUrl('javascript:alert(1)')).rejects.toThrow('unsafe URL');
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 });

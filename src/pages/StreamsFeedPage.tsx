@@ -23,6 +23,8 @@ import { useOpenPost } from '@/hooks/useOpenPost';
 import { getExtraKindDef } from '@/lib/extraKinds';
 import { timeAgo } from '@/lib/timeAgo';
 import { cn } from '@/lib/utils';
+import { SafeImage } from '@/components/SafeImage';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 const streamsDef = getExtraKindDef('streams')!;
 
@@ -109,7 +111,7 @@ export function StreamsFeedPage() {
 function StreamCard({ event }: { event: NostrEvent }) {
   const title = getTag(event.tags, 'title') || 'Untitled Stream';
   const summary = getTag(event.tags, 'summary');
-  const imageUrl = getTag(event.tags, 'image');
+  const imageUrl = sanitizeUrl(getTag(event.tags, 'image'));
   const status = getTag(event.tags, 'status');
   const currentParticipants = getTag(event.tags, 'current_participants');
   const statusConfig = getStatusConfig(status);
@@ -130,7 +132,7 @@ function StreamCard({ event }: { event: NostrEvent }) {
       {/* Thumbnail */}
       {imageUrl && (
         <div className="relative w-full aspect-video overflow-hidden bg-muted">
-          <img
+          <SafeImage
             src={imageUrl}
             alt=""
             className="w-full h-full object-cover"

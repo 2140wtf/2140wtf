@@ -92,6 +92,7 @@ const WalletSettingsPage = lazy(() => import("./pages/WalletSettingsPage").then(
 const BtcMapPage = lazy(() => import("./pages/BtcMapPage").then(m => ({ default: m.BtcMapPage })));
 const RoadstrPage = lazy(() => import("./pages/RoadstrPage").then(m => ({ default: m.RoadstrPage })));
 const MarketPage = lazy(() => import("./pages/MarketPage").then(m => ({ default: m.MarketPage })));
+const AuctionDetailPage = lazy(() => import("./pages/AuctionDetailPage"));
 const MessagesPage = lazy(() => import("./pages/MessagesPage").then(m => ({ default: m.MessagesPage })));
 const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m => ({ default: m.MessageThreadPage })));
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
@@ -350,11 +351,13 @@ export function AppRouter() {
               <Route path="/fal-live" element={<FalLivePage />} />
               <Route path="/roadstr" element={<RoadstrPage />} />
               <Route path="/market" element={<MarketPage />} />
+              <Route path="/market/auction/:sellerPubkey/:dTag" element={<AuctionDetailPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/bao/community" element={<BaoCommunitiesPage />} />
-              <Route path="/bao/baocommunity" element={<Navigate to="/bao/community" replace />} />
-              <Route path="/bao/chat" element={<Navigate to="/bao/community" replace />} />
+              <Route path="/community" element={<BaoCommunitiesPage />} />
+              <Route path="/bao/community" element={<Navigate to="/community" replace />} />
+              <Route path="/bao/baocommunity" element={<Navigate to="/community" replace />} />
+              <Route path="/bao/chat" element={<Navigate to="/community" replace />} />
               <Route path="/bao/markets" element={<PredictionMarketsPage />} />
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
@@ -373,7 +376,7 @@ export function AppRouter() {
                   relay pool. Keep old links working, but never mount its
                   composer: all room chat now uses the encrypted 2140.social
                   scroll transport and its single scoped relay. */}
-              <Route path="/groups" element={<Navigate to="/bao/community" replace />} />
+              <Route path="/groups" element={<Navigate to="/community" replace />} />
 
               <Route path="/pets" element={<PetsPage />} />
               <Route path="/pets/battle" element={<PetsBattlePage />} />

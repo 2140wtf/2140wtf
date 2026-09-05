@@ -3,6 +3,7 @@ import { useEncryptedSecureLocalStorage } from '@/hooks/useEncryptedSecureLocalS
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
 import { redactSecrets } from '@/lib/redactSecrets';
+import { isAllowedRelayUrl } from '@/lib/sanitizeUrl';
 import { LN } from '@getalby/sdk';
 
 export interface NWCConnection {
@@ -32,9 +33,12 @@ export interface NwcUriParts {
  * Validate a Nostr Wallet Connect URI.
  *
  * Accepts both `nostr+walletconnect://` and `nostrwalletconnect://`. Requires
- * the query string to contain non-empty `pubkey` and `relay` parameters. The
- * secret is parsed but never returned in error messages — callers must run any
- * error text through {@link redactSecrets} before displaying it.
+ * the query string to contain a 64-hex `pubkey` (the wallet service's Nostr
+ * key — every request is NIP-44-encrypted to it) and a relay URL using `wss://`
+ * (`ws://` only for localhost/loopback, matching the app's dev-relay policy —
+ * the relay carries all secret-bearing payment traffic). The secret is parsed
+ * but never returned in error messages — callers must run any error text
+ * through {@link redactSecrets} before displaying it.
  */
 export function validateNwcUri(rawUri: string): NwcUriParts | null {
   const uri = rawUri.trim();
@@ -57,10 +61,14 @@ export function validateNwcUri(rawUri: string): NwcUriParts | null {
   const pubkey = params.get('pubkey')?.trim();
   const relay = params.get('relay')?.trim();
   const secret = params.get('secret')?.trim();
-  if (!pubkey || pubkey.length === 0) return null;
-  if (!relay || relay.length === 0) return null;
+  // NIP-47: the wallet service pubkey is a 32-byte x-only hex key.
+  if (!pubkey || !/^[0-9a-f]{64}$/i.test(pubkey)) return null;
+  // The relay transports secret-bearing (end-to-end encrypted) payment
+  // requests — require a valid WebSocket URL, plaintext ws:// only for local
+  // dev relays.
+  if (!relay || !isAllowedRelayUrl(relay)) return null;
 
-  return { connectionString: uri, pubkey, relay, secret };
+  return { connectionString: uri, pubkey: pubkey.toLowerCase(), relay, secret };
 }
 
 export function useNWCInternal(userPubkey?: string) {

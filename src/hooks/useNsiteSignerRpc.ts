@@ -6,7 +6,7 @@
  * stored decision exists, a prompt is shown to the user. Prompts are
  * serialized (one at a time) to prevent overwhelming the user.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import {
@@ -44,6 +44,38 @@ interface UseNsiteSignerRpcOptions {
   siteName: string;
 }
 
+const HEX64 = /^[0-9a-f]{64}$/i;
+const MAX_RPC_TEXT_LENGTH = 64 * 1024;
+const MAX_RPC_TAGS = 1_000;
+const MAX_RPC_TAG_ITEMS = 32;
+const MAX_RPC_TAG_ITEM_LENGTH = 4 * 1024;
+
+function isValidPublicKey(value: unknown): value is string {
+  return typeof value === 'string' && HEX64.test(value);
+}
+
+function isValidEventTemplate(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Record<string, unknown>;
+  if (
+    typeof event.kind !== 'number'
+    || !Number.isSafeInteger(event.kind)
+    || event.kind < 0
+    || event.kind > 4_294_967_295
+    || (event.content !== undefined && (typeof event.content !== 'string' || event.content.length > MAX_RPC_TEXT_LENGTH))
+    || (event.created_at !== undefined && (!Number.isSafeInteger(event.created_at) || (event.created_at as number) < 0))
+  ) return false;
+  if (event.tags !== undefined) {
+    if (!Array.isArray(event.tags) || event.tags.length > MAX_RPC_TAGS) return false;
+    if (!event.tags.every((tag) => (
+      Array.isArray(tag)
+      && tag.length <= MAX_RPC_TAG_ITEMS
+      && tag.every((item) => typeof item === 'string' && item.length <= MAX_RPC_TAG_ITEM_LENGTH)
+    ))) return false;
+  }
+  return true;
+}
+
 interface UseNsiteSignerRpcResult {
   /** The `onRpc` callback to pass to SandboxFrame. */
   onRpc: (
@@ -67,6 +99,14 @@ export function useNsiteSignerRpc({
 }: UseNsiteSignerRpcOptions): UseNsiteSignerRpcResult {
   const { user } = useCurrentUser();
   const [pendingPrompt, setPendingPrompt] = useState<NsitePromptState | null>(null);
+  // SandboxFrame validates the iframe origin and source, but a malicious or
+  // buggy nsite can still send several valid RPC messages at once. Keep the
+  // parent-side signer path serialized as a second boundary; otherwise one
+  // request could overwrite the single permission prompt resolver.
+  const rpcQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const rpcQueueDepthRef = useRef(0);
+  const rpcCancelledRef = useRef(false);
+  const RPC_QUEUE_LIMIT = 32;
 
   // Ref to the resolve/reject pair for the current prompt, so the prompt UI
   // can resolve it without a stale closure.
@@ -137,7 +177,7 @@ export function useNsiteSignerRpc({
   // RPC handler
   // ---------------------------------------------------------------------------
 
-  const onRpc = useCallback(
+  const executeRpc = useCallback(
     async (
       method: string,
       params: unknown,
@@ -162,7 +202,7 @@ export function useNsiteSignerRpc({
         // ------------------------------------------------------------------
         case 'nostr.signEvent': {
           const event = p.event as Record<string, unknown> | undefined;
-          if (!event || typeof event.kind !== 'number') {
+          if (!isValidEventTemplate(event)) {
             throw new Error('Invalid event');
           }
 
@@ -194,7 +234,7 @@ export function useNsiteSignerRpc({
 
           const pubkey = p.pubkey as string;
           const plaintext = p.plaintext as string;
-          if (!pubkey || typeof plaintext !== 'string') {
+          if (!isValidPublicKey(pubkey) || typeof plaintext !== 'string' || plaintext.length > MAX_RPC_TEXT_LENGTH) {
             throw new Error('Invalid params');
           }
 
@@ -211,7 +251,7 @@ export function useNsiteSignerRpc({
 
           const pubkey = p.pubkey as string;
           const ciphertext = p.ciphertext as string;
-          if (!pubkey || typeof ciphertext !== 'string') {
+          if (!isValidPublicKey(pubkey) || typeof ciphertext !== 'string' || ciphertext.length > MAX_RPC_TEXT_LENGTH) {
             throw new Error('Invalid params');
           }
 
@@ -231,7 +271,7 @@ export function useNsiteSignerRpc({
 
           const pubkey = p.pubkey as string;
           const plaintext = p.plaintext as string;
-          if (!pubkey || typeof plaintext !== 'string') {
+          if (!isValidPublicKey(pubkey) || typeof plaintext !== 'string' || plaintext.length > MAX_RPC_TEXT_LENGTH) {
             throw new Error('Invalid params');
           }
 
@@ -248,7 +288,7 @@ export function useNsiteSignerRpc({
 
           const pubkey = p.pubkey as string;
           const ciphertext = p.ciphertext as string;
-          if (!pubkey || typeof ciphertext !== 'string') {
+          if (!isValidPublicKey(pubkey) || typeof ciphertext !== 'string' || ciphertext.length > MAX_RPC_TEXT_LENGTH) {
             throw new Error('Invalid params');
           }
 
@@ -266,6 +306,49 @@ export function useNsiteSignerRpc({
     },
     [user, checkPermission],
   );
+
+  const onRpc = useCallback(
+    async (
+      method: string,
+      params: unknown,
+    ): Promise<unknown> => {
+      if (rpcCancelledRef.current) {
+        throw new Error('Signer request cancelled');
+      }
+      if (rpcQueueDepthRef.current >= RPC_QUEUE_LIMIT) {
+        throw new Error('Too many signer requests');
+      }
+
+      rpcQueueDepthRef.current += 1;
+      const previous = rpcQueueRef.current;
+      let release!: () => void;
+      const turn = new Promise<void>((resolve) => { release = resolve; });
+      rpcQueueRef.current = previous.then(() => turn);
+
+      await previous;
+      try {
+        if (rpcCancelledRef.current) {
+          throw new Error('Signer request cancelled');
+        }
+        return await executeRpc(method, params);
+      } finally {
+        rpcQueueDepthRef.current -= 1;
+        release();
+      }
+    },
+    [executeRpc],
+  );
+
+  // Do not leave an iframe request hanging forever if the preview closes while
+  // a permission prompt is open. The SandboxFrame will turn the rejection into
+  // a JSON-RPC error for the nsite.
+  useEffect(() => {
+    return () => {
+      rpcCancelledRef.current = true;
+      promptResolverRef.current?.reject(new Error('Signer request cancelled'));
+      promptResolverRef.current = null;
+    };
+  }, []);
 
   return { onRpc, pendingPrompt, resolvePrompt };
 }

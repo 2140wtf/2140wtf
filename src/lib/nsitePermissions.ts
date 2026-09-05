@@ -54,14 +54,68 @@ export interface NsiteAllowance {
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'nostr:nsite-permissions';
+const MAX_ALLOWANCES = 256;
+const MAX_PERMISSIONS_PER_ALLOWANCE = 512;
+const MAX_SITE_ID_LENGTH = 253;
+const MAX_SITE_NAME_LENGTH = 200;
+const HEX64 = /^[0-9a-f]{64}$/;
+const PERMISSION_TYPES = new Set<NsitePermissionType>([
+  'signEvent',
+  'nip04.encrypt',
+  'nip04.decrypt',
+  'nip44.encrypt',
+  'nip44.decrypt',
+]);
 
-/** Read all allowances from localStorage. */
+function isPermissionType(value: unknown): value is NsitePermissionType {
+  return typeof value === 'string' && PERMISSION_TYPES.has(value as NsitePermissionType);
+}
+
+function isValidPermission(value: unknown): value is NsitePermission {
+  if (!value || typeof value !== 'object') return false;
+  const permission = value as Record<string, unknown>;
+  if (!isPermissionType(permission.type) || typeof permission.allowed !== 'boolean') return false;
+  if (permission.type === 'signEvent') {
+    return typeof permission.kind === 'number'
+      && Number.isSafeInteger(permission.kind)
+      && permission.kind >= 0
+      && permission.kind <= 4_294_967_295;
+  }
+  return permission.kind === null;
+}
+
+function parseAllowance(value: unknown): NsiteAllowance | null {
+  if (!value || typeof value !== 'object') return null;
+  const allowance = value as Record<string, unknown>;
+  if (
+    typeof allowance.siteId !== 'string' || allowance.siteId.length === 0 || allowance.siteId.length > MAX_SITE_ID_LENGTH
+    || typeof allowance.siteName !== 'string' || allowance.siteName.length > MAX_SITE_NAME_LENGTH
+    || typeof allowance.userPubkey !== 'string' || !HEX64.test(allowance.userPubkey)
+    || typeof allowance.createdAt !== 'number' || !Number.isSafeInteger(allowance.createdAt) || allowance.createdAt < 0
+    || !Array.isArray(allowance.permissions) || allowance.permissions.length > MAX_PERMISSIONS_PER_ALLOWANCE
+  ) return null;
+  const permissions = allowance.permissions.filter(isValidPermission);
+  if (permissions.length !== allowance.permissions.length) return null;
+  return {
+    siteId: allowance.siteId,
+    siteName: allowance.siteName,
+    userPubkey: allowance.userPubkey,
+    permissions,
+    createdAt: allowance.createdAt,
+  };
+}
+
+/** Read all allowances from localStorage, failing closed on malformed data. */
 function readAllowances(): NsiteAllowance[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.slice(0, MAX_ALLOWANCES).flatMap((value) => {
+      const allowance = parseAllowance(value);
+      return allowance ? [allowance] : [];
+    });
   } catch {
     return [];
   }
@@ -70,7 +124,7 @@ function readAllowances(): NsiteAllowance[] {
 /** Write all allowances to localStorage and notify same-tab subscribers. */
 function writeAllowances(allowances: NsiteAllowance[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(allowances));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allowances.slice(0, MAX_ALLOWANCES)));
   } catch {
     // localStorage may be unavailable (private mode, quota); skip persistence.
     return;
@@ -133,6 +187,12 @@ export function setNsitePermission(
   kind: number | null,
   allowed: boolean,
 ): void {
+  if (
+    siteId.length === 0 || siteId.length > MAX_SITE_ID_LENGTH
+    || siteName.length > MAX_SITE_NAME_LENGTH
+    || !HEX64.test(userPubkey)
+    || !isValidPermission({ type, kind, allowed })
+  ) return;
   const allowances = readAllowances();
   let allowance = findAllowance(allowances, siteId, userPubkey);
 

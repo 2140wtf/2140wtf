@@ -1,6 +1,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { readResponseBytes } from '@/lib/readResponseBytes';
+import { sanitizePublicHttpsUrl } from '@/lib/sanitizeUrl';
 
 /**
  * Helpers for Blossom-backed encrypted settings backups.
@@ -39,7 +40,7 @@ export function buildBlossomBackupTag(url: string, ciphertext: string): string[]
 export function parseBlossomBackupTag(tags: string[][]): { url: string; hash: string } | undefined {
   const tag = tags.find(([name]) => name === 'blossom');
   if (!tag?.[1] || !tag?.[2]) return undefined;
-  const url = sanitizeUrl(tag[1]);
+  const url = sanitizePublicHttpsUrl(tag[1]);
   if (!url) return undefined;
   return { url, hash: tag[2] };
 }
@@ -48,16 +49,22 @@ export function parseBlossomBackupTag(tags: string[][]): { url: string; hash: st
  * Fetch a Blossom-backed encrypted backup and verify its sha256 hash.
  * Returns the ciphertext as a string, or `null` if unavailable or invalid.
  */
+export const MAX_ENCRYPTED_BACKUP_BYTES = 4 * 1024 * 1024;
+
 export async function fetchEncryptedBackup(
   url: string,
   expectedHash: string,
   signal?: AbortSignal,
 ): Promise<string | null> {
+  const safeUrl = sanitizePublicHttpsUrl(url);
+  if (!safeUrl) return null;
+
   try {
-    const response = await fetch(url, { signal });
+    const response = await fetch(safeUrl, { signal });
     if (!response.ok) return null;
 
-    const text = await response.text();
+    const bytes = await readResponseBytes(response, MAX_ENCRYPTED_BACKUP_BYTES);
+    const text = new TextDecoder().decode(bytes);
     const actualHash = computeBackupHash(text);
     if (actualHash !== expectedHash) {
       console.warn('Encrypted backup hash mismatch');

@@ -9,6 +9,8 @@
 
 import { bech32 } from "@scure/base";
 
+import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
+
 export interface LnurlPayParams {
   callback: string;
   /** millisats */
@@ -23,14 +25,9 @@ export interface LnurlPayParams {
   nostrPubkey?: string;
 }
 
-/** Require https (LUD-06 does too): a profile field must not be able to point
- * payment traffic at plain http or, worse, probe intranet hosts over it. */
+/** Require a public HTTPS endpoint before contacting a wallet service. */
 function httpsOnly(url: string): string | null {
-  try {
-    return new URL(url).protocol === "https:" ? url : null;
-  } catch {
-    return null;
-  }
+  return sanitizePublicHttpsUrl(url) ?? null;
 }
 
 /** lud16 `name@domain` → LNURL-pay metadata URL. */
@@ -38,7 +35,7 @@ function lud16Url(address: string): string | null {
   const match = address.trim().match(/^([\w.+-]+)@([\w.-]+)$/);
   if (!match) return null;
   const [, name, domain] = match;
-  return `https://${domain}/.well-known/lnurlp/${name.toLowerCase()}`;
+  return httpsOnly(`https://${domain}/.well-known/lnurlp/${name.toLowerCase()}`);
 }
 
 /** lud06 bech32 `lnurl1…` → its embedded URL (https only). */
@@ -79,7 +76,7 @@ export async function resolveLnurlPay(
     ? data.nostrPubkey.toLowerCase()
     : undefined;
   return {
-    callback: data.callback,
+    callback: httpsOnly(data.callback)!,
     minSendable: typeof data.minSendable === "number" ? data.minSendable : 1000,
     maxSendable: typeof data.maxSendable === "number" ? data.maxSendable : Number.MAX_SAFE_INTEGER,
     commentAllowed: typeof data.commentAllowed === "number" ? data.commentAllowed : 0,
@@ -101,7 +98,9 @@ export async function fetchLnurlInvoice(
   opts: { amountMsats: number; comment?: string; zapRequest?: string },
   fetchFn: typeof fetch = fetch,
 ): Promise<string> {
-  const url = new URL(params.callback);
+  const callback = httpsOnly(params.callback);
+  if (!callback) throw new Error("Recipient's lightning callback is not a public HTTPS URL.");
+  const url = new URL(callback);
   url.searchParams.set("amount", String(opts.amountMsats));
   if (opts.comment && params.commentAllowed > 0) {
     url.searchParams.set("comment", opts.comment.slice(0, params.commentAllowed));

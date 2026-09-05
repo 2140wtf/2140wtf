@@ -30,6 +30,7 @@ const exactRoutes: Record<string, RouteLoader> = {
   '/roadstr': () => import('@/pages/RoadstrPage'),
   '/market': () => import('@/pages/MarketPage'),
   '/messages': () => import('@/pages/MessagesPage'),
+  '/community': () => import('@/pages/BaoCommunitiesPage'),
   '/bao/community': () => import('@/pages/BaoCommunitiesPage'),
   '/bao/markets': () => import('@/pages/PredictionMarketsPage'),
   '/bao/fund': () => import('@/pages/BaoFundingPage'),

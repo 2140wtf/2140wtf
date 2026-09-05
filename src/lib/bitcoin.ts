@@ -860,10 +860,9 @@ export async function broadcastTransaction(
 
   if (!response.ok) {
     const body = await response.text();
-    // Don't include the server response body in the user-facing error — it
-    // could contain the raw transaction hex or other wallet data in some
-    // Esplora/mempool configurations. Log it for debugging instead.
-    console.warn('Broadcast failed:', response.status, body);
+    // Do not log the server response body: it may contain the raw transaction
+    // hex or other wallet data. Keep only a bounded diagnostic.
+    console.warn('Broadcast failed:', response.status, `response_length=${body.length}`);
     throw new Error(`Broadcast failed (${response.status}). Please try again.`);
   }
 

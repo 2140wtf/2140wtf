@@ -201,7 +201,7 @@ describe('writePendingReceive attempts counter', () => {
     expect((await loadPendingReceive('hash-b', encKey))!.attempts).toBe(0);
     await writePendingReceive('cashuAtoken', 'hash-b', ['https://mint.example.com'], 10, encKey, undefined, 1);
     expect((await loadPendingReceive('hash-b', encKey))!.attempts).toBe(1);
-    clearPendingReceive('hash-b');
+    await clearPendingReceive('hash-b');
     expect(await loadPendingReceive('hash-b', encKey)).toBeNull();
   });
 });

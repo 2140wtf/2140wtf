@@ -65,7 +65,14 @@ export function useCurrentUser() {
         const user = loginToUser(login);
         users.push(user);
       } catch (error) {
-        console.warn("Skipped invalid login", login.id, error);
+        // Login ids can embed credential material (for example, an nsec).
+        // Keep diagnostics limited to the non-sensitive login type and error
+        // class rather than logging the identifier or exception payload.
+        console.warn(
+          "Skipped invalid login",
+          login.type,
+          error instanceof Error ? error.name : "UnknownError",
+        );
       }
     }
 

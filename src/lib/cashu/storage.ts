@@ -190,36 +190,40 @@ export async function loadMintedQuotes(key: CryptoKey, legacyKey?: CryptoKey, na
 }
 
 export async function writeMintedQuote(quoteId: string, key: CryptoKey, maxAttempts = 2, namespace?: string): Promise<void> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const existing = await loadMintedQuotes(key, undefined, namespace);
-      if (existing.includes(quoteId)) return;
-      existing.push(quoteId);
-      const encrypted = await encryptData(JSON.stringify(existing), key);
-      localStorage.setItem(mintedQuotesKey(namespace), encrypted);
-      return;
-    } catch (e) {
-      lastErr = e;
+  return withTxLock(async () => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const existing = await loadMintedQuotes(key, undefined, namespace);
+        if (existing.includes(quoteId)) return;
+        existing.push(quoteId);
+        const encrypted = await encryptData(JSON.stringify(existing), key);
+        localStorage.setItem(mintedQuotesKey(namespace), encrypted);
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
     }
-  }
-  throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+    throw new Error(`Failed to persist minted quote after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+  }, namespace);
 }
 
 export async function saveMintedQuotes(quoteIds: string[], key: CryptoKey, maxAttempts = 2, namespace?: string): Promise<void> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      const existing = await loadMintedQuotes(key, undefined, namespace);
-      const merged = [...new Set([...existing, ...quoteIds])];
-      const encrypted = await encryptData(JSON.stringify(merged), key);
-      localStorage.setItem(mintedQuotesKey(namespace), encrypted);
-      return;
-    } catch (e) {
-      lastErr = e;
+  return withTxLock(async () => {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const existing = await loadMintedQuotes(key, undefined, namespace);
+        const merged = [...new Set([...existing, ...quoteIds])];
+        const encrypted = await encryptData(JSON.stringify(merged), key);
+        localStorage.setItem(mintedQuotesKey(namespace), encrypted);
+        return;
+      } catch (e) {
+        lastErr = e;
+      }
     }
-  }
-  throw new Error(`Failed to persist minted quotes after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+    throw new Error(`Failed to persist minted quotes after ${maxAttempts} attempts: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
+  }, namespace);
 }
 
 /* ── Pending receive recovery ───────────────────────────────────── */
@@ -258,8 +262,18 @@ export async function loadPendingReceive(tokenHash: string, key: CryptoKey, lega
   }
 }
 
-export function clearPendingReceive(tokenHash: string, namespace?: string): void {
-  try { localStorage.removeItem(pendingReceiveKey(tokenHash, namespace)); } catch { /* noop */ }
+export async function clearPendingReceive(tokenHash: string, namespace?: string): Promise<void> {
+  // A delete must share the journal lock with writes; otherwise a concurrent
+  // write that started before this clear can complete afterward and resurrect
+  // an already-consumed retry entry.
+  try {
+    await withTxLock(async () => {
+      try { localStorage.removeItem(pendingReceiveKey(tokenHash, namespace)); } catch { /* noop */ }
+    }, namespace);
+  } catch {
+    // Clearing recovery is best-effort, matching the previous synchronous API;
+    // never surface an unhandled rejection from a cleanup path.
+  }
 }
 
 export async function writePendingReceive(
@@ -272,22 +286,27 @@ export async function writePendingReceive(
   attempts?: number,
   namespace?: string,
 ): Promise<void> {
-  const existing = await loadPendingReceive(tokenHash, key, undefined, namespace);
-  const entry: PendingReceiveEntry = {
-    tokenStr,
-    tokenHash,
-    mintUrls,
-    amount,
-    status: 'pending',
-    timestamp: Date.now(),
-    // An explicit attempts value wins (the reconciler increments it); without
-    // one, preserve the stored counter instead of silently resetting it to 0 —
-    // otherwise the max-attempts eviction never trips.
-    attempts: attempts ?? existing?.attempts ?? 0,
-    succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
-  };
-  const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
-  localStorage.setItem(pendingReceiveKey(tokenHash, namespace), encrypted);
+  // This is a read-modify-write journal. Serialize it with the transaction
+  // lock so two tabs cannot overwrite a newer attempt counter or recovery
+  // progress with stale state.
+  return withTxLock(async () => {
+    const existing = await loadPendingReceive(tokenHash, key, undefined, namespace);
+    const entry: PendingReceiveEntry = {
+      tokenStr,
+      tokenHash,
+      mintUrls,
+      amount,
+      status: 'pending',
+      timestamp: Date.now(),
+      // An explicit attempts value wins (the reconciler increments it); without
+      // one, preserve the stored counter instead of silently resetting it to 0 —
+      // otherwise the max-attempts eviction never trips.
+      attempts: attempts ?? existing?.attempts ?? 0,
+      succeededMintUrls: succeededMintUrls ?? existing?.succeededMintUrls ?? [],
+    };
+    const encrypted = await encryptData(JSON.stringify(entry), key, pendingReceiveContext);
+    localStorage.setItem(pendingReceiveKey(tokenHash, namespace), encrypted);
+  }, namespace);
 }
 
 const DEFAULT_PREFIX = 'freedomid_';
@@ -406,13 +425,6 @@ function supportsIndexedDB(): boolean {
   return typeof indexedDB !== 'undefined';
 }
 
-function idbRequest<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
 let lockDbPromise: Promise<IDBDatabase> | null = null;
 
 function openLockDB(): Promise<IDBDatabase> {
@@ -438,16 +450,26 @@ class IdbLockUnavailableError extends Error {}
 async function idbAcquire(name: string, token: string, leaseMs: number): Promise<boolean> {
   try {
     const db = await openLockDB();
-    const tx = db.transaction(LOCK_STORE, 'readwrite');
-    const store = tx.objectStore(LOCK_STORE);
-    const existing = await idbRequest<IdbLockRecord | undefined>(store.get(name));
-    const now = Date.now();
-    if (!existing || existing.expires < now) {
-      const record: IdbLockRecord = { name, token, expires: now + leaseMs };
-      await idbRequest(store.put(record));
-    }
-    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
-    return current?.token === token;
+    return await new Promise<boolean>((resolve, reject) => {
+      let acquired = false;
+      const tx = db.transaction(LOCK_STORE, 'readwrite');
+      const store = tx.objectStore(LOCK_STORE);
+      const request = store.get(name);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const existing = request.result as IdbLockRecord | undefined;
+        if (!existing || existing.expires < Date.now()) {
+          // Keep the read and conditional write in one transaction. Awaiting
+          // the get() promise before put() lets real browsers auto-commit the
+          // transaction and breaks the compare-and-swap guarantee.
+          store.put({ name, token, expires: Date.now() + leaseMs } satisfies IdbLockRecord);
+          acquired = true;
+        }
+      };
+      tx.oncomplete = () => resolve(acquired);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB lock transaction aborted'));
+    });
   } catch (e) {
     // Surface unrecoverable IndexedDB failures so the caller can fall back.
     if (e instanceof Error && (e.name === 'QuotaExceededError' || e.name === 'InvalidStateError' || e.name === 'UnknownError')) {
@@ -464,13 +486,23 @@ async function idbAcquire(name: string, token: string, leaseMs: number): Promise
 async function idbExtend(name: string, token: string, leaseMs: number): Promise<boolean> {
   try {
     const db = await openLockDB();
-    const tx = db.transaction(LOCK_STORE, 'readwrite');
-    const store = tx.objectStore(LOCK_STORE);
-    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
-    if (current?.token !== token) return false;
-    current.expires = Date.now() + leaseMs;
-    await idbRequest(store.put(current));
-    return true;
+    return await new Promise<boolean>((resolve, reject) => {
+      let extended = false;
+      const tx = db.transaction(LOCK_STORE, 'readwrite');
+      const store = tx.objectStore(LOCK_STORE);
+      const request = store.get(name);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const current = request.result as IdbLockRecord | undefined;
+        if (current?.token === token) {
+          store.put({ ...current, expires: Date.now() + leaseMs });
+          extended = true;
+        }
+      };
+      tx.oncomplete = () => resolve(extended);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB lease transaction aborted'));
+    });
   } catch {
     return true;
   }
@@ -479,12 +511,19 @@ async function idbExtend(name: string, token: string, leaseMs: number): Promise<
 async function idbRelease(name: string, token: string): Promise<void> {
   try {
     const db = await openLockDB();
-    const tx = db.transaction(LOCK_STORE, 'readwrite');
-    const store = tx.objectStore(LOCK_STORE);
-    const current = await idbRequest<IdbLockRecord | undefined>(store.get(name));
-    if (current?.token === token) {
-      await idbRequest(store.delete(name));
-    }
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(LOCK_STORE, 'readwrite');
+      const store = tx.objectStore(LOCK_STORE);
+      const request = store.get(name);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const current = request.result as IdbLockRecord | undefined;
+        if (current?.token === token) store.delete(name);
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB release transaction aborted'));
+    });
   } catch { /* ignore */ }
 }
 
@@ -660,13 +699,23 @@ export class CrossTabLock {
     if (this.useIdb) {
       try {
         const db = await openLockDB();
-        const tx = db.transaction(LOCK_STORE, 'readwrite');
-        const store = tx.objectStore(LOCK_STORE);
-        const current = await idbRequest<IdbLockRecord | undefined>(store.get(this.key));
-        if (current?.token !== this.owner) return false;
-        current.expires = Date.now() + LOCK_LEASE_MS;
-        await idbRequest(store.put(current));
-        return true;
+        return await new Promise<boolean>((resolve, reject) => {
+          let refreshed = false;
+          const tx = db.transaction(LOCK_STORE, 'readwrite');
+          const store = tx.objectStore(LOCK_STORE);
+          const request = store.get(this.key);
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const current = request.result as IdbLockRecord | undefined;
+            if (current?.token === this.owner) {
+              store.put({ ...current, expires: Date.now() + LOCK_LEASE_MS });
+              refreshed = true;
+            }
+          };
+          tx.oncomplete = () => resolve(refreshed);
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error ?? new Error('IndexedDB refresh transaction aborted'));
+        });
       } catch {
         // IDB hiccup — the extend timer already tolerates transient failures;
         // don't break reentrancy on a flaky read.
@@ -1364,35 +1413,39 @@ export async function isProcessedTokenHash(hash: string, encKey?: CryptoKey, leg
 
 export async function saveProcessedTokenHashes(entries: ProcessedTokenEntry[], encKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!encKey) return;
-  const now = Date.now();
-  const trimmed = entries
-    .filter((e) => e && typeof e === 'object' && typeof e.hash === 'string' && e.hash.length > 0 && typeof e.expiresAt === 'number' && e.expiresAt > now)
-    .sort((a, b) => b.expiresAt - a.expiresAt)
-    .slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
-  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
-  try {
-    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
-  } catch (e) {
-    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
-    throw new Error(`Failed to save processed token hashes: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return withTxLock(async () => {
+    const now = Date.now();
+    const trimmed = entries
+      .filter((e) => e && typeof e === 'object' && typeof e.hash === 'string' && e.hash.length > 0 && typeof e.expiresAt === 'number' && e.expiresAt > now)
+      .sort((a, b) => b.expiresAt - a.expiresAt)
+      .slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
+    const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
+    try {
+      localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      throw new Error(`Failed to save processed token hashes: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, namespace);
 }
 
 export async function addProcessedTokenHash(hash: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!hash || !encKey) return;
-  const entries = await loadProcessedTokenHashes(encKey, legacyKey, namespace);
-  const now = Date.now();
-  const filtered = entries.filter((e) => e.hash !== hash);
-  filtered.push({ hash, expiresAt: now + PROCESSED_TOKEN_TTL_MS });
-  filtered.sort((a, b) => b.expiresAt - a.expiresAt);
-  const trimmed = filtered.slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
-  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
-  try {
-    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
-  } catch (e) {
-    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
-    throw new Error(`Failed to save processed token hash: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return withTxLock(async () => {
+    const entries = await loadProcessedTokenHashes(encKey, legacyKey, namespace);
+    const now = Date.now();
+    const filtered = entries.filter((e) => e.hash !== hash);
+    filtered.push({ hash, expiresAt: now + PROCESSED_TOKEN_TTL_MS });
+    filtered.sort((a, b) => b.expiresAt - a.expiresAt);
+    const trimmed = filtered.slice(0, MAX_PROCESSED_TOKEN_ENTRIES);
+    const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_TOKENS_CONTEXT);
+    try {
+      localStorage.setItem(resolvePrefix(namespace) + PROCESSED_TOKENS_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      throw new Error(`Failed to save processed token hash: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, namespace);
 }
 
 // ── Processed Nutzap ids (receive dedup, survives restart) ─
@@ -1441,19 +1494,21 @@ export async function isProcessedNutzapId(id: string, encKey?: CryptoKey, legacy
 
 export async function addProcessedNutzapId(id: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!id || !encKey) return;
-  const entries = await loadProcessedNutzapIds(encKey, legacyKey, namespace);
-  const now = Date.now();
-  const filtered = entries.filter((e) => e.id !== id);
-  filtered.push({ id, expiresAt: now + PROCESSED_NUTZAP_TTL_MS });
-  filtered.sort((a, b) => b.expiresAt - a.expiresAt);
-  const trimmed = filtered.slice(0, MAX_PROCESSED_NUTZAP_ENTRIES);
-  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_NUTZAP_CONTEXT);
-  try {
-    localStorage.setItem(resolvePrefix(namespace) + PROCESSED_NUTZAP_KEY, ciphertext);
-  } catch (e) {
-    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
-    throw new Error(`Failed to save processed Nutzap id: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return withTxLock(async () => {
+    const entries = await loadProcessedNutzapIds(encKey, legacyKey, namespace);
+    const now = Date.now();
+    const filtered = entries.filter((e) => e.id !== id);
+    filtered.push({ id, expiresAt: now + PROCESSED_NUTZAP_TTL_MS });
+    filtered.sort((a, b) => b.expiresAt - a.expiresAt);
+    const trimmed = filtered.slice(0, MAX_PROCESSED_NUTZAP_ENTRIES);
+    const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PROCESSED_NUTZAP_CONTEXT);
+    try {
+      localStorage.setItem(resolvePrefix(namespace) + PROCESSED_NUTZAP_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      throw new Error(`Failed to save processed Nutzap id: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, namespace);
 }
 
 // ── Pending Nutzap sends (recover from publish failure) ───
@@ -1515,32 +1570,36 @@ export async function loadPendingNutzaps(encKey?: CryptoKey, legacyKey?: CryptoK
 
 export async function savePendingNutzap(entry: PendingNutzapEntry, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!encKey || !entry?.id) return;
-  const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
-  const filtered = entries.filter((e) => e.id !== entry.id);
-  filtered.push(entry);
-  filtered.sort((a, b) => b.timestamp - a.timestamp);
-  const trimmed = filtered.slice(0, MAX_PENDING_NUTZAP_ENTRIES);
-  const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PENDING_NUTZAP_CONTEXT);
-  try {
-    localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
-  } catch (e) {
-    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
-    throw new Error(`Failed to save pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return withTxLock(async () => {
+    const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
+    const filtered = entries.filter((e) => e.id !== entry.id);
+    filtered.push(entry);
+    filtered.sort((a, b) => b.timestamp - a.timestamp);
+    const trimmed = filtered.slice(0, MAX_PENDING_NUTZAP_ENTRIES);
+    const ciphertext = await encryptData(JSON.stringify(trimmed), encKey, PENDING_NUTZAP_CONTEXT);
+    try {
+      localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      throw new Error(`Failed to save pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, namespace);
 }
 
 export async function removePendingNutzap(id: string, encKey?: CryptoKey, legacyKey?: CryptoKey, namespace?: string): Promise<void> {
   if (!encKey || !id) return;
-  const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
-  const filtered = entries.filter((e) => e.id !== id);
-  if (filtered.length === entries.length) return;
-  const ciphertext = await encryptData(JSON.stringify(filtered), encKey, PENDING_NUTZAP_CONTEXT);
-  try {
-    localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
-  } catch (e) {
-    if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
-    throw new Error(`Failed to remove pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return withTxLock(async () => {
+    const entries = await loadPendingNutzaps(encKey, legacyKey, namespace);
+    const filtered = entries.filter((e) => e.id !== id);
+    if (filtered.length === entries.length) return;
+    const ciphertext = await encryptData(JSON.stringify(filtered), encKey, PENDING_NUTZAP_CONTEXT);
+    try {
+      localStorage.setItem(resolvePrefix(namespace) + PENDING_NUTZAP_KEY, ciphertext);
+    } catch (e) {
+      if (isStorageFullError(e)) resetCanWriteLocalStorageCache();
+      throw new Error(`Failed to remove pending Nutzap: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, namespace);
 }
 
 export function pendingNutzapCooldownRemaining(entry: PendingNutzapEntry, now = Date.now()): number {

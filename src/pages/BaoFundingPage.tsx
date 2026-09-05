@@ -304,7 +304,7 @@ export function BaoFundingPage() {
             <AccordionTrigger className="text-left">Where are code review and discussion?</AccordionTrigger>
             <AccordionContent className="space-y-3 text-muted-foreground">
               <p>The public repository is the reviewable source of code and evidence. The creator can bring the campaign team into a ₿AO community for encrypted planning, review discussion, and selected member access. Funding alone does not silently create or expose a private community.</p>
-              <Button asChild variant="outline" size="sm"><Link to="/bao/community"><MessageCircle className="mr-2 size-4" />Open 2140 Social</Link></Button>
+              <Button asChild variant="outline" size="sm"><Link to="/community"><MessageCircle className="mr-2 size-4" />Open 2140 Social</Link></Button>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -641,7 +641,7 @@ function CampaignCard({ fundraiser: f, expanded, onToggle, detail, detailLoading
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">No public repository was attached.</div>
             )}
             <Button asChild variant="outline" className="justify-start">
-              <Link to="/bao/community" className="inline-flex items-center"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
+              <Link to="/community" className="inline-flex items-center"><MessageCircle className="mr-2 size-4" /> Discuss work in a ₿AO</Link>
             </Button>
           </div>
 

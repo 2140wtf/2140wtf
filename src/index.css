@@ -266,6 +266,21 @@
     }
   }
 
+  /* Fal Live sits beneath the sticky mobile top bar and above the fixed
+     bottom navigation. Reserve both chrome regions so cross-origin iframe
+     controls at the studio's bottom edge (including expanded Choices) remain
+     visible and tappable. */
+  .fal-live-height {
+    height: calc(100dvh - var(--top-bar-height) - var(--bottom-nav-height) - var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    max-height: calc(100dvh - var(--top-bar-height) - var(--bottom-nav-height) - var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  }
+  @media (min-width: 900px) {
+    .fal-live-height {
+      height: 100dvh;
+      max-height: 100dvh;
+    }
+  }
+
   /* Live stream page height on mobile: full viewport minus top bar, bottom nav, and safe-area insets */
   .livestream-height {
     height: calc(100dvh - var(--top-bar-height) - var(--bottom-nav-height) - var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));

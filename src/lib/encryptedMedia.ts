@@ -2,6 +2,8 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import type { ImetaEncryption } from "@/lib/imeta";
+import { readResponseBytes } from "@/lib/readResponseBytes";
+import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
 
 /**
  * Decrypt client-encrypted Blossom attachments (Vector / 0xChat).
@@ -30,6 +32,8 @@ import type { ImetaEncryption } from "@/lib/imeta";
 
 /** Max total decrypted bytes to keep alive as object URLs (~192 MB). */
 const MAX_CACHED_BYTES = 192 * 1024 * 1024;
+/** Max ciphertext accepted from one encrypted-media fetch. */
+export const MAX_ENCRYPTED_MEDIA_BYTES = 256 * 1024 * 1024;
 /** How long to keep a revoked entry's object URL alive after eviction. */
 const REVOKE_GRACE_MS = 30_000;
 
@@ -89,7 +93,10 @@ export async function decryptAttachmentToObjectURL(
   mime: string | undefined,
   signal?: AbortSignal,
 ): Promise<string> {
-  const k = cacheKey(url, enc);
+  const safeUrl = sanitizePublicHttpsUrl(url);
+  if (!safeUrl) throw new Error("Encrypted media URL must be a public HTTPS URL.");
+
+  const k = cacheKey(safeUrl, enc);
   const existing = cache.get(k);
   if (existing) {
     touch(k, existing);
@@ -99,9 +106,9 @@ export async function decryptAttachmentToObjectURL(
   const entry: Entry = { promise: Promise.resolve(""), bytes: 0 };
 
   entry.promise = (async () => {
-    const res = await fetch(url, { signal });
+    const res = await fetch(safeUrl, { signal });
     if (!res.ok) throw new Error(`attachment fetch failed: HTTP ${res.status}`);
-    const ciphertext = new Uint8Array(await res.arrayBuffer());
+    const ciphertext = await readResponseBytes(res, MAX_ENCRYPTED_MEDIA_BYTES);
     const plaintext = await decryptBytes(ciphertext, enc.key, enc.nonce);
     const blob = new Blob([plaintext], { type: mime || "application/octet-stream" });
     const objectUrl = URL.createObjectURL(blob);

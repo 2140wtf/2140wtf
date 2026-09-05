@@ -11,13 +11,30 @@ export function sanitizeUrl(raw: string | undefined | null): string | undefined 
   if (!raw) return undefined;
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol === 'https:') {
+    if (parsed.protocol === 'https:' && !isLocalNetworkUrl(raw)) {
       return parsed.href;
     }
   } catch {
     // not a valid URL
   }
   return undefined;
+}
+
+/**
+ * Return a public HTTPS URL suitable for browser-side fetches that may carry
+ * credentials or payment data. In addition to the general URL policy, reject
+ * embedded HTTP credentials so an untrusted endpoint cannot receive secrets
+ * through a userinfo-bearing URL.
+ */
+export function sanitizePublicHttpsUrl(raw: string | undefined | null): string | undefined {
+  const safe = sanitizeUrl(raw);
+  if (!safe) return undefined;
+  try {
+    const parsed = new URL(safe);
+    return parsed.username || parsed.password ? undefined : safe;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -94,6 +111,7 @@ export function isAllowedRelayUrl(url: string | undefined | null): boolean {
   if (!url) return false;
   try {
     const parsed = new URL(url);
+    if (parsed.username || parsed.password) return false;
     if (parsed.protocol === 'wss:') return true;
     if (parsed.protocol === 'ws:' && isLocalhost(parsed.hostname)) return true;
     return false;
@@ -115,6 +133,27 @@ export function isAllowedHttpsUrl(url: string | undefined | null): boolean {
     if (parsed.protocol === 'https:') return true;
     if (parsed.protocol === 'http:' && isLocalhost(parsed.hostname)) return true;
     return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate a Blossom origin supplied by untrusted event data.
+ *
+ * Unlike general service configuration, nsite server tags must never point at
+ * local/private network addresses or carry credentials. This prevents a
+ * malicious nsite from turning every preview into a browser-side local-network
+ * probe or leaking credentials through an embedded URL.
+ */
+export function isAllowedBlossomUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' &&
+      !parsed.username &&
+      !parsed.password &&
+      !isLocalNetworkUrl(url);
   } catch {
     return false;
   }

@@ -80,4 +80,20 @@ describe('fetchEncryptedBackup', () => {
     const result = await fetchEncryptedBackup('https://blossom.example.com/abc123', 'deadbeef');
     expect(result).toBeNull();
   });
+
+  it('does not fetch private-network backup URLs', async () => {
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock;
+
+    const result = await fetchEncryptedBackup('https://127.0.0.1/backup', 'deadbeef');
+    expect(result).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an oversized backup response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response('x'.repeat(4 * 1024 * 1024 + 1)));
+
+    const result = await fetchEncryptedBackup('https://blossom.example.com/large', 'deadbeef');
+    expect(result).toBeNull();
+  });
 });

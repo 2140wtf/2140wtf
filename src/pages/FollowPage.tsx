@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { NoteCard } from '@/components/NoteCard';
 import { getAvatarShape, isEmoji, emojiAvatarBorderStyle } from '@/lib/avatarShape';
 import { cn } from '@/lib/utils';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useAuthors } from '@/hooks/useAuthors';
@@ -186,7 +187,7 @@ function FollowView({ pubkey }: { pubkey: string }) {
   const metadata = author.data?.metadata;
   const displayName = metadata?.name || metadata?.display_name || 'Anonymous';
   const profileUrl = useProfileUrl(pubkey, metadata);
-  const bannerUrl = metadata?.banner;
+  const bannerUrl = sanitizeUrl(metadata?.banner);
   const { startSignup } = useOnboarding();
 
   const isOwnProfile = user && user.pubkey === pubkey;

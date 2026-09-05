@@ -35,6 +35,7 @@ import { usePublishRSVP } from '@/hooks/usePublishRSVP';
 import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { useToast } from '@/hooks/useToast';
+import { SafeImage } from '@/components/SafeImage';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 
@@ -157,7 +158,7 @@ export function CalendarEventDetailPage({ event }: { event: NostrEvent }) {
   const shareOrigin = useShareOrigin();
 
   const title = getTag(event.tags, 'title') ?? 'Untitled Event';
-  const image = getTag(event.tags, 'image');
+  const image = sanitizeUrl(getTag(event.tags, 'image'));
   const locationRaw = getTag(event.tags, 'location');
   const location = locationRaw ? parseLocation(locationRaw) : undefined;
   const summary = getTag(event.tags, 'summary');
@@ -246,7 +247,7 @@ export function CalendarEventDetailPage({ event }: { event: NostrEvent }) {
       {/* ── Cover image ── */}
       {image ? (
         <div className="aspect-[2/1] w-full overflow-hidden">
-          <img src={image} alt={title} className="w-full h-full object-cover" />
+          <SafeImage src={image} alt={title} className="w-full h-full object-cover" />
         </div>
       ) : (
         <div className="aspect-[3/1] w-full bg-gradient-to-br from-primary/15 via-primary/5 to-transparent flex items-center justify-center">

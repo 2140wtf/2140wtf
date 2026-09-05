@@ -11,7 +11,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
 import type { Pets } from '@/pets/core/types/pets';
+import { readResponseBytes } from '@/lib/readResponseBytes';
 import { sanitizePetsSvg } from '@/lib/sanitizePetsSvg';
+import { sanitizePublicHttpsUrl } from '@/lib/sanitizeUrl';
 import type { Asset3DEntry } from '@/pets/three-d/lib/three-d-schema';
 import type { CustomPetForm } from '@/pets/three-d/lib/custom-forms-schema';
 import { useCustomForms } from './useCustomForms';
@@ -26,6 +28,7 @@ interface UseCustomFormSvgResult {
 }
 
 const SVG_CACHE = new Map<string, string>();
+const MAX_CUSTOM_FORM_SVG_BYTES = 512 * 1024;
 
 /**
  * Verify downloaded bytes against the expected SHA-256 declared in the asset entry.
@@ -66,7 +69,8 @@ export function useCustomFormSvg(
     return isSleeping ? (form.svgSleeping ?? form.svgBase) : form.svgBase;
   }, [form, isSleeping]);
 
-  const url = entry?.url;
+  const rawUrl = entry?.url;
+  const url = sanitizePublicHttpsUrl(rawUrl);
   const cached = url ? SVG_CACHE.get(url) : undefined;
   const [svg, setSvg] = useState<string | undefined>(cached);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -93,10 +97,16 @@ export function useCustomFormSvg(
 
     const controller = new AbortController();
 
+    if (!url) {
+      setError(true);
+      setIsLoading(false);
+      return;
+    }
+
     fetch(url, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const bytes = new Uint8Array(await res.arrayBuffer());
+        const bytes = await readResponseBytes(res, MAX_CUSTOM_FORM_SVG_BYTES);
         verifyAssetHash(bytes, entry.sha256);
         const text = new TextDecoder().decode(bytes);
         const sanitized = sanitizePetsSvg(text);

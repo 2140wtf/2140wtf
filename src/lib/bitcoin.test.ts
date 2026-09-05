@@ -673,6 +673,7 @@ describe('NSecSignerBtc.signPsbt — BIP-375 path', () => {
 import * as btc from '@scure/btc-signer';
 import {
   BroadcastOutcomeUnknownError,
+  broadcastTransaction,
   broadcastTransactionDisambiguated,
   createBitcoinTransaction,
   txidFromRawTx,
@@ -1096,6 +1097,18 @@ describe('broadcastTransactionDisambiguated', () => {
   const mockEsplora = vi.mocked(esploraFetch);
 
   beforeEach(() => { mockEsplora.mockReset(); });
+
+  it('does not log a failed broadcast response body', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const sensitiveBody = 'wallet-secret=' + 'a'.repeat(64);
+    mockEsplora.mockResolvedValueOnce(new Response(sensitiveBody, { status: 400 }));
+
+    await expect(broadcastTransaction(DONATION_TX_HEX, URLS)).rejects.toThrow('Broadcast failed (400)');
+
+    expect(warn).toHaveBeenCalledWith('Broadcast failed:', 400, `response_length=${sensitiveBody.length}`);
+    expect(warn).not.toHaveBeenCalledWith('Broadcast failed:', 400, sensitiveBody);
+    warn.mockRestore();
+  });
 
   it('derives the txid from the raw transaction bytes', () => {
     expect(TXID).toMatch(/^[0-9a-f]{64}$/);

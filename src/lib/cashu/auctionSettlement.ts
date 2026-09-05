@@ -32,6 +32,12 @@ import {
   type AuctionListing,
   auctionAddress,
 } from '@/lib/cashu/auction';
+import {
+  AUCTION_TAGS,
+  evaluateReserve,
+  type ReserveOutcome,
+} from '@/lib/cashu/auctionRules';
+import { verifyReveal } from '@/lib/cashu/auctionCommit';
 
 /** localStorage prefix for the bidder's own escrow deposit tokens. */
 const PENDING_BID_DEPOSIT_PREFIX = 'bao_auction_bid_';
@@ -112,7 +118,12 @@ export function buildAuctionSettleTags(auction: AuctionListing): string[][] {
   return tags;
 }
 
-/** Resolve the winning bid for a closed auction: highest, tie → most recent. */
+/**
+ * Resolve the winning bid for a closed auction: highest, tie → EARLIEST
+ * (eBay first-mover rule; a later equal bid never displaces the leader).
+ * Bids after the effective close (soft-close already applied by the caller
+ * passing only pre-close bids) are ignored.
+ */
 export function resolveWinningBid(
   bids: AuctionBid[],
   _auction: AuctionListing,
@@ -121,10 +132,90 @@ export function resolveWinningBid(
   if (valid.length === 0) return null;
   return valid.reduce((best, bid) =>
     bid.amountSats > best.amountSats ||
-    (bid.amountSats === best.amountSats && bid.createdAt > best.createdAt)
+    (bid.amountSats === best.amountSats && bid.createdAt < best.createdAt)
       ? bid
       : best,
   );
+}
+
+/** Result of reserve-gated settlement. */
+export interface ReserveGatedSettlement {
+  outcome: ReserveOutcome;
+  /** The winning bid, only meaningful when outcome.met is true. */
+  winningBid: AuctionBid | null;
+}
+
+/**
+ * Reserve-gated winner resolution (fail-closed):
+ *  - no reserve commitment → winner stands;
+ *  - reserve committed but seller hasn't revealed → NOT met, everyone
+ *    refunds, seller unpaid until they reveal;
+ *  - reveal present but final price below it → NOT met (refunds).
+ * The reveal must cryptographically verify against the auction's published
+ * `reserve_commit` — a bogus reveal is rejected, not merely ignored.
+ */
+export function resolveSettlementWithReserve(args: {
+  auction: AuctionListing;
+  bids: AuctionBid[];
+  /** The seller's published reveal, if any (from a `reserve_reveal` tag). */
+  reserveReveal: { valueSats: number; nonce: string } | null;
+}): ReserveGatedSettlement {
+  const addr = auctionAddress(args.auction.pubkey, args.auction.dTag);
+  const reserveCommit =
+    args.auction.event.tags.find((t) => t[0] === AUCTION_TAGS.reserveCommit)?.[1] ?? null;
+
+  const winningBid = resolveWinningBid(args.bids, args.auction);
+
+  // Verify the reveal binds to the commitment before trusting its value.
+  let verifiedReveal: { valueSats: number; nonce: string } | null = null;
+  if (reserveCommit && args.reserveReveal) {
+    const ok = verifyReveal({
+      auctionAddress: addr,
+      pubkey: args.auction.pubkey,
+      commitment: reserveCommit,
+      secret: args.reserveReveal,
+    });
+    if (ok) verifiedReveal = args.reserveReveal;
+  }
+
+  const outcome = evaluateReserve({
+    reserveCommit,
+    reserveReveal: verifiedReveal,
+    sellerPubkey: args.auction.pubkey,
+    auctionAddr: addr,
+    finalPriceSats: winningBid?.amountSats ?? null,
+  });
+
+  return { outcome, winningBid: outcome.met ? winningBid : null };
+}
+
+/**
+ * Build the seller's reserve-reveal update: republish the auction with a
+ * `reserve_reveal` tag carrying `{"v":<sats>,"n":"<hex nonce>"}`. Any party
+ * can then verify it against `reserve_commit`. Publish once the reserve is
+ * met (or at close) — an unrevealed reserve pays nobody.
+ */
+export function buildReserveRevealTags(auction: AuctionListing, secret: { valueSats: number; nonce: string }): string[][] {
+  const tags = auction.event.tags.filter((t) => t[0] !== AUCTION_TAGS.reserveReveal);
+  tags.push([
+    AUCTION_TAGS.reserveReveal,
+    JSON.stringify({ v: secret.valueSats, n: secret.nonce }),
+  ]);
+  return tags;
+}
+
+/** Parse a `reserve_reveal` tag published by the seller. */
+export function parseReserveReveal(auction: AuctionListing): { valueSats: number; nonce: string } | null {
+  const raw = auction.event.tags.find((t) => t[0] === AUCTION_TAGS.reserveReveal)?.[1];
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { v?: unknown; n?: unknown };
+    if (typeof parsed.v !== 'number' || !Number.isSafeInteger(parsed.v) || parsed.v < 0) return null;
+    if (typeof parsed.n !== 'string' || !/^[0-9a-f]{32}$/.test(parsed.n)) return null;
+    return { valueSats: parsed.v, nonce: parsed.n };
+  } catch {
+    return null;
+  }
 }
 
 /**

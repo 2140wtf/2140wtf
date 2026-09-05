@@ -19,6 +19,12 @@ import { getNsiteSubdomain } from '@/lib/nsiteSubdomain';
 import { getPreviewInjectedScript } from '@/lib/previewInjectedScript';
 import { getMimeType } from '@/lib/sandbox';
 import type { FileResponse, InjectedScript } from '@/lib/sandbox';
+import {
+  buildNsiteManifest,
+  isSafeNsitePath,
+  resolveNsiteServers,
+  verifyNsiteContent,
+} from '@/lib/nsiteContent';
 
 interface Rect { left: number; top: number; width: number; height: number }
 
@@ -45,82 +51,36 @@ function useElementRect(el: HTMLElement | null): Rect | null {
 }
 
 /**
- * Build the path→sha256 manifest from a nsite event's `path` tags.
- * Each path tag has the format: ["path", "/file/path", "<sha256>"]
- */
-function buildManifest(event: NostrEvent): Map<string, string> {
-  const manifest = new Map<string, string>();
-  for (const tag of event.tags) {
-    if (tag[0] === 'path' && tag[1] && tag[2]) {
-      manifest.set(tag[1], tag[2]);
-    }
-  }
-  return manifest;
-}
-
-/**
- * Resolve the Blossom servers for a nsite event.
- * Prefers the `server` tags on the event; falls back to the provided app servers.
- */
-function resolveServers(event: NostrEvent, appServers: string[]): string[] {
-  const eventServers = event.tags
-    .filter(([name]) => name === 'server')
-    .map(([, url]) => url)
-    .filter((url) => {
-      try { new URL(url); return true; } catch { return false; }
-    });
-
-  return eventServers.length > 0 ? eventServers : appServers;
-}
-
-/**
  * Module-level preferred server. Once a Blossom server successfully serves
- * a blob, it is promoted here so subsequent requests try it first — avoiding
- * the round-trip penalty of 404s on servers that don't have the content.
+ * a blob, it is promoted here so subsequent requests try it first.
  */
 let preferredServer: string | null = null;
 
-/**
- * Fetch a blob from the given sha256 by trying Blossom servers.
- *
- * If a server previously succeeded (the "preferred" server), it is tried
- * first. On success the preferred server is reinforced; on failure we fall
- * through to the remaining servers in order. Whichever server ultimately
- * succeeds is promoted to preferred for the next call.
- */
-async function fetchFromBlossom(sha256: string, servers: string[]): Promise<Response> {
+/** Fetch a verified blob from the trusted Blossom server list. */
+async function fetchFromBlossom(sha256: string, servers: string[]): Promise<Uint8Array> {
   let lastError: unknown;
+  const orderedServers = preferredServer && servers.includes(preferredServer)
+    ? [preferredServer, ...servers.filter((server) => server !== preferredServer)]
+    : servers;
 
-  /** Try a single server. Returns the Response on success, or null. */
-  async function tryServer(server: string): Promise<Response | null> {
+  for (const server of orderedServers) {
     const base = server.replace(/\/+$/, '');
-    const url = `${base}/${sha256}`;
     try {
-      const res = await fetch(url);
-      if (res.ok) {
-        preferredServer = server;
-        return res;
+      const res = await fetch(`${base}/${sha256}`);
+      if (!res.ok) continue;
+      const body = new Uint8Array(await res.arrayBuffer());
+      if (!verifyNsiteContent(body, sha256)) {
+        lastError = new Error(`Blossom server returned content with an invalid hash: ${server}`);
+        continue;
       }
+      preferredServer = server;
+      return body;
     } catch (err) {
       lastError = err;
     }
-    return null;
   }
 
-  // Try the preferred server first if it's in the list.
-  if (preferredServer && servers.includes(preferredServer)) {
-    const res = await tryServer(preferredServer);
-    if (res) return res;
-  }
-
-  // Fall through to the full list, skipping the preferred (already tried).
-  for (const server of servers) {
-    if (server === preferredServer) continue;
-    const res = await tryServer(server);
-    if (res) return res;
-  }
-
-  throw lastError ?? new Error(`Failed to fetch blob ${sha256} from all servers`);
+  throw lastError ?? new Error(`Failed to fetch verified blob ${sha256} from all servers`);
 }
 
 interface NsitePreviewDialogProps {
@@ -169,12 +129,12 @@ export function NsitePreviewDialog({ event, appName, appPicture, open, onOpenCha
   const servers = useRef<string[]>([]);
 
   useEffect(() => {
-    manifest.current = buildManifest(event);
+    manifest.current = buildNsiteManifest(event);
     const appServers = getEffectiveBlossomServers(
       config.blossomServerMetadata,
       config.useAppBlossomServers ?? true,
     );
-    servers.current = resolveServers(event, appServers.length > 0 ? appServers : APP_BLOSSOM_SERVERS.servers);
+    servers.current = resolveNsiteServers(event, appServers.length > 0 ? appServers : APP_BLOSSOM_SERVERS.servers);
   }, [event, config.blossomServerMetadata, config.useAppBlossomServers]);
 
   /** Injected scripts: SPA path normalisation + NIP-07 provider (when logged in). */
@@ -185,11 +145,16 @@ export function NsitePreviewDialog({ event, appName, appPicture, open, onOpenCha
     }];
 
     // When a user is logged in, inject a NIP-07 provider so the nsite can
-    // use window.nostr to interact with the user's signer.
+    // use window.nostr to interact with the user's signer. The parent origin
+    // is passed explicitly — document.referrer is always empty under the
+    // app's global no-referrer policy, so the provider cannot infer it.
     if (user) {
       scripts.push({
         path: '__injected__/nostr-provider.js',
-        content: getNsiteNostrProviderScript(user.pubkey),
+        content: getNsiteNostrProviderScript(
+          user.pubkey,
+          typeof window !== 'undefined' ? window.location.origin : undefined,
+        ),
       });
     }
 
@@ -198,7 +163,10 @@ export function NsitePreviewDialog({ event, appName, appPicture, open, onOpenCha
 
   /** Resolve a pathname to file content from the Blossom manifest. */
   const resolveFile = useCallback(async (pathname: string): Promise<FileResponse | null> => {
-    // Look up the sha256 for this path in the manifest.
+    // Only resolve canonical paths from the iframe protocol. Invalid paths
+    // must not be allowed to select an arbitrary manifest entry.
+    if (!isSafeNsitePath(pathname)) return null;
+
     // If not found, fall back to /index.html (SPA client-side routing).
     let sha256 = manifest.current.get(pathname);
     let servingPath = pathname;
@@ -210,10 +178,9 @@ export function NsitePreviewDialog({ event, appName, appPicture, open, onOpenCha
 
     if (!sha256) return null;
 
-    // Fetch from Blossom.
-    const res = await fetchFromBlossom(sha256, servers.current);
-    const buffer = await res.arrayBuffer();
-    const body = new Uint8Array(buffer);
+    // Fetch and verify the content-addressed blob before serving it to the
+    // sandbox. A compromised/misbehaving mirror must not inject arbitrary JS.
+    const body = await fetchFromBlossom(sha256, servers.current);
 
     // Always determine content type from the file extension.
     // Blossom servers commonly return incorrect types (e.g. text/plain for .js

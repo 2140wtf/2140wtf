@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, user-scalable=yes, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- Invite links are bearer capabilities — never leak them via Referer. -->
     <meta name="referrer" content="no-referrer" />
+    <!-- The app does not need ambient device or cross-origin browsing
+         privileges. Keep these disabled even when embedded content is shown. -->
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), display-capture=(), accelerometer=(), gyroscope=(), magnetometer=(), usb=(), serial=(), midi=()" />
     <meta name="description" content="2140 — Bitcoin, art, events, and writing on Nostr." />
     <!-- Agent onboarding doc. Any agent (or LLM) fetching this shell can
          discover how to operate in ₿AO communities without running JS:

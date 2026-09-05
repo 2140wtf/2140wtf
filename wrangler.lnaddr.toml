@@ -1,0 +1,20 @@
+name = "bao-lnaddr"
+main = "src/worker/lnaddrWorker.ts"
+compatibility_date = "2025-01-01"
+account_id = ""          # fill in on deploy: wrangler whoami
+
+# KV stores the registry: name → {callback, nostrPubkey, pubkey, claimedAt}
+kv_namespaces = [
+  { binding = "LNADDR_KV", id = "" }   # create with: wrangler kv namespace create LNADDR_KV
+]
+
+# Serve the well-known endpoints on the app zone. The SPA must not claim
+# these paths (see public/_redirects).
+routes = [
+  { pattern = "2140.wtf/.well-known/lnurlp", zone_name = "2140.wtf" },
+  { pattern = "2140.wtf/.well-known/lnurlp/*", zone_name = "2140.wtf" }
+]
+
+[vars]
+LNADDR_DOMAIN = "2140.wtf"
+# Optional: rate-limit / turnstile secret kept as a wrangler secret, not here.

@@ -38,19 +38,38 @@ vi.mock('@getalby/sdk', () => ({
 }));
 
 describe('validateNwcUri', () => {
+  const HEX = 'a'.repeat(64);
+
   it('accepts a valid nostr+walletconnect:// URI with pubkey and relay', () => {
-    const uri = 'nostr+walletconnect://?pubkey=abcdef&relay=wss://relay.example.com&secret=supersecret';
+    const uri = `nostr+walletconnect://?pubkey=${HEX}&relay=wss://relay.example.com&secret=supersecret`;
     const parsed = validateNwcUri(uri);
     expect(parsed).not.toBeNull();
     expect(parsed?.connectionString).toBe(uri);
-    expect(parsed?.pubkey).toBe('abcdef');
+    expect(parsed?.pubkey).toBe(HEX);
     expect(parsed?.relay).toBe('wss://relay.example.com');
     expect(parsed?.secret).toBe('supersecret');
   });
 
   it('accepts the alternate nostrwalletconnect:// spelling', () => {
-    const uri = 'nostrwalletconnect://?pubkey=pubkey1&relay=wss://r&secret=s';
-    expect(validateNwcUri(uri)?.pubkey).toBe('pubkey1');
+    const uri = `nostrwalletconnect://?pubkey=${'b'.repeat(64)}&relay=wss://r&secret=s`;
+    expect(validateNwcUri(uri)?.pubkey).toBe('b'.repeat(64));
+  });
+
+  it('rejects a URI with a malformed (non-64-hex) wallet pubkey', () => {
+    const uri = `nostr+walletconnect://?pubkey=abcdef&relay=wss://relay.example.com&secret=s`;
+    expect(validateNwcUri(uri)).toBeNull();
+  });
+
+  it('rejects a URI whose relay is not a WebSocket URL', () => {
+    const uri = `nostr+walletconnect://?pubkey=${HEX}&relay=https://evil.example&secret=s`;
+    expect(validateNwcUri(uri)).toBeNull();
+    const plaintext = `nostr+walletconnect://?pubkey=${HEX}&relay=ws://evil.example&secret=s`;
+    expect(validateNwcUri(plaintext)).toBeNull();
+  });
+
+  it('accepts a localhost ws:// relay for development', () => {
+    const uri = `nostr+walletconnect://?pubkey=${HEX}&relay=ws://localhost:8080&secret=s`;
+    expect(validateNwcUri(uri)?.relay).toBe('ws://localhost:8080');
   });
 
   it('rejects a URI missing the pubkey query parameter', () => {
@@ -59,7 +78,7 @@ describe('validateNwcUri', () => {
   });
 
   it('rejects a URI missing the relay query parameter', () => {
-    const uri = 'nostr+walletconnect://abcdef?secret=supersecret';
+    const uri = `nostr+walletconnect://${HEX}?secret=supersecret`;
     expect(validateNwcUri(uri)).toBeNull();
   });
 
@@ -72,7 +91,7 @@ describe('validateNwcUri', () => {
 describe('useNWCInternal.addConnection error handling', () => {
   it('redacts the NWC secret from connection-failure toast messages', async () => {
     const secret = 'extremely-sensitive-secret-123';
-    const uri = `nostr+walletconnect://?pubkey=pubkey&relay=wss://r&secret=${secret}`;
+    const uri = `nostr+walletconnect://?pubkey=${'c'.repeat(64)}&relay=wss://r&secret=${secret}`;
     LNMock.mockImplementation(function () {
       throw new Error(`Failed to parse ${uri}`);
     });

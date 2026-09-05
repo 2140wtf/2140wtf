@@ -5,6 +5,8 @@ import {
   isAllowedRelayUrl,
   isAllowedShareOrigin,
   isAllowedUrlTemplate,
+  isLocalNetworkUrl,
+  isAllowedBlossomUrl,
 } from './sanitizeUrl';
 
 describe('sanitizeUrl', () => {
@@ -41,6 +43,12 @@ describe('sanitizeUrl', () => {
 
   it('rejects protocol-relative URLs', () => {
     expect(sanitizeUrl('//evil.com')).toBeUndefined();
+  });
+
+  it('rejects HTTPS local-network URLs to prevent browser-side probing', () => {
+    expect(sanitizeUrl('https://127.0.0.1/admin')).toBeUndefined();
+    expect(sanitizeUrl('https://192.168.1.10/photo')).toBeUndefined();
+    expect(sanitizeUrl('https://printer.local/status')).toBeUndefined();
   });
 });
 
@@ -101,6 +109,24 @@ describe('URL allowlist helpers', () => {
 
     it('rejects non-https origins', () => {
       expect(isAllowedShareOrigin('http://2140.wtf')).toBe(false);
+    });
+  });
+
+  describe('isLocalNetworkUrl and Blossom URLs', () => {
+    it('recognizes private, loopback, link-local, and local-name hosts', () => {
+      expect(isLocalNetworkUrl('https://127.0.0.1')).toBe(true);
+      expect(isLocalNetworkUrl('https://10.0.0.1')).toBe(true);
+      expect(isLocalNetworkUrl('https://172.16.0.1')).toBe(true);
+      expect(isLocalNetworkUrl('https://169.254.1.1')).toBe(true);
+      expect(isLocalNetworkUrl('https://device.local')).toBe(true);
+      expect(isLocalNetworkUrl('https://example.com')).toBe(false);
+    });
+
+    it('allows only public HTTPS Blossom origins', () => {
+      expect(isAllowedBlossomUrl('https://cdn.example')).toBe(true);
+      expect(isAllowedBlossomUrl('http://cdn.example')).toBe(false);
+      expect(isAllowedBlossomUrl('https://user:pass@cdn.example')).toBe(false);
+      expect(isAllowedBlossomUrl('https://localhost')).toBe(false);
     });
   });
 

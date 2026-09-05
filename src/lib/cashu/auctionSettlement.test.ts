@@ -61,7 +61,7 @@ describe('resolveWinningBid', () => {
     expect(winner!.amountSats).toBe(3000);
   });
 
-  it('breaks amount ties by recency', () => {
+  it('breaks amount ties by earliest bid (eBay first-mover rule)', () => {
     const winner = resolveWinningBid(
       [
         { eventId: '1', pubkey: 'b'.repeat(64), amountSats: 2000, auctionAddress: '', createdAt: NOW },
@@ -69,7 +69,8 @@ describe('resolveWinningBid', () => {
       ],
       auction,
     );
-    expect(winner!.eventId).toBe('2');
+    // A later equal bid never displaces the earlier leader.
+    expect(winner!.eventId).toBe('1');
   });
 
   it('returns null with no valid bids', () => {

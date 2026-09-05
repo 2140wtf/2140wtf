@@ -32,6 +32,7 @@ import {
 import { z } from 'zod';
 import { IntroImage } from '@/components/IntroImage';
 import { ImageCropDialog } from '@/components/ImageCropDialog';
+import { LightningAddressClaim } from '@/components/LightningAddressClaim';
 import { isValidAvatarShape } from '@/lib/avatarShape';
 
 // Extended form schema that includes custom fields and avatar shape
@@ -435,6 +436,9 @@ export const EditProfileForm: React.FC<EditProfileFormProps> = ({ onValuesChange
                 )}
               />
             </div>
+
+            {/* Claim a name@2140.wtf address bound to the user's own wallet. */}
+            <LightningAddressClaim />
           </div>
 
           {/* Custom Profile Fields */}

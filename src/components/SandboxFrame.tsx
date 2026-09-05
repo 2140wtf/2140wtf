@@ -161,12 +161,12 @@ async function handleFetchRequest(
 // ---------------------------------------------------------------------------
 
 /**
- * Broad permissions-policy grant for sandbox iframes.
+ * Conservative permissions-policy grant for sandbox iframes.
  *
  * A cross-origin iframe is blocked from most capability APIs unless the
- * parent explicitly delegates them via `allow="…"`. We grant every
- * directive that a general-purpose web app might legitimately use so
- * nsites and mini-apps can access media, sensors, downloads, etc.
+ * parent explicitly delegates them via `allow="…"`. Nsites are untrusted
+ * content, so capabilities that expose sensors, cameras, microphones,
+ * location, screen contents, or device state stay disabled by default.
  *
  * **Deliberately omitted** — capabilities whose UX or security guarantees
  * make them unsafe to expose to untrusted third-party content:
@@ -181,31 +181,12 @@ async function handleFetchRequest(
  *   - `clipboard-read`                 — Passive clipboard read (allowed by gesture but omitted for now).
  */
 const SANDBOX_ALLOW = [
-  'accelerometer',
-  'ambient-light-sensor',
+  // Safe, user-visible presentation and playback capabilities.
   'autoplay',
-  'battery',
-  'camera',
   'clipboard-write',
-  'compute-pressure',
-  'display-capture',
   'encrypted-media',
   'fullscreen',
-  'gamepad',
-  'geolocation',
-  'gyroscope',
-  'idle-detection',
-  'keyboard-map',
-  'magnetometer',
-  'microphone',
-  'midi',
   'picture-in-picture',
-  'screen-wake-lock',
-  'speaker-selection',
-  'storage-access',
-  'web-share',
-  'window-management',
-  'xr-spatial-tracking',
 ].join('; ');
 
 // ---------------------------------------------------------------------------

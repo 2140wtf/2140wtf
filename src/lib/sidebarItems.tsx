@@ -137,8 +137,8 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "2140-social",
-    label: "2140 Social Chat",
-    path: "/bao/community",
+    label: "2140 Trollbox",
+    path: "/community",
     icon: MessageSquareMore,
     requiresAuth: true,
   },

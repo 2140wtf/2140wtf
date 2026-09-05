@@ -545,17 +545,17 @@ export function useCashuWallet(
       }
       const entry = await storageRef.current.loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
       if (!entry || entry.status !== 'pending') {
-        storageRef.current.clearPendingReceive(tokenHash);
+        void storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       if (Date.now() - entry.timestamp > PENDING_RECEIVE_TTL_MS) {
         devLog.warn('Pending receive entry expired, clearing:', tokenHash);
-        storageRef.current.clearPendingReceive(tokenHash);
+        void storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       if (entry.attempts >= PENDING_RECEIVE_MAX_ATTEMPTS) {
         devLog.warn('Pending receive exceeded max attempts, clearing:', tokenHash);
-        storageRef.current.clearPendingReceive(tokenHash);
+        void storageRef.current.clearPendingReceive(tokenHash);
         continue;
       }
       entry.attempts += 1;
@@ -2300,7 +2300,7 @@ export function useCashuWallet(
               const tokenHash = atob(k.slice((storageNamespaceRef.current + 'receive_pending_').length));
               const entry = await storageRef.current.loadPendingReceive(tokenHash, encKey, legacyEncKeyRef.current ?? undefined);
               if (entry && entry.mintUrls.some((u) => safeNormalizeMintUrl(u) === normalized)) {
-                storageRef.current.clearPendingReceive(tokenHash);
+                await storageRef.current.clearPendingReceive(tokenHash);
               }
             } catch { /* ignore malformed entries */ }
           }
@@ -2388,7 +2388,7 @@ export function useCashuWallet(
       // Defend against double-credit both within this session and across restarts.
       if (processedTokenHashesRef.current.has(tokenHash) || await storageRef.current.isProcessedTokenHash(tokenHash, encKey, legacyEncKeyRef.current ?? undefined)) {
         devLog.warn('Token already processed, skipping:', tokenHash);
-        storageRef.current.clearPendingReceive(tokenHash);
+        void storageRef.current.clearPendingReceive(tokenHash);
         if (mountedRef.current) setSuccessTimed('Token already received');
         return 0;
       }
@@ -2634,7 +2634,7 @@ export function useCashuWallet(
           devLog.warn('Failed to persist processed token hash:', e);
           // Do not fail the receive; the in-memory guard still protects this session.
         }
-        storageRef.current.clearPendingReceive(tokenHash);
+        void storageRef.current.clearPendingReceive(tokenHash);
       }
 
       if (mountedRef.current) {

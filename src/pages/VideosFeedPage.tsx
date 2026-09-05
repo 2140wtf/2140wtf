@@ -56,6 +56,8 @@ import { sidebarItemIcon } from "@/lib/sidebarItems";
 import { getEffectiveStreamStatus } from "@/lib/streamStatus";
 import { timeAgo } from "@/lib/timeAgo";
 import { cn } from "@/lib/utils";
+import { SafeImage } from "@/components/SafeImage";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 
 // Reuse the real short-form video card from the extracted component.
 import { ShortVideoCard } from "@/components/ShortVideoCard";
@@ -368,7 +370,7 @@ function StreamBadge({ status }: { status: string }) {
 
 function LiveStreamCard({ event }: { event: NostrEvent }) {
   const title = getTag(event.tags, "title") || "Untitled Stream";
-  const imageUrl = getTag(event.tags, "image");
+  const imageUrl = sanitizeUrl(getTag(event.tags, "image"));
   const viewers = getTag(event.tags, "current_participants");
   const effectiveStatus = getEffectiveStreamStatus(event);
 
@@ -397,7 +399,7 @@ function LiveStreamCard({ event }: { event: NostrEvent }) {
     >
       <div className="relative aspect-video overflow-hidden rounded-lg bg-muted">
         {imageUrl ? (
-          <img
+          <SafeImage
             src={imageUrl}
             alt={title}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"

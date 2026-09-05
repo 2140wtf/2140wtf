@@ -1921,12 +1921,15 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           <div className="h-36 md:h-48 bg-secondary relative">
             {author.isLoading ? (
               <Skeleton className="w-full h-full rounded-none" />
-            ) : metadata?.banner ? (
+            ) : sanitizeUrl(metadata?.banner) ? (
               <img
-                src={metadata.banner}
+                src={sanitizeUrl(metadata?.banner)}
                 alt=""
                 className="w-full h-full object-cover cursor-pointer"
-                onClick={() => setLightboxImage(metadata.banner!)}
+                onClick={() => {
+                  const safeBanner = sanitizeUrl(metadata?.banner);
+                  if (safeBanner) setLightboxImage(safeBanner);
+                }}
               />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-primary/5" />

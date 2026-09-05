@@ -16,6 +16,7 @@ import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
+import { SafeImage } from '@/components/SafeImage';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 // --- Helpers ---
@@ -27,7 +28,7 @@ function getTag(tags: string[][], name: string): string | undefined {
 function parseCommunityEvent(event: NostrEvent) {
   const name = getTag(event.tags, 'name') || getTag(event.tags, 'd') || 'Unnamed Community';
   const description = getTag(event.tags, 'description') || '';
-  const image = getTag(event.tags, 'image');
+  const image = sanitizeUrl(getTag(event.tags, 'image'));
 
   // Extract moderators from p tags with "moderator" role
   const moderators = event.tags
@@ -125,7 +126,7 @@ export function CommunityContent({ event }: { event: NostrEvent }) {
       {/* Community hero image */}
       {image ? (
         <div className="relative -mx-4 aspect-[21/9] overflow-hidden">
-          <img
+          <SafeImage
             src={image}
             alt={name}
             className="w-full h-full object-cover"

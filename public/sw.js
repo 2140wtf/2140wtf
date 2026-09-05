@@ -7,16 +7,26 @@
 
 // --- Push received ---
 
-function isSafeNotificationUrl(url) {
-  if (typeof url !== 'string') return false;
+/**
+ * Notification assets must stay same-origin. Even an HTTPS third-party icon
+ * causes the browser to fetch that URL when showing a notification, leaking
+ * the user's IP and notification timing to an untrusted host.
+ */
+function isSafeNotificationUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
   try {
-    const parsed = new URL(url, self.location.origin);
-    // Only allow same-origin assets or plain paths (no external icons that
-    // could be used as a tracking / IP-leak vector by a compromised server).
-    return parsed.origin === self.location.origin || parsed.protocol === 'https:';
+    const parsed = new URL(value, self.location.origin);
+    return parsed.origin === self.location.origin && !parsed.username && !parsed.password;
   } catch {
     return false;
   }
+}
+
+function safeNotificationTag(data) {
+  const tag = data && typeof data.subscription_id === 'string'
+    ? data.subscription_id
+    : 'ditto-notification';
+  return tag.slice(0, 100);
 }
 
 self.addEventListener('push', (event) => {
@@ -28,19 +38,22 @@ self.addEventListener('push', (event) => {
   } catch {
     payload = { title: '2140.wtf', body: event.data.text() };
   }
+  if (!payload || typeof payload !== 'object') payload = {};
 
   const title = typeof payload.title === 'string' ? payload.title.slice(0, 100) : '2140.wtf';
   const body = typeof payload.body === 'string' ? payload.body.slice(0, 300) : '';
-  const icon = isSafeNotificationUrl(payload.icon) ? payload.icon : '/icon-192.png';
-  const badge = isSafeNotificationUrl(payload.badge) ? payload.badge : '/icon-192.png';
+  const notificationIcon = isSafeNotificationUrl(payload.icon) ? payload.icon : '/icon-192.png';
+  const notificationBadge = isSafeNotificationUrl(payload.badge) ? payload.badge : '/icon-192.png';
 
   const options = {
     body,
-    icon,
-    badge,
-    data: payload.data ?? {},
+    icon: notificationIcon,
+    badge: notificationBadge,
+    // The click handler does not need the push payload. Do not persist
+    // arbitrary server-controlled data in Notification.data.
+    data: {},
     requireInteraction: false,
-    tag: payload.data?.subscription_id ?? 'ditto-notification',
+    tag: safeNotificationTag(payload.data),
     renotify: true,
   };
 

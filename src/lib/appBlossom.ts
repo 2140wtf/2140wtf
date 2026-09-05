@@ -1,5 +1,6 @@
 import type { NostrEvent } from "@nostrify/nostrify";
 import type { BlossomServerMetadata } from "@/contexts/AppContext";
+import { isAllowedBlossomUrl } from "@/lib/sanitizeUrl";
 
 /** Normalize a Blossom server URL for deduplication (lowercase, ensure trailing slash). */
 function normalizeUrl(url: string): string {
@@ -11,14 +12,7 @@ export function parseBlossomServerList(event: NostrEvent): string[] {
   return event.tags
     .filter(([name]) => name === "server")
     .map(([, url]) => url)
-    .filter((url) => {
-      try {
-        new URL(url);
-        return true;
-      } catch {
-        return false;
-      }
-    });
+    .filter((url): url is string => isAllowedBlossomUrl(url));
 }
 
 /**

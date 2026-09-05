@@ -67,9 +67,9 @@ test.describe('smoke', () => {
     // collapsible group was split by the 2140 Social migration: 2140 Social is
     // now a standalone destination and the three ₿AO links render flat, so each
     // is a link rather than a group trigger. The chat was rebranded to
-    // "2140 Social Chat" (separate app from BAO Markets).
+    // "2140 Trollbox" (separate app from BAO Markets).
     await expect(drawer.getByRole('link', { name: 'Feed' })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: '2140 Social Chat' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: '2140 Trollbox' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: '₿AO MARKETS' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Fund my ₿AO' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();

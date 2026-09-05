@@ -635,6 +635,20 @@ export async function scoreMilestone(
  * reconcile the terminal state from the signed kind-38037 event once the
  * stream closes — tool calls and tokens here are advisory transcripts only.
  */
+const MAX_SCORE_STREAM_BYTES = 512 * 1024;
+const MAX_SCORE_STREAM_EVENTS = 512;
+const MAX_SCORE_STREAM_FRAME_BYTES = 32 * 1024;
+const MAX_SCORE_STREAM_DELTA_LENGTH = 8 * 1024;
+
+function isScoreJobEvent(value: unknown): value is ScoreJobEvent {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Record<string, unknown>;
+  if (typeof event.type !== 'string' || !['accepted', 'tool_call', 'token', 'verdict', 'done', 'error'].includes(event.type)) return false;
+  if (typeof event.job_id !== 'number' || !Number.isSafeInteger(event.job_id)) return false;
+  if (event.delta !== undefined && (typeof event.delta !== 'string' || event.delta.length > MAX_SCORE_STREAM_DELTA_LENGTH)) return false;
+  return true;
+}
+
 export async function fetchScoreJobEvents(
   fundraiserId: string,
   milestoneId: string,
@@ -648,21 +662,33 @@ export async function fetchScoreJobEvents(
   const decoder = new TextDecoder();
   const events: ScoreJobEvent[] = [];
   let buffer = '';
+  let totalBytes = 0;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_SCORE_STREAM_BYTES) {
+        await reader.cancel('score stream too large');
+        throw new Error('Score stream exceeded its size limit.');
+      }
       buffer += decoder.decode(value, { stream: true });
+      if (buffer.length > MAX_SCORE_STREAM_FRAME_BYTES) {
+        await reader.cancel('score stream frame too large');
+        throw new Error('Score stream frame exceeded its size limit.');
+      }
       let sep: number;
       while ((sep = buffer.indexOf('\n\n')) >= 0) {
         const frame = buffer.slice(0, sep);
         buffer = buffer.slice(sep + 2);
+        if (frame.length > MAX_SCORE_STREAM_FRAME_BYTES) continue;
         const dataLine = frame.split('\n').find((line) => line.startsWith('data:'));
-        if (!dataLine) continue;
+        if (!dataLine || events.length >= MAX_SCORE_STREAM_EVENTS) continue;
         try {
-          events.push(JSON.parse(dataLine.slice(5).trim()) as ScoreJobEvent);
+          const parsed: unknown = JSON.parse(dataLine.slice(5).trim());
+          if (isScoreJobEvent(parsed)) events.push(parsed);
         } catch {
-          // skip a malformed frame rather than killing the whole stream
+          // Skip malformed or schema-invalid frames rather than trusting them.
         }
       }
     }
