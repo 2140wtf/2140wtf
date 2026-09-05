@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
+
 /**
  * Download a text file to the user's device.
  *
@@ -65,6 +67,36 @@ export async function downloadDataUrlFile(filename: string, dataUrl: string): Pr
 }
 
 /**
+ * Return a URL/deep link that is safe to hand to the browser or native share
+ * sheet. Relative app paths are allowed for the web-only middle-click helper;
+ * external HTTP(S) URLs must pass the public URL policy. Known payment/contact
+ * schemes are constrained to their expected payload shape.
+ */
+export function sanitizeOpenUrl(raw: string | undefined | null): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (!value || [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f;
+  })) return undefined;
+
+  if (/^https?:/i.test(value)) return sanitizeUrl(value);
+  if (/^\/(?!\/)/.test(value)) return value;
+  if (/^bitcoin:[^\s]+$/i.test(value)) {
+    const payload = value.slice('bitcoin:'.length);
+    const address = payload.split('?')[0];
+    if (/^(?:bc1|[13])[a-z0-9]{20,90}$/i.test(address) || address === '') return value;
+  }
+  if (/^lightning:ln(?:bc|tb|bcrt)[0-9a-z]+$/i.test(value)) return value;
+  if (/^bolt12:lno1[0-9a-z]+$/i.test(value)) return value;
+  if (/^nostrconnect:\/\/[0-9a-f]{64}\?[^\s]+$/i.test(value)) return value;
+  if (/^monero:[48][0-9a-z]{94,105}$/i.test(value)) return value;
+  if (/^simplex:[^\s]+$/i.test(value)) return value;
+
+  return undefined;
+}
+
+/**
  * Open a URL in a new browser tab, or present the native share sheet on Capacitor.
  *
  * The programmatic `<a target="_blank">` click pattern doesn't work inside
@@ -72,10 +104,13 @@ export async function downloadDataUrlFile(filename: string, dataUrl: string): Pr
  * letting the user open, save, or share the resource.
  */
 export async function openUrl(url: string): Promise<void> {
+  const safeUrl = sanitizeOpenUrl(url);
+  if (!safeUrl) throw new Error('Refusing to open an unsafe URL.');
+
   if (Capacitor.isNativePlatform()) {
     const { Share } = await import('@capacitor/share');
-    await Share.share({ url });
+    await Share.share({ url: safeUrl });
   } else {
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(safeUrl, '_blank', 'noopener,noreferrer');
   }
 }
