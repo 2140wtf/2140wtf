@@ -2,6 +2,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import type { ImetaEncryption } from "@/lib/imeta";
+import { readResponseBytes } from "@/lib/readResponseBytes";
 import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
 
 /**
@@ -31,6 +32,8 @@ import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
 
 /** Max total decrypted bytes to keep alive as object URLs (~192 MB). */
 const MAX_CACHED_BYTES = 192 * 1024 * 1024;
+/** Max ciphertext accepted from one encrypted-media fetch. */
+export const MAX_ENCRYPTED_MEDIA_BYTES = 256 * 1024 * 1024;
 /** How long to keep a revoked entry's object URL alive after eviction. */
 const REVOKE_GRACE_MS = 30_000;
 
@@ -105,7 +108,7 @@ export async function decryptAttachmentToObjectURL(
   entry.promise = (async () => {
     const res = await fetch(safeUrl, { signal });
     if (!res.ok) throw new Error(`attachment fetch failed: HTTP ${res.status}`);
-    const ciphertext = new Uint8Array(await res.arrayBuffer());
+    const ciphertext = await readResponseBytes(res, MAX_ENCRYPTED_MEDIA_BYTES);
     const plaintext = await decryptBytes(ciphertext, enc.key, enc.nonce);
     const blob = new Blob([plaintext], { type: mime || "application/octet-stream" });
     const objectUrl = URL.createObjectURL(blob);
