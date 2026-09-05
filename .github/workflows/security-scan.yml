@@ -77,10 +77,10 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm audit --omit=dev --audit-level=critical --json > audit-results.json
+          npm audit --omit=dev --audit-level=high --json > audit-results.json
           STATUS=$?
           set -e
-          node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('audit-results.json','utf8')); const v=data.metadata?.vulnerabilities ?? {}; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Dependency Audit\\n\\n- Critical: '+(v.critical ?? 0)+'\\n- High: '+(v.high ?? 0)+'\\n');"
+          node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('audit-results.json','utf8')); const v=data.metadata?.vulnerabilities ?? {}; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Dependency Audit\\n\\n- Critical: '+(v.critical ?? 0)+'\\n- High: '+(v.high ?? 0)+'\\n- Moderate: '+(v.moderate ?? 0)+'\\n');"
           exit "$STATUS"
 
       - name: Upload dependency audit
