@@ -111,6 +111,7 @@ export function isAllowedRelayUrl(url: string | undefined | null): boolean {
   if (!url) return false;
   try {
     const parsed = new URL(url);
+    if (parsed.username || parsed.password) return false;
     if (parsed.protocol === 'wss:') return true;
     if (parsed.protocol === 'ws:' && isLocalhost(parsed.hostname)) return true;
     return false;

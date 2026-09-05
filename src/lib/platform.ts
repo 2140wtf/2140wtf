@@ -1,3 +1,5 @@
+import { isAllowedRelayUrl } from './sanitizeUrl';
+
 /**
  * Platform (build-time pinned) configuration for the ₿AO chat (Concord V2)
  * foundation, ported from Armada's `lib/platform.ts`. Only the pieces the
@@ -23,7 +25,7 @@ export function normalizeRelayUrl(url: string): string | undefined {
   }
   try {
     const u = new URL(value);
-    if (u.protocol !== "ws:" && u.protocol !== "wss:") return undefined;
+    if (!isAllowedRelayUrl(u.href)) return undefined;
     return u.toString().replace(/\/$/, "");
   } catch {
     return undefined;
@@ -45,11 +47,15 @@ export function relayToRouteParam(relayUrl: string): string {
 
 /** Path segment → relay URL. `relay.internal` ⇒ wss, `ws:host` ⇒ ws. */
 export function routeParamToRelay(param: string): string | undefined {
-  const decoded = decodeURIComponent(param);
-  if (decoded.startsWith("ws:")) {
-    return normalizeRelayUrl(`ws://${decoded.slice(3)}`);
+  try {
+    const decoded = decodeURIComponent(param);
+    if (decoded.startsWith("ws:")) {
+      return normalizeRelayUrl(`ws://${decoded.slice(3)}`);
+    }
+    return normalizeRelayUrl(decoded);
+  } catch {
+    return undefined;
   }
-  return normalizeRelayUrl(decoded);
 }
 
 /**
