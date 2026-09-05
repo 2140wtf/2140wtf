@@ -88,7 +88,7 @@ export function FalLivePage() {
     // Mobile: the studio owns all remaining height and Trollbox starts as a
     // compact bar, keeping fal.live's answer controls visible. Desktop keeps
     // the chat as a narrow full-height panel beside the studio.
-    <main className="flex h-[100dvh] flex-col overflow-hidden lg:flex-row">
+    <main className="fal-live-height flex flex-col overflow-hidden lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
           <Button variant="ghost" size="sm" asChild>

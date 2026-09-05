@@ -73,6 +73,7 @@ describe('FalLivePage trollbox', () => {
       const studio = screen.getByTitle('fal.live AI generation studio');
       expect(studio).toHaveAttribute('src', expect.stringContaining('fal.live'));
       expect(studio.className).toContain('flex-1');
+      expect(screen.getByRole('main')).toHaveClass('fal-live-height');
     });
 
     // Expanding is opt-in so the live answer controls keep the available
