@@ -90,21 +90,21 @@ export function FalLivePage() {
     // the chat as a narrow full-height panel beside the studio.
     <main className="fal-live-height flex flex-col overflow-hidden lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/">
-              <ArrowLeft className="size-4 mr-1.5" />
-              Back
+        <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 sm:h-auto sm:gap-3 sm:px-4 sm:py-2">
+          <Button variant="ghost" size="sm" className="size-8 shrink-0 px-0 sm:h-9 sm:w-auto sm:px-3" asChild>
+            <Link to="/" aria-label="Back to home">
+              <ArrowLeft className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Back</span>
             </Link>
           </Button>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Sparkles className="size-4 shrink-0 text-primary" />
-            <h1 className="truncate text-sm font-semibold">fal.live — AI generation studio</h1>
+            <h1 className="truncate text-xs font-semibold sm:text-sm">fal.live — AI generation studio</h1>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <a href={FAL_LIVE_URL} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="size-4 mr-1.5" />
-              Original site
+          <Button variant="outline" size="sm" className="size-8 shrink-0 px-0 sm:h-9 sm:w-auto sm:px-3" asChild>
+            <a href={FAL_LIVE_URL} target="_blank" rel="noopener noreferrer" aria-label="Open original fal.live site">
+              <ExternalLink className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">Original site</span>
             </a>
           </Button>
         </div>
