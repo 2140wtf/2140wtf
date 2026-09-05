@@ -185,11 +185,16 @@ export function NsitePreviewDialog({ event, appName, appPicture, open, onOpenCha
     }];
 
     // When a user is logged in, inject a NIP-07 provider so the nsite can
-    // use window.nostr to interact with the user's signer.
+    // use window.nostr to interact with the user's signer. The parent origin
+    // is passed explicitly — document.referrer is always empty under the
+    // app's global no-referrer policy, so the provider cannot infer it.
     if (user) {
       scripts.push({
         path: '__injected__/nostr-provider.js',
-        content: getNsiteNostrProviderScript(user.pubkey),
+        content: getNsiteNostrProviderScript(
+          user.pubkey,
+          typeof window !== 'undefined' ? window.location.origin : undefined,
+        ),
       });
     }
 
