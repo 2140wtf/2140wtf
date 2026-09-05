@@ -25,6 +25,8 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
+import { sanitizePublicHttpsUrl } from '@/lib/sanitizeUrl';
+
 export const LNADDR_DOMAIN = '2140.wtf';
 
 /** Worker base URL — same-origin path in prod, overridable for wrangler dev. */
@@ -149,9 +151,10 @@ export async function checkNameAvailable(name: string): Promise<boolean | null> 
 export function extractWalletLnurlp(json: unknown): { callback: string; nostrPubkey?: string; minSendable?: number; maxSendable?: number } | null {
   if (!json || typeof json !== 'object') return null;
   const obj = json as Record<string, unknown>;
-  if (typeof obj.callback !== 'string' || !/^https:\/\//.test(obj.callback)) return null;
+  const callback = typeof obj.callback === 'string' ? sanitizePublicHttpsUrl(obj.callback) : undefined;
+  if (!callback) return null;
   return {
-    callback: obj.callback,
+    callback,
     nostrPubkey: typeof obj.nostrPubkey === 'string' ? obj.nostrPubkey : undefined,
     minSendable: typeof obj.minSendable === 'number' ? obj.minSendable : undefined,
     maxSendable: typeof obj.maxSendable === 'number' ? obj.maxSendable : undefined,
@@ -160,7 +163,9 @@ export function extractWalletLnurlp(json: unknown): { callback: string; nostrPub
 
 /** Fetch + parse a wallet's LNURLp endpoint (user pastes the URL). */
 export async function fetchWalletLnurlp(url: string): Promise<ReturnType<typeof extractWalletLnurlp>> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const safeUrl = sanitizePublicHttpsUrl(url);
+  if (!safeUrl) throw new Error('Wallet URL must be a public HTTPS URL.');
+  const res = await fetch(safeUrl, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Wallet responded ${res.status}`);
   return extractWalletLnurlp(await res.json());
 }

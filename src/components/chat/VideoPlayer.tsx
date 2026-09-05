@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 
 import { useResolvedMediaSrc } from "@/hooks/useResolvedMediaSrc";
 import { cn } from "@/lib/utils";
+import { sanitizeUrl } from "@/lib/sanitizeUrl";
 
 import type { ImetaEncryption } from "@/lib/imeta";
 
@@ -27,6 +28,7 @@ interface VideoPlayerProps {
  */
 export function VideoPlayer({ src, poster, dim, mime, encryption, className }: VideoPlayerProps) {
   const [failed, setFailed] = useState(false);
+  const safePoster = sanitizeUrl(poster);
   const resolved = useResolvedMediaSrc({ url: src, encryption, mime });
 
   const aspectRatio = useMemo(() => {
@@ -42,7 +44,7 @@ export function VideoPlayer({ src, poster, dim, mime, encryption, className }: V
   if (failed || resolved.status === "error") {
     return (
       <a
-        href={src}
+        href={resolved.status === "ready" ? resolved.src : sanitizeUrl(src)}
         target="_blank"
         rel="noopener noreferrer"
         className="text-primary hover:underline break-all"
@@ -62,7 +64,7 @@ export function VideoPlayer({ src, poster, dim, mime, encryption, className }: V
       {resolved.status === "ready" ? (
         <video
           src={resolved.src}
-          poster={poster}
+          poster={safePoster}
           controls
           preload="metadata"
           playsInline

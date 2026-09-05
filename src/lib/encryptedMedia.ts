@@ -2,6 +2,7 @@ import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 import type { ImetaEncryption } from "@/lib/imeta";
+import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
 
 /**
  * Decrypt client-encrypted Blossom attachments (Vector / 0xChat).
@@ -89,7 +90,10 @@ export async function decryptAttachmentToObjectURL(
   mime: string | undefined,
   signal?: AbortSignal,
 ): Promise<string> {
-  const k = cacheKey(url, enc);
+  const safeUrl = sanitizePublicHttpsUrl(url);
+  if (!safeUrl) throw new Error("Encrypted media URL must be a public HTTPS URL.");
+
+  const k = cacheKey(safeUrl, enc);
   const existing = cache.get(k);
   if (existing) {
     touch(k, existing);
@@ -99,7 +103,7 @@ export async function decryptAttachmentToObjectURL(
   const entry: Entry = { promise: Promise.resolve(""), bytes: 0 };
 
   entry.promise = (async () => {
-    const res = await fetch(url, { signal });
+    const res = await fetch(safeUrl, { signal });
     if (!res.ok) throw new Error(`attachment fetch failed: HTTP ${res.status}`);
     const ciphertext = new Uint8Array(await res.arrayBuffer());
     const plaintext = await decryptBytes(ciphertext, enc.key, enc.nonce);

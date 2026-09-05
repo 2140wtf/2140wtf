@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { decryptAttachmentToObjectURL } from "@/lib/encryptedMedia";
+import { sanitizePublicHttpsUrl } from "@/lib/sanitizeUrl";
 
 import type { ImetaEncryption } from "@/lib/imeta";
 
@@ -33,7 +34,8 @@ type State =
  * Buzz plane is not part of the ₿AO build, so that branch is dropped.)
  */
 export function useResolvedMediaSrc(ref: EncryptedRef | string): State {
-  const url = typeof ref === "string" ? ref : ref.url;
+  const rawUrl = typeof ref === "string" ? ref : ref.url;
+  const url = sanitizePublicHttpsUrl(rawUrl);
   const encryption = typeof ref === "string" ? undefined : ref.encryption;
   const mime = typeof ref === "string" ? undefined : ref.mime;
 
@@ -48,10 +50,14 @@ export function useResolvedMediaSrc(ref: EncryptedRef | string): State {
   const encrypted = Boolean(encKey && encNonce && encAlgo);
 
   const [state, setState] = useState<State>(
-    encrypted ? { status: "loading" } : { status: "ready", src: url },
+    url ? (encrypted ? { status: "loading" } : { status: "ready", src: url }) : { status: "error" },
   );
 
   useEffect(() => {
+    if (!url) {
+      setState({ status: "error" });
+      return;
+    }
     if (!encKey || !encNonce || !encAlgo) {
       setState({ status: "ready", src: url });
       return;

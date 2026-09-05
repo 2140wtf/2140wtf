@@ -21,6 +21,23 @@ export function sanitizeUrl(raw: string | undefined | null): string | undefined 
 }
 
 /**
+ * Return a public HTTPS URL suitable for browser-side fetches that may carry
+ * credentials or payment data. In addition to the general URL policy, reject
+ * embedded HTTP credentials so an untrusted endpoint cannot receive secrets
+ * through a userinfo-bearing URL.
+ */
+export function sanitizePublicHttpsUrl(raw: string | undefined | null): string | undefined {
+  const safe = sanitizeUrl(raw);
+  if (!safe) return undefined;
+  try {
+    const parsed = new URL(safe);
+    return parsed.username || parsed.password ? undefined : safe;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Whether a URL points at a local-network address (loopback, RFC-1918 private,
  * link-local, `.local`/`.localhost`). Untrusted event data (custom-emoji URLs,
  * avatars, media) can carry a `http://localhost:…` or `http://192.168.x.x/…`
