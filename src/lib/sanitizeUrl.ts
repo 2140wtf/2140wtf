@@ -11,7 +11,7 @@ export function sanitizeUrl(raw: string | undefined | null): string | undefined 
   if (!raw) return undefined;
   try {
     const parsed = new URL(raw);
-    if (parsed.protocol === 'https:') {
+    if (parsed.protocol === 'https:' && !isLocalNetworkUrl(raw)) {
       return parsed.href;
     }
   } catch {

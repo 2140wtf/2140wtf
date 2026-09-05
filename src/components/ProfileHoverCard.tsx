@@ -18,6 +18,7 @@ import { BadgeThumbnail } from '@/components/BadgeThumbnail';
 import { useProfileBadges } from '@/hooks/useProfileBadges';
 import { useBadgeDefinitions } from '@/hooks/useBadgeDefinitions';
 import { cn } from '@/lib/utils';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 interface ProfileHoverCardProps {
   pubkey: string;
@@ -54,9 +55,9 @@ function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
     <>
       {/* Mini banner */}
       <div className="h-16 bg-secondary relative">
-        {metadata?.banner && (
+        {sanitizeUrl(metadata?.banner) && (
           <img
-            src={metadata.banner}
+            src={sanitizeUrl(metadata?.banner)}
             alt=""
             className="w-full h-full object-cover"
             loading="lazy"
