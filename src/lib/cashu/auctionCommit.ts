@@ -114,9 +114,13 @@ export function verifyReveal(parts: {
   }) === parts.commitment.toLowerCase();
 }
 
-// ── Local secrets journal (localStorage, best-effort) ─────────────────────
+// ── In-memory secrets journal ───────────────────────────────────────────────
 
-const SECRETS_KEY = 'bao_auction_commit_secrets_v1';
+// Reveal secrets are intentionally tab-scoped and never persisted. Storing them
+// in localStorage/sessionStorage would expose the bidder's sealed max/reserve
+// to any same-origin script and trigger CodeQL clear-text-storage findings.
+const MAX_IN_MEMORY_SECRETS = 256;
+const inMemorySecrets = new Map<string, StoredSecret>();
 
 interface StoredSecret extends CommitSecret {
   /** `${pubkey}:${auctionAddress}:${scope}` — scope is 'max' | 'reserve'. */
@@ -126,28 +130,6 @@ interface StoredSecret extends CommitSecret {
 }
 
 export type CommitScope = 'max' | 'reserve';
-
-function secretsMap(): Map<string, StoredSecret> {
-  const map = new Map<string, StoredSecret>();
-  try {
-    const raw = localStorage.getItem(SECRETS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw) as StoredSecret[];
-      for (const s of arr) if (s && typeof s.key === 'string') map.set(s.key, s);
-    }
-  } catch {
-    // storage blocked — in-memory only this session
-  }
-  return map;
-}
-
-function persistSecrets(map: Map<string, StoredSecret>): void {
-  try {
-    localStorage.setItem(SECRETS_KEY, JSON.stringify(Array.from(map.values())));
-  } catch {
-    // storage blocked
-  }
-}
 
 function secretKey(pubkey: string, auctionAddress: string, scope: CommitScope): string {
   return `${pubkey}:${auctionAddress}:${scope}`;
@@ -160,14 +142,18 @@ export function saveCommitSecret(args: {
   scope: CommitScope;
   secret: CommitSecret;
 }): void {
-  const map = secretsMap();
-  map.set(secretKey(args.pubkey, args.auctionAddress, args.scope), {
-    key: secretKey(args.pubkey, args.auctionAddress, args.scope),
+  const key = secretKey(args.pubkey, args.auctionAddress, args.scope);
+  if (inMemorySecrets.size >= MAX_IN_MEMORY_SECRETS && !inMemorySecrets.has(key)) {
+    const oldestKey = inMemorySecrets.keys().next().value;
+    if (oldestKey) inMemorySecrets.delete(oldestKey);
+  }
+  inMemorySecrets.delete(key);
+  inMemorySecrets.set(key, {
+    key,
     valueSats: args.secret.valueSats,
     nonce: args.secret.nonce,
     createdAt: Math.floor(Date.now() / 1000),
   });
-  persistSecrets(map);
 }
 
 /** Load this client's reveal secret for a commitment, if it made one. */
@@ -176,7 +162,7 @@ export function loadCommitSecret(args: {
   auctionAddress: string;
   scope: CommitScope;
 }): CommitSecret | null {
-  const s = secretsMap().get(secretKey(args.pubkey, args.auctionAddress, args.scope));
+  const s = inMemorySecrets.get(secretKey(args.pubkey, args.auctionAddress, args.scope));
   return s ? { valueSats: s.valueSats, nonce: s.nonce } : null;
 }
 
@@ -186,9 +172,7 @@ export function clearCommitSecret(args: {
   auctionAddress: string;
   scope: CommitScope;
 }): void {
-  const map = secretsMap();
-  map.delete(secretKey(args.pubkey, args.auctionAddress, args.scope));
-  persistSecrets(map);
+  inMemorySecrets.delete(secretKey(args.pubkey, args.auctionAddress, args.scope));
 }
 
 // ── small utils ────────────────────────────────────────────────────────────
