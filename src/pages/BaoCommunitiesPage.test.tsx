@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
@@ -109,5 +110,17 @@ describe('BaoCommunitiesPage (trollbox)', () => {
     // LoginDialog is a real component; smoke-assert the click didn't throw and
     // the gate stays mounted (dialog render is covered by its own tests).
     expect(screen.getByText('Members-only chat')).toBeInTheDocument();
+  });
+});
+
+describe('FalLivePage Trollbox', () => {
+  it('embeds the encrypted trollbox in-page as the single locked room', () => {
+    const source = readFileSync('src/pages/FalLivePage.tsx', 'utf8');
+    // The old hosted-iframe embed (room/view params on the hosted origin) is
+    // gone: the page renders the in-page scroll client locked to the trollbox
+    // room on the pinned relay — same metadata-minimization goal, and no
+    // third-party frame at all.
+    expect(source).not.toContain('BAO_HOSTED_ORIGIN');
+    expect(source).toContain('lockedRoom={BAO_TROLLBOX_ROOM} embedded');
   });
 });
