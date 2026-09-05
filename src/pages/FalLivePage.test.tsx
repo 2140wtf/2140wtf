@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
@@ -66,10 +66,20 @@ describe('FalLivePage trollbox', () => {
     // iframe is still fal.live. Both resolve once the authed branch renders.
     await vi.waitFor(() => {
       expect(screen.queryByText('Members-only chat')).not.toBeInTheDocument();
+      expect(screen.getByText('TROLLBOX')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'SIGN OUT' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Expand Trollbox' })).toHaveAttribute('aria-expanded', 'false');
       expect(MockWebSocket.instances.length).toBeGreaterThan(0);
       const studio = screen.getByTitle('fal.live AI generation studio');
       expect(studio).toHaveAttribute('src', expect.stringContaining('fal.live'));
+      expect(studio.className).toContain('flex-1');
     });
+
+    // Expanding is opt-in so the live answer controls keep the available
+    // mobile height until the viewer explicitly opens the chat.
+    const expand = screen.getByRole('button', { name: 'Expand Trollbox' });
+    fireEvent.click(expand);
+    expect(screen.getByRole('button', { name: 'Collapse Trollbox' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('connects ONLY to the pinned 2140.social relay — never the app relays', async () => {

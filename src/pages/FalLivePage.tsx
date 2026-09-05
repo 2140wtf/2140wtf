@@ -16,18 +16,20 @@
  */
 import { useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowLeft, ExternalLink, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, LogOut, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
+import { useLoginActions } from "@/hooks/useLoginActions";
 import { BaoScrollChat } from "@/components/bao/BaoScrollChat";
 import LoginDialog from "@/components/auth/LoginDialog";
 import SignupDialog from "@/components/auth/SignupDialog";
 import { BAO_TROLLBOX_ROOM } from "@/lib/baosocial/rooms";
 import { FAL_LIVE_URL } from "@/lib/falLive";
+import { cn } from "@/lib/utils";
 
 /** Members-only gate for the chat panel — the room is public on the relay
  * but posting/reading is for signed-in users (2140 Social parity). */
@@ -37,10 +39,6 @@ function ChatGate() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <MessageSquare className="size-4 text-primary shrink-0" />
-        <span className="text-sm font-semibold flex-1 truncate">Trollbox</span>
-      </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
         <ShieldCheck className="size-8 text-muted-foreground" />
         <div>
@@ -70,6 +68,8 @@ function ChatGate() {
 export function FalLivePage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
+  const { logout } = useLoginActions();
+  const [chatExpanded, setChatExpanded] = useState(false);
 
   // Expanded mode: collapse the left sidebar to its icon rail and hide the
   // right sidebar so the studio gets the full width (same pattern as
@@ -85,8 +85,9 @@ export function FalLivePage() {
   useSeoMeta({ title: `fal.live | ${config.appName}` });
 
   return (
-    // Mobile: stack — studio on top, chat below (video keeps ~55dvh, chat
-    // takes the rest). Desktop: side-by-side — studio flex-1, chat w-80.
+    // Mobile: the studio owns all remaining height and Trollbox starts as a
+    // compact bar, keeping fal.live's answer controls visible. Desktop keeps
+    // the chat as a narrow full-height panel beside the studio.
     <main className="flex h-[100dvh] flex-col overflow-hidden lg:flex-row">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-3 border-b px-4 py-2">
@@ -110,19 +111,50 @@ export function FalLivePage() {
         <iframe
           src={FAL_LIVE_URL}
           title="fal.live AI generation studio"
-          className="h-[55dvh] w-full flex-none border-0 bg-black lg:h-auto lg:flex-1"
+          className="min-h-0 w-full flex-1 border-0 bg-black"
           allow="fullscreen; clipboard-write"
         />
       </div>
-      <aside className="flex min-h-0 flex-1 flex-col border-t bg-muted/30 lg:w-80 lg:flex-none lg:border-l lg:border-t-0">
-        {user ? (
-          // Authed: the real encrypted 2140 Social scroll client, locked to
-          // the Trollbox room (embedded — parent provides the height). Stays
-          // on this page; nothing publishes to public Nostr.
-          <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} embedded />
-        ) : (
-          <ChatGate />
+      <aside
+        className={cn(
+          "flex min-h-0 flex-none flex-col border-t bg-muted/30 transition-[height] duration-200 lg:h-auto lg:w-80 lg:flex-none lg:border-l lg:border-t-0",
+          chatExpanded ? "h-[min(40dvh,360px)]" : "h-11",
         )}
+      >
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
+          <MessageSquare className="size-4 shrink-0 text-primary" />
+          <span className="flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLLBOX</span>
+          {user && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-[10px] font-semibold tracking-wide"
+              onClick={() => void logout()}
+            >
+              <LogOut className="mr-1 size-3" />
+              SIGN OUT
+            </Button>
+          )}
+          <button
+            type="button"
+            className="rounded p-1 text-muted-foreground hover:bg-secondary/60 hover:text-foreground lg:hidden"
+            aria-label={chatExpanded ? "Collapse Trollbox" : "Expand Trollbox"}
+            aria-expanded={chatExpanded}
+            onClick={() => setChatExpanded((expanded) => !expanded)}
+          >
+            {chatExpanded ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+          </button>
+        </div>
+        <div className={cn("min-h-0 flex-1", !chatExpanded && "hidden lg:flex")}>
+          {user ? (
+            // Authed: the real encrypted 2140 Social scroll client, locked to
+            // the Trollbox room. The compact parent header is the only chrome
+            // shown in this embedded view.
+            <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} embedded />
+          ) : (
+            <ChatGate />
+          )}
+        </div>
       </aside>
     </main>
   );
