@@ -14,6 +14,7 @@ import { emitRelayReopened } from '@/lib/relayReopen';
 import { RelayBackoff } from '@/lib/relayBackoff';
 import { normalizeRelayUrl } from '@/lib/platform';
 import { logSync } from '@/lib/syncLog';
+import { AuthSignQueue } from '@/lib/authSignQueue';
 
 /**
  * IndexedDB database name for the events cache.
@@ -141,19 +142,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // relay that keeps closing our subs — reuses the signature instead of queuing
   // another bunker round-trip.
   const authCacheRef = useRef<Map<string, { challenge: string; event: NostrEvent; signedAt: number }>>(new Map());
-  // Per-relay in-flight AUTH sign, so a burst of concurrent challenges for the
-  // SAME challenge string collapses onto one bunker round-trip instead of N.
-  // (Distinct challenges are NOT deduped here — they get their own key — but
-  // they are serialized by authSignChainRef below.)
-  const authInFlightRef = useRef<Map<string, Promise<NostrEvent>>>(new Map());
-  // Per-relay sign CHAIN: distinct concurrent challenges enqueue behind the
-  // previous sign for this relay and re-check the cooldown AT THEIR TURN.
-  // Without this, N distinct challenges all observe an empty cooldown
-  // simultaneously and sign concurrently — the rate limit never gated bursts
-  // (cooldown is only recorded after a sign completes). With it, the first
-  // signs immediately, the rest space out ≥ AUTH_MIN_INTERVAL_MS apart, and
-  // each fails closed if its challenge was superseded while queued.
-  const authSignChainRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Per-relay sign queue (round 27c extraction, `lib/authSignQueue.ts`):
+  // callers asking for the SAME challenge collapse onto one in-flight sign;
+  // DISTINCT challenges serialize as FULL turns (turn N+1 starts only after
+  // turn N's sign fully completed, cooldown write included) and re-check the
+  // cooldown AT THEIR TURN — the first signs immediately, the rest space out
+  // ≥ AUTH_MIN_INTERVAL_MS apart, and each fails closed if its challenge was
+  // superseded while queued. A failed sign never poisons the chain.
+  const authQueueRef = useRef<AuthSignQueue<NostrEvent>>(new AuthSignQueue<NostrEvent>());
   // Per-relay cooldown: timestamp until which we refuse to sign a NEW challenge
   // for this relay, so a relay that re-challenges on every retried REQ can't
   // flood the bunker. Set after each successful sign.
@@ -192,10 +188,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       authChallengeRef.current.delete(url);
       // In-flight queued signs still complete (fail-closed on supersession);
       // the next challenge on the fresh socket starts a new chain.
-      authSignChainRef.current.delete(url);
-      for (const key of authInFlightRef.current.keys()) {
-        if (key.startsWith(`${url}\n`)) authInFlightRef.current.delete(key);
-      }
+      authQueueRef.current.reset(url);
       // Retransmit publishes still awaiting an OK (see docstring). NRelay1
       // removes an event from pendingEvents once its OK arrives, so anything
       // still here either never reached the relay or its OK was lost — both
@@ -301,8 +294,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       // cache-hit path skips the sign-time pubkey validation).
       authCacheRef.current.clear();
       authCooldownRef.current.clear();
-      authInFlightRef.current.clear();
-      authSignChainRef.current.clear();
+      authQueueRef.current.clear();
       authChallengeRef.current.clear();
       setTransportAccount(currentLogin?.pubkey);
     }
@@ -391,70 +383,64 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
               // Challenges are nonces. Collapse only callers asking for the
               // SAME challenge; sharing an in-flight event across distinct
               // challenges would return a correctly-signed but invalid AUTH.
-              const inFlightKey = `${expectedRelay}\n${challenge}`;
-              const inFlight = authInFlightRef.current.get(inFlightKey);
-              if (inFlight) return inFlight;
-              // Serialize DISTINCT concurrent challenges per relay: enqueue
-              // behind the previous sign for this relay, then re-check the
-              // cooldown AT OUR TURN (it reflects every sign queued before
-              // us, not just completed-before-we-arrived).
-              const prevTurn = authSignChainRef.current.get(expectedRelay) ?? Promise.resolve();
-              const myTurn = prevTurn.catch(() => {
-                // A failed sign must not poison the chain for later signs.
-              }).then(async () => {
-                const wait = (authCooldownRef.current.get(expectedRelay) ?? 0) - Date.now();
-                if (wait > 0) {
-                  await new Promise<void>((resolve) => setTimeout(resolve, wait));
-                }
-              });
-              authSignChainRef.current.set(expectedRelay, myTurn);
-              const signing: Promise<NostrEvent> = myTurn.then(async () => {
-                const liveSigner = signerRef.current;
-                if (!liveSigner) {
-                  throw new Error('AUTH failed: no signer available (user not logged in)');
-                }
-                const signed = await liveSigner.signEvent({
-                  kind: 22242,
-                  content: '',
-                  tags: [
-                    ['relay', expectedRelay],
-                    ['challenge', challenge],
-                  ],
-                  created_at: Math.floor(Date.now() / 1000),
-                });
+              // Same challenge already signing? Collapse onto it. DISTINCT
+              // challenges serialize as full turns per relay; the async guard
+              // re-checks the cooldown AT OUR TURN (it reflects every sign
+              // queued before us, not just completed-before-we-arrived) and
+              // waits it out — delay, don't refuse (NRelay1 gives each sub one
+              // auth-retry per socket).
+              return authQueueRef.current.collapse(`${expectedRelay}\n${challenge}`, () =>
+                authQueueRef.current.enqueue(
+                  expectedRelay,
+                  async () => {
+                    const liveSigner = signerRef.current;
+                    if (!liveSigner) {
+                      throw new Error('AUTH failed: no signer available (user not logged in)');
+                    }
+                    const signed = await liveSigner.signEvent({
+                      kind: 22242,
+                      content: '',
+                      tags: [
+                        ['relay', expectedRelay],
+                        ['challenge', challenge],
+                      ],
+                      created_at: Math.floor(Date.now() / 1000),
+                    });
 
-                // Validate the signed event before trusting it (a compromised
-                // or misconfigured signer must not silently authenticate us
-                // to the wrong relay or as the wrong identity).
-                const relayTag = signed.tags.find(([name]) => name === 'relay')?.[1];
-                if (relayTag !== expectedRelay) {
-                  throw new Error('AUTH failed: signed relay tag does not match connected relay');
-                }
-                const challengeTag = signed.tags.find(([name]) => name === 'challenge')?.[1];
-                if (challengeTag !== challenge) {
-                  throw new Error('AUTH failed: signed challenge tag does not match relay challenge');
-                }
-                const expectedPubkey = loginRef.current?.pubkey;
-                if (!expectedPubkey || signed.pubkey !== expectedPubkey) {
-                  throw new Error('AUTH failed: signed pubkey does not match logged-in identity');
-                }
-                if (
-                  authChallengeRef.current.get(expectedRelay) !== challenge ||
-                  relay.socket !== challengedSocket
-                ) {
-                  throw new Error('AUTH failed: relay challenge was superseded');
-                }
+                    // Validate the signed event before trusting it (a compromised
+                    // or misconfigured signer must not silently authenticate us
+                    // to the wrong relay or as the wrong identity).
+                    const relayTag = signed.tags.find(([name]) => name === 'relay')?.[1];
+                    if (relayTag !== expectedRelay) {
+                      throw new Error('AUTH failed: signed relay tag does not match connected relay');
+                    }
+                    const challengeTag = signed.tags.find(([name]) => name === 'challenge')?.[1];
+                    if (challengeTag !== challenge) {
+                      throw new Error('AUTH failed: signed challenge tag does not match relay challenge');
+                    }
+                    const expectedPubkey = loginRef.current?.pubkey;
+                    if (!expectedPubkey || signed.pubkey !== expectedPubkey) {
+                      throw new Error('AUTH failed: signed pubkey does not match logged-in identity');
+                    }
+                    if (
+                      authChallengeRef.current.get(expectedRelay) !== challenge ||
+                      relay.socket !== challengedSocket
+                    ) {
+                      throw new Error('AUTH failed: relay challenge was superseded');
+                    }
 
-                authCacheRef.current.set(expectedRelay, { challenge, event: signed, signedAt: Date.now() });
-                authCooldownRef.current.set(expectedRelay, Date.now() + AUTH_MIN_INTERVAL_MS);
-                return signed;
-              }).finally(() => {
-                if (authInFlightRef.current.get(inFlightKey) === signing) {
-                  authInFlightRef.current.delete(inFlightKey);
-                }
-              });
-              authInFlightRef.current.set(inFlightKey, signing);
-              return signing;
+                    authCacheRef.current.set(expectedRelay, { challenge, event: signed, signedAt: Date.now() });
+                    authCooldownRef.current.set(expectedRelay, Date.now() + AUTH_MIN_INTERVAL_MS);
+                    return signed;
+                  },
+                  async () => {
+                    const wait = (authCooldownRef.current.get(expectedRelay) ?? 0) - Date.now();
+                    if (wait > 0) {
+                      await new Promise<void>((resolve) => setTimeout(resolve, wait));
+                    }
+                  },
+                ),
+              );
             };
             return signUserAuth();
           },
