@@ -70,8 +70,50 @@ export function FalLivePage() {
   const { user } = useCurrentUser();
   const { logout } = useLoginActions();
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [kbOverlap, setKbOverlap] = useState(0);
   const videoColumnRef = useRef<HTMLDivElement | null>(null);
   const [pinnedVideoHeight, setPinnedVideoHeight] = useState<number | null>(null);
+
+  // The page height reads --fal-live-dvh (see index.css .fal-live-height):
+  // 100dvh recalculates as mobile browser chrome shows/hides — a URL-bar
+  // collapse is often triggered by taps near the bottom edge, exactly where
+  // the trollbox bar sits — and that layout churn resizes the cross-origin
+  // studio iframe, pausing playback ("sometimes it stops video"). The value
+  // is pinned once per session and refreshed ONLY on rotation (width change);
+  // height-only changes (chrome, keyboard) never churn the layout.
+  // The software keyboard is handled separately: the chat overlay lifts by
+  // the visual-viewport overlap so typing stays usable — the overlay moves,
+  // the iframe never does.
+  useEffect(() => {
+    const root = document.documentElement;
+    let pinnedWidth = window.visualViewport?.width ?? window.innerWidth;
+    const pinDvh = () => {
+      const vv = window.visualViewport;
+      root.style.setProperty("--fal-live-dvh", `${Math.round(vv?.height ?? window.innerHeight)}px`);
+    };
+    const sync = () => {
+      const vv = window.visualViewport;
+      const width = vv?.width ?? window.innerWidth;
+      if (width !== pinnedWidth) {
+        pinnedWidth = width; // rotation: re-pin the session height
+        pinDvh();
+      }
+      // Keyboard overlap: gap between layout-viewport bottom and the visible
+      // (visual) viewport bottom. 0 with no keyboard; >0 while typing.
+      const overlap = Math.max(0, Math.round(window.innerHeight - (vv?.height ?? window.innerHeight) - (vv?.offsetTop ?? 0)));
+      setKbOverlap(overlap);
+    };
+    pinDvh();
+    window.visualViewport?.addEventListener("resize", sync);
+    window.visualViewport?.addEventListener("scroll", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", sync);
+      window.visualViewport?.removeEventListener("scroll", sync);
+      window.removeEventListener("orientationchange", sync);
+      root.style.removeProperty("--fal-live-dvh");
+    };
+  }, []);
 
   // Cross-origin video inside the studio iframe pauses in several mobile
   // browser engines whenever the iframe's rendered box changes size. Two
@@ -188,30 +230,39 @@ export function FalLivePage() {
             ? "h-[min(40dvh,360px)] bg-background shadow-[0_-12px_32px_rgba(0,0,0,0.45)] lg:bg-muted/30"
             : "h-11",
         )}
+        // While typing, lift the overlay above the software keyboard (inert
+        // on desktop, where the aside is position:static and the inline
+        // bottom is ignored).
+        style={chatExpanded && kbOverlap > 0 ? { bottom: kbOverlap } : undefined}
       >
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-          <MessageSquare className="size-4 shrink-0 text-primary" />
-          <span className="flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLLBOX</span>
+        <div className="relative flex h-11 shrink-0 items-center gap-2 border-b px-3">
+          {/* The WHOLE bar is the tap target on mobile (the chevron alone was
+              ~28px and most taps missed it — "not expanding when clicked").
+              Controls sit at z-10 above it and keep their own handlers; the
+              chevron is decorative and tap-through (pointer-events-none). */}
+          <button
+            type="button"
+            className="absolute inset-0 z-0 lg:hidden"
+            aria-label={chatExpanded ? "Collapse Trollbox" : "Expand Trollbox"}
+            aria-expanded={chatExpanded}
+            onClick={() => setChatExpanded((expanded) => !expanded)}
+          />
+          <MessageSquare className="pointer-events-none relative z-10 size-4 shrink-0 text-primary" />
+          <span className="pointer-events-none relative z-10 flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLLBOX</span>
           {user && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[10px] font-semibold tracking-wide"
+              className="relative z-10 h-7 px-2 text-[10px] font-semibold tracking-wide"
               onClick={() => void logout()}
             >
               <LogOut className="mr-1 size-3" />
               SIGN OUT
             </Button>
           )}
-          <button
-            type="button"
-            className="rounded p-1 text-muted-foreground hover:bg-secondary/60 hover:text-foreground lg:hidden"
-            aria-label={chatExpanded ? "Collapse Trollbox" : "Expand Trollbox"}
-            aria-expanded={chatExpanded}
-            onClick={() => setChatExpanded((expanded) => !expanded)}
-          >
+          <span aria-hidden className="pointer-events-none relative z-10 rounded p-1 text-muted-foreground lg:hidden">
             {chatExpanded ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-          </button>
+          </span>
         </div>
         <div className={cn("min-h-0 flex-1", !chatExpanded && "hidden lg:flex")}>
           {user ? (
