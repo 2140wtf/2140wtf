@@ -32,7 +32,11 @@ const EVENTS_DB_NAME = 'nostr';
  * REQs (each re-challenged) arrives within milliseconds, so a short window
  * collapses the flood onto one bunker sign while still letting a genuine
  * reconnect re-authenticate quickly. (Challenges are nonces, so we never reuse a
- * signature across challenges — we just refuse the extra ones during the window.)
+ * signature across challenges — extra challenges during the window are QUEUED
+ * behind the window, not refused: NRelay1's doAuth swallows a rejection and each
+ * sub/publish gets ONE auth-retry per socket, so a refused challenge would kill
+ * a gated sub until reconnect. Queued signs still fail closed if their challenge
+ * was superseded by the time their turn comes.)
  */
 const AUTH_MIN_INTERVAL_MS = 5_000;
 
@@ -138,10 +142,18 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // another bunker round-trip.
   const authCacheRef = useRef<Map<string, { challenge: string; event: NostrEvent; signedAt: number }>>(new Map());
   // Per-relay in-flight AUTH sign, so a burst of concurrent challenges for the
-  // same relay collapses onto one bunker round-trip instead of N (the cache
-  // timestamp is only set AFTER signing, so without this the whole burst slips
-  // past the rate-limit check before any of them completes).
+  // SAME challenge string collapses onto one bunker round-trip instead of N.
+  // (Distinct challenges are NOT deduped here — they get their own key — but
+  // they are serialized by authSignChainRef below.)
   const authInFlightRef = useRef<Map<string, Promise<NostrEvent>>>(new Map());
+  // Per-relay sign CHAIN: distinct concurrent challenges enqueue behind the
+  // previous sign for this relay and re-check the cooldown AT THEIR TURN.
+  // Without this, N distinct challenges all observe an empty cooldown
+  // simultaneously and sign concurrently — the rate limit never gated bursts
+  // (cooldown is only recorded after a sign completes). With it, the first
+  // signs immediately, the rest space out ≥ AUTH_MIN_INTERVAL_MS apart, and
+  // each fails closed if its challenge was superseded while queued.
+  const authSignChainRef = useRef<Map<string, Promise<void>>>(new Map());
   // Per-relay cooldown: timestamp until which we refuse to sign a NEW challenge
   // for this relay, so a relay that re-challenges on every retried REQ can't
   // flood the bunker. Set after each successful sign.
@@ -178,6 +190,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       authCacheRef.current.delete(url);
       authCooldownRef.current.delete(url);
       authChallengeRef.current.delete(url);
+      // In-flight queued signs still complete (fail-closed on supersession);
+      // the next challenge on the fresh socket starts a new chain.
+      authSignChainRef.current.delete(url);
       for (const key of authInFlightRef.current.keys()) {
         if (key.startsWith(`${url}\n`)) authInFlightRef.current.delete(key);
       }
@@ -287,6 +302,7 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
       authCacheRef.current.clear();
       authCooldownRef.current.clear();
       authInFlightRef.current.clear();
+      authSignChainRef.current.clear();
       authChallengeRef.current.clear();
       setTransportAccount(currentLogin?.pubkey);
     }
@@ -342,13 +358,16 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
              * Sign the user's kind-22242 for this relay, guarded against a
              * slow/remote NIP-46 bunker: reuse a cached signature when the
              * relay re-issues the IDENTICAL challenge (challenges are
-             * single-use nonces, so never across a fresh one); collapse a
-             * concurrent burst onto one in-flight sign; and rate-limit per
-             * relay — within the window, DELAY the sign until the window ends
-             * rather than refusing it (NRelay1's doAuth swallows a rejection
-             * and each sub/publish gets ONE auth-retry per socket, so a
-             * dropped challenge could kill a gated sub until reconnect). A
-             * delayed sign uses the relay's LATEST challenge at fire time.
+             * single-use nonces, so never across a fresh one); collapse
+             * concurrent callers asking for the SAME challenge onto one
+             * in-flight sign; serialize DISTINCT concurrent challenges per
+             * relay (sign-chain) and rate-limit per relay — within the
+             * window, DELAY the sign until the window ends rather than
+             * refusing it (NRelay1's doAuth swallows a rejection and each
+             * sub/publish gets ONE auth-retry per socket, so a dropped
+             * challenge could kill a gated sub until reconnect). A sign whose
+             * challenge was superseded (relay issued a newer one) FAILS
+             * CLOSED at fire time — it never signs stale challenges.
              */
             const signUserAuth = (): Promise<NostrEvent> => {
               const signer = signerRef.current;
@@ -375,11 +394,21 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
               const inFlightKey = `${expectedRelay}\n${challenge}`;
               const inFlight = authInFlightRef.current.get(inFlightKey);
               if (inFlight) return inFlight;
-              const wait = (authCooldownRef.current.get(expectedRelay) ?? 0) - Date.now();
-              const signing: Promise<NostrEvent> = (wait > 0
-                ? new Promise<void>((resolve) => setTimeout(resolve, wait))
-                : Promise.resolve()
-              ).then(async () => {
+              // Serialize DISTINCT concurrent challenges per relay: enqueue
+              // behind the previous sign for this relay, then re-check the
+              // cooldown AT OUR TURN (it reflects every sign queued before
+              // us, not just completed-before-we-arrived).
+              const prevTurn = authSignChainRef.current.get(expectedRelay) ?? Promise.resolve();
+              const myTurn = prevTurn.catch(() => {
+                // A failed sign must not poison the chain for later signs.
+              }).then(async () => {
+                const wait = (authCooldownRef.current.get(expectedRelay) ?? 0) - Date.now();
+                if (wait > 0) {
+                  await new Promise<void>((resolve) => setTimeout(resolve, wait));
+                }
+              });
+              authSignChainRef.current.set(expectedRelay, myTurn);
+              const signing: Promise<NostrEvent> = myTurn.then(async () => {
                 const liveSigner = signerRef.current;
                 if (!liveSigner) {
                   throw new Error('AUTH failed: no signer available (user not logged in)');
