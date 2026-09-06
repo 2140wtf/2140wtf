@@ -84,7 +84,17 @@ interface Bolt11Info {
   paymentHash: string | null;
 }
 
-/** Decode the two invoice fields zaps care about. Never throws. */
+/**
+ * Decode the two invoice fields zaps care about. Never throws.
+ *
+ * Amount contract (round 27b): `amountMsats` is returned only when it is a
+ * positive **safe integer**. light-bolt11-decoder accepts amounts far above
+ * 2^53 msat (measured: a 21M-BTC invoice decodes to 2.1e18 msat as a lossy
+ * float) — silently storing a corrupted value would poison every downstream
+ * comparison (`amountMsats !== requestAmount`, melt/quote math, tally sums).
+ * Invoices with sub-quadrillion-msat precision do not exist on the network,
+ * so failing closed here cannot reject a legitimate payment.
+ */
 export function bolt11Info(invoice: string): Bolt11Info {
   try {
     const decoded = decodeBolt11(invoice.trim());
@@ -93,7 +103,7 @@ export function bolt11Info(invoice: string): Bolt11Info {
     for (const section of decoded.sections as Array<{ name: string; value?: unknown }>) {
       if (section.name === "amount") {
         const n = Number(section.value);
-        if (Number.isFinite(n) && n > 0) amountMsats = n;
+        if (Number.isSafeInteger(n) && n > 0) amountMsats = n;
       } else if (section.name === "payment_hash" && typeof section.value === "string") {
         paymentHash = section.value.toLowerCase();
       }
@@ -108,6 +118,19 @@ export function bolt11Info(invoice: string): Bolt11Info {
 export function bolt11AmountSats(invoice: string): number | null {
   const { amountMsats } = bolt11Info(invoice);
   return amountMsats === null ? null : Math.floor(amountMsats / 1000);
+}
+
+/**
+ * Hard ceiling on any single zap's sats (21e6 BTC × 1e8 sats/BTC, the total
+ * Bitcoin supply). Every attacker-supplied amount in a tally must pass this
+ * before it can reach the accumulator: an over-supply amount is definitionally
+ * not a real payment, and capping the per-entry maximum caps the accumulator.
+ */
+export const MAX_ZAP_SATS = 2_100_000_000_000_000;
+
+/** True when `sats` is a positive integer within the Bitcoin supply bound. */
+export function isValidZapSats(sats: number): boolean {
+  return Number.isSafeInteger(sats) && sats > 0 && sats <= MAX_ZAP_SATS;
 }
 
 // ── NIP-29: public kind-9735 receipts ────────────────────────────────────────
@@ -155,7 +178,8 @@ export function receiptAmountSats(receipt: NostrEvent, request: NostrEvent): num
   if (amountMsats === null) return 0;
   const requested = Number(request.tags.find((t) => t[0] === "amount")?.[1]);
   if (Number.isFinite(requested) && requested > 0 && requested !== amountMsats) return 0;
-  return Math.floor(amountMsats / 1000);
+  const sats = Math.floor(amountMsats / 1000);
+  return isValidZapSats(sats) ? sats : 0;
 }
 
 /**
@@ -225,7 +249,7 @@ export function tallyOnchainZaps(
     if (seenTxids.has(txid)) continue;
     seenTxids.add(txid);
     const sats = Number(event.tags.find((t) => t[0] === "amount")?.[1]);
-    if (!Number.isFinite(sats) || sats <= 0) continue;
+    if (!isValidZapSats(sats)) continue;
     zaps.push({
       id: event.id,
       pubkey: event.pubkey,
@@ -269,6 +293,7 @@ export function verifyZapRumor(rumor: {
   const { amountMsats, paymentHash } = bolt11Info(bolt11);
   if (!paymentHash || amountMsats === null) return null; // amountless invoices are not zappable
   if (amountMsats !== amount) return null;
+  if (!isValidZapSats(Math.floor(amountMsats / 1000))) return null;
   try {
     return bytesToHex(sha256(hexToBytes(preimage))) === paymentHash ? paymentHash : null;
   } catch {
