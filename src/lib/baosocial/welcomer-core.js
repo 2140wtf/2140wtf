@@ -137,8 +137,16 @@ export function verifyChallengeSignature(welcomerEpochKey, c) {
 }
 // ─── Bounded replay cache (§5.2) ───────────────────────────────────────────
 export class ReplayCache {
-    constructor(clock = systemClock) {
+    constructor(clock = systemClock, limit = 8192) {
         this.clock = clock;
+        /** Hard growth cap (round 26): without it, a burner-generator flood of
+         * validly-signed, validly-solved challenges grows this Map without
+         * bound for the whole TTL+grace window. Mirrors TtlKeySet's discipline:
+         * expired first, then OLDEST survivors, per key — never a bulk wipe
+         * (a bulk wipe would drop ALL replay protection at once). The trade:
+         * under sustained flood, an evicted entry could theoretically be
+         * re-presented — accepted deliberately, same as TtlKeySet. */
+        this.limit = limit;
         /** ReplayCache (welcomer-core.ts) tracks arbitrary replay keys (pow challenges,
          * invite-uses, etc.). NullifierCache (credential.ts) is the same algorithm
          * but adds hex-validation of the nullifier (NOSTR-32 bytes hex constraint).
@@ -154,7 +162,15 @@ export class ReplayCache {
         if (this.seen.has(key))
             return false;
         this.seen.set(key, this.clock.nowSec() + ttlWithGraceSec);
+        this.evictOldestIfOverLimit();
         return true;
+    }
+    evictOldestIfOverLimit() {
+        if (this.seen.size <= this.limit)
+            return;
+        const oldest = [...this.seen.entries()].sort((a, b) => a[1] - b[1]);
+        for (let i = 0; i < oldest.length && this.seen.size > this.limit; i++)
+            this.seen.delete(oldest[i][0]);
     }
     sweep() {
         const now = this.clock.nowSec();

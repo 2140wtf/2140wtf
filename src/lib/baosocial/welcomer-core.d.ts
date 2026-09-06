@@ -56,7 +56,7 @@ export declare class ReplayCache {
      * not hex).
      */
     private readonly seen;
-    constructor(clock?: Clock);
+    constructor(clock?: Clock, limit?: number);
     /** Returns true if the key was NEW (not replayed). */
     checkAndInsert(key: string, ttlWithGraceSec: number): boolean;
     private sweep;
