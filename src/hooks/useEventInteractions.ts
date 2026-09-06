@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { isCustomEmoji, getCustomEmojiUrl } from '@/lib/customEmoji';
 import { isNostrId } from '@/lib/nostrId';
+import { parseBolt11Amount } from '@/lib/bolt11';
 
 export interface RepostEntry {
   eventId: string;
@@ -66,32 +67,23 @@ export function extractZapAmount(event: NostrEvent): number {
 
   const bolt11Tag = event.tags.find(([name]) => name === 'bolt11');
   if (bolt11Tag?.[1]) {
-    const msats = parseBolt11Amount(bolt11Tag[1]);
+    const msats = parseBolt11AmountMsats(bolt11Tag[1]);
     if (msats > 0) return msats;
   }
 
   return 0;
 }
 
-function parseBolt11Amount(bolt11: string): number {
-  // Digit cap + safe-integer guard: crafted invoice strings previously hit
-  // parseInt unbounded, silently losing precision past 2^53, and the msats
-  // product could exceed Number.MAX_SAFE_INTEGER. Return 0 (the caller's
-  // "unknown amount" sentinel) instead of an unfaithful number.
-  const match = bolt11.toLowerCase().match(/^ln\w+?(\d{1,9})([munp]?)1/);
-  if (!match) return 0;
-  const value = parseInt(match[1], 10);
-  if (isNaN(value)) return 0;
-  const multiplier = match[2];
-  const apply = (v: number): number =>
-    Number.isFinite(v) && Number.isSafeInteger(v) ? v : 0;
-  switch (multiplier) {
-    case 'm': return apply(value * 100_000_000);
-    case 'u': return apply(value * 100_000);
-    case 'n': return apply(value * 100);
-    case 'p': return apply(value / 10);
-    default:  return apply(value * 100_000_000_000);
-  }
+function parseBolt11AmountMsats(bolt11: string): number {
+  // Delegate to the shared, property-fuzzed sats parser (round 24) and scale
+  // to millisatoshis — the zap receipt's denomination. Delegation removes the
+  // duplicated regex/multiplier table that drifted from the shared parser in
+  // round 23 (different digit caps per copy = different acceptance per caller).
+  // Overflow/precision degrade to 0, the caller's "unknown amount" sentinel.
+  const sats = parseBolt11Amount(bolt11);
+  if (sats === null) return 0;
+  const msats = sats * 1000;
+  return Number.isFinite(msats) && Math.abs(msats) <= Number.MAX_SAFE_INTEGER ? msats : 0;
 }
 
 /**

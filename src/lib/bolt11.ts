@@ -14,7 +14,17 @@ export function parseBolt11Amount(bolt11: string): number | null {
   // Cap the digit run BEFORE numeric parsing. Real invoices never approach
   // this (210000000000000 msats = 2.1e14 < 2^53); the cap only rejects
   // crafted strings whose exact value JavaScript cannot represent.
-  const match = bolt11.toLowerCase().match(/^ln\w+?(?:(\d{1,15})([munp]?))?1/);
+  //
+  // Grammar-hardened (round 24, property-fuzzed): (a) the hrp matcher is
+  // ALPHABETIC — real BOLT11 hrps (lnbc, lntb, lnbcrt…) are all letters, and
+  // letting it match digits let a crafted 16+-digit run be partially absorbed
+  // into the "hrp", re-anchoring the amount capture on a shifted sub-run that
+  // silently returned a wrong amount; (b) the capture is anchored immediately
+  // after the hrp, so leading run digits can never be skipped; (c) `[^1]*$`
+  // requires the hrp/amount separator `1` to be the LAST `1` in the string —
+  // bech32 data never contains `1`, so a `1` planted inside a digit run cannot
+  // impersonate the separator and truncate the amount.
+  const match = bolt11.toLowerCase().match(/^ln[a-z]+(?:(\d{1,15})([munp]?))?1[^1]*$/);
   if (!match || match[1] === undefined) return null;
   const value = parseInt(match[1], 10);
   if (isNaN(value)) return null;
