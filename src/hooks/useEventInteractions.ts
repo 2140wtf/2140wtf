@@ -74,17 +74,23 @@ export function extractZapAmount(event: NostrEvent): number {
 }
 
 function parseBolt11Amount(bolt11: string): number {
-  const match = bolt11.toLowerCase().match(/^ln\w+?(\d+)([munp]?)1/);
+  // Digit cap + safe-integer guard: crafted invoice strings previously hit
+  // parseInt unbounded, silently losing precision past 2^53, and the msats
+  // product could exceed Number.MAX_SAFE_INTEGER. Return 0 (the caller's
+  // "unknown amount" sentinel) instead of an unfaithful number.
+  const match = bolt11.toLowerCase().match(/^ln\w+?(\d{1,9})([munp]?)1/);
   if (!match) return 0;
   const value = parseInt(match[1], 10);
   if (isNaN(value)) return 0;
   const multiplier = match[2];
+  const apply = (v: number): number =>
+    Number.isFinite(v) && Number.isSafeInteger(v) ? v : 0;
   switch (multiplier) {
-    case 'm': return value * 100_000_000;
-    case 'u': return value * 100_000;
-    case 'n': return value * 100;
-    case 'p': return value / 10;
-    default:  return value * 100_000_000_000;
+    case 'm': return apply(value * 100_000_000);
+    case 'u': return apply(value * 100_000);
+    case 'n': return apply(value * 100);
+    case 'p': return apply(value / 10);
+    default:  return apply(value * 100_000_000_000);
   }
 }
 
