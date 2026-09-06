@@ -54,10 +54,19 @@ function secureZero(buf: Uint8Array): void {
   }
 }
 
-/** Reject negative fees and fees that exceed a ppm cap relative to the amount. */
+/**
+ * Reject negative fees and fees that exceed a ppm cap relative to the amount.
+ *
+ * Round 27b: the comparison is exact — `amount * ppm` is computed in BigInt
+ * (the float product silently loses precision for amounts above ~2^53/ppm,
+ * which can flip the verdict right at the fee boundary), and both inputs must
+ * be safe integers: money values here are always whole units, so fractional
+ * or lossy inputs fail closed instead of comparing garbage.
+ */
 export function isFeeWithinMaxPpm(fee: number, amount: number, ppm = MAX_MINT_FEE_PPM): boolean {
-  if (!Number.isFinite(fee) || fee < 0 || !Number.isFinite(amount) || amount < 0) return false;
-  return fee <= Math.floor((amount * ppm) / 1_000_000);
+  if (!Number.isSafeInteger(fee) || fee < 0 || !Number.isSafeInteger(amount) || amount < 0) return false;
+  if (ppm < 0) return false;
+  return fee <= Number((BigInt(amount) * BigInt(ppm)) / 1_000_000n);
 }
 
 function hasToHex(obj: unknown): obj is { toHex(isCompressed?: boolean): string } {
