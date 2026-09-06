@@ -35,6 +35,9 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { openUrl } from '@/lib/downloadFile';
+
+/** A valid nsec key file is a single short line; anything bigger is junk or hostile. */
+const MAX_KEY_FILE_SIZE = 1024 * 1024;
 import {
   registerNativePasskeyAccount,
   loginNativePasskeyAccount,
@@ -268,6 +271,14 @@ const LoginDialog: React.FC<LoginDialogProps> = ({ isOpen, onClose, onLogin, onS
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Bound the import: a valid key file is a single short line, so anything
+    // larger is junk (or a hostile file meant to balloon memory via readAsText).
+    if (file.size > MAX_KEY_FILE_SIZE || file.size === 0) {
+      e.target.value = '';
+      setErrors({ file: 'Key files must be 1 MB or smaller and not empty.' });
+      return;
+    }
 
     setIsFileLoading(true);
     setErrors({});

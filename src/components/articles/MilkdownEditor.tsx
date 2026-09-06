@@ -12,6 +12,7 @@ import { replaceAll, callCommand } from '@milkdown/utils';
 import { MilkdownToolbar } from './MilkdownToolbar';
 import { LinkDialog } from './LinkDialog';
 import { sanitizeCssString } from '@/lib/fontLoader';
+import { MAX_PREVIEW_DATA_URL_SIZE, validateUploadFile } from '@/lib/fileValidation';
 
 interface MilkdownEditorInnerProps {
   value: string;
@@ -84,7 +85,10 @@ function MilkdownEditorInner({ value, onChange, onBlur, onUploadImage, placehold
                     if (node) nodes.push(node);
                   }
                 } else {
-                  // Fallback to base64 if no upload handler
+                  // Fallback to base64 if no upload handler. Data URLs live in
+                  // the document and get re-serialized on every save, so bound
+                  // the source file before inflating it ~4/3× into a string.
+                  if (validateUploadFile(image, MAX_PREVIEW_DATA_URL_SIZE)) continue;
                   const reader = new FileReader();
                   const dataUrl = await new Promise<string>((resolve) => {
                     reader.onload = () => resolve(reader.result as string);
