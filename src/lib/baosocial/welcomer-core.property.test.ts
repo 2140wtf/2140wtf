@@ -48,6 +48,8 @@ function cfgFor(overrides: Partial<Parameters<typeof verifyJoinAdmission>[0]> = 
 }
 
 describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
+  // CPU-bound PoW brute-force properties get explicit generous timeouts —
+  // the 5s default can flake under full-suite CPU contention (observed on P4).
   it('P1: golden path — a correctly issued, solved, unreplayed challenge is admitted', () => {
     fc.assert(
       fc.property(burnerArb, roomIdArb, difficultyArb, fc.integer({ min: 1, max: 600 }), (burner, roomId, difficulty, ttl) => {
@@ -58,7 +60,7 @@ describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
         expect(verifyJoinAdmission(cfg, ch, burner, nonce)).toBe(true);
       }),
     );
-  });
+  }, 30_000);
 
   it('P2: every binding mutation flips admission to false — no partial acceptance', () => {
     fc.assert(
@@ -113,7 +115,7 @@ describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
         expect(verifyJoinAdmission(strictCfg, chStrict, burner, failingNonce!)).toBe(false);
       }),
     );
-  });
+  }, 30_000);
 
   it('P3: expiry boundary is exact — challenge valid until nowSec, dead at nowSec', () => {
     fc.assert(
@@ -130,7 +132,7 @@ describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
         expect(verifyJoinAdmission(expiredCfg, ch2, burner, nonce2)).toBe(false);
       }),
     );
-  });
+  }, 30_000);
 
   it('P4: replay — the same (salt, burner) solution admits exactly once per cache', () => {
     fc.assert(
@@ -149,7 +151,7 @@ describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
         expect(verifyJoinAdmission(cfgFor({ policy: { preset: 'cap-pow', difficulty } }), chOther, other, solve(chOther, other))).toBe(true);
       }),
     );
-  });
+  }, 30_000);
 
   it('P5: zero-difficulty challenge is admitted only by a zero-difficulty policy', () => {
     fc.assert(
@@ -162,7 +164,7 @@ describe('verifyJoinAdmission — gate ordering & bindings (round 26)', () => {
         expect(verifyJoinAdmission(strict, ch, burner, nonce)).toBe(false); // historical bug: must NOT pass
       }),
     );
-  });
+  }, 30_000);
 
   it('P6: open policy admits without any challenge (documented preset)', () => {
     const cfg = cfgFor({ policy: { preset: 'open' as const } });
@@ -195,7 +197,7 @@ describe('verifyPow — oracle properties (round 26)', () => {
         }
       }),
     );
-  });
+  }, 30_000);
 
   it('P9: nonce grammar — only ^\\d{1,20}$ within 2^64-1 can ever verify', () => {
     fc.assert(

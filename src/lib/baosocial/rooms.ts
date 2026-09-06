@@ -1,5 +1,5 @@
 /**
- * 2140 Social — bundled room directory.
+ * 2140 Trollbox — bundled room directory.
  *
  * Mirror of the production directory served at www.2140.social/rooms.json
  * (fetched 2026-08-26 via the gate's Nostr
@@ -44,7 +44,7 @@ export const BAO_SOCIAL_DIRECTORY: BaoSocialDirectory = {
     {
       // "Trollbox FAL TV" — the Fal Live TV chat. A REAL encrypted scroll
       // room on the 2140.social relay (same protocol as General), listed so
-      // it appears in the 2140 Social room list AND in the Fal Live TV panel
+      // it appears in the 2140 Trollbox room list AND in the Fal Live TV panel
       // (BaoScrollChat lockedRoom).
       //
       // TEMPORARY STATE: the dedicated room is not minted on the relay host

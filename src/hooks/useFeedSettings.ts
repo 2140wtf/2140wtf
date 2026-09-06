@@ -34,7 +34,7 @@ const SIDEBAR_ID_MIGRATIONS: Record<string, string> = {
   'music': 'media',
   'videos': 'media',
   'bao-funding': 'bao-fund',
-  // The legacy ₿AO Chat (Concord V2) group entry is now the 2140 Social
+  // The legacy ₿AO Chat (Concord V2) group entry is now the 2140 Trollbox
   // top-level item; the three ₿AO links below it render as standalone rows.
   'bao-chat': '2140-social',
   // The observatory used to be an external-URI sidebar item pointing at the
@@ -228,9 +228,9 @@ export function useFeedSettings() {
     }
   }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
-  // Migration: insert 2140 Social + the three ₿AO links below Chat. Replaces
+  // Migration: insert 2140 Trollbox + the three ₿AO links below Chat. Replaces
   // the legacy ₿AO Chat group entry; existing "bao-chat" rows display as
-  // 2140 Social via SIDEBAR_ID_MIGRATIONS and dedupe against this insert.
+  // 2140 Trollbox via SIDEBAR_ID_MIGRATIONS and dedupe against this insert.
   useEffect(() => {
     const order = config.sidebarOrder;
     if (order.length === 0) return;

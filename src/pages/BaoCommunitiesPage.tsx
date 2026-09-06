@@ -11,7 +11,7 @@ import { MessageSquare, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 
 /**
- * Trollbox — the public encrypted community room of 2140 Social, presented
+ * Trollbox — the public encrypted community room of 2140 Trollbox, presented
  * in-page (no hosted-app iframe, no room directory, no masthead). The scroll
  * client is locked to the Trollbox room on wss://2140.social/ws; nothing is
  * ever published to the app's public Nostr relays.
@@ -27,7 +27,7 @@ export function BaoCommunitiesPage(): React.JSX.Element {
 
   useSeoMeta({
     title: 'Trollbox',
-    description: 'Trollbox — the public encrypted community room on 2140 Social.',
+    description: 'Trollbox — the public encrypted community room on 2140 Trollbox.',
   });
 
   const { user } = useCurrentUser();
@@ -49,7 +49,7 @@ export function BaoCommunitiesPage(): React.JSX.Element {
             <div>
               <h2 className="text-sm font-semibold">Members-only chat</h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                The trollbox is a 2140 Social room — sign in to join.
+                2140 Trollbox is members-only — sign in to join.
               </p>
             </div>
             <Button size="sm" onClick={() => setLoginOpen(true)}>Join to enter</Button>

@@ -83,6 +83,39 @@ describe('FalLivePage trollbox', () => {
     expect(screen.getByRole('button', { name: 'Collapse Trollbox' })).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('expanding the trollbox never resizes the studio iframe (overlay architecture)', async () => {
+    // Cross-origin video pauses in several mobile engines when the iframe's
+    // rendered box changes — the chat must float OVER the video instead of
+    // squeezing it. This pins the architecture so a future refactor cannot
+    // silently reintroduce the resize.
+    mocks.currentUser = { pubkey: 'a'.repeat(64) };
+    renderPage();
+
+    await vi.waitFor(() => expect(screen.getByText('TROLLBOX')).toBeInTheDocument());
+    const studio = screen.getByTitle('fal.live AI generation studio');
+    const main = screen.getByRole('main');
+    const aside = main.querySelector('aside') as HTMLElement;
+    const videoColumn = studio.parentElement as HTMLElement;
+
+    // Overlay architecture markers: main establishes the positioning
+    // context, the chat is absolutely anchored to the bottom, and the video
+    // column permanently reserves the collapsed-bar strip.
+    expect(main.className).toContain('relative');
+    expect(aside.className).toContain('absolute');
+    expect(videoColumn.className).toContain('pb-11');
+
+    const iframeClassBefore = studio.className;
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Trollbox' }));
+    expect(screen.getByRole('button', { name: 'Collapse Trollbox' })).toHaveAttribute('aria-expanded', 'true');
+
+    // Same iframe node, never remounted, and its box-driving classes are
+    // byte-identical across the toggle — the height change lives entirely
+    // on the overlaying aside.
+    expect(screen.getByTitle('fal.live AI generation studio')).toBe(studio);
+    expect(studio.className).toBe(iframeClassBefore);
+    expect(aside.className).toContain('h-[min(40dvh,360px)]');
+  });
+
   it('connects ONLY to the pinned 2140.social relay — never the app relays', async () => {
     mocks.currentUser = { pubkey: 'a'.repeat(64) };
     renderPage();
