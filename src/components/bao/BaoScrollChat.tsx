@@ -33,7 +33,7 @@ import {
   resolveMentions,
   segmentMentions,
 } from "@/lib/baosocial/browser.js";
-import { npubEncode, nsecEncode } from "nostr-tools/nip19";
+import { npubEncode } from "nostr-tools/nip19";
 import type { Envelope, JoinedRoom, RosterEntry } from "@/lib/baosocial/browser.js";
 import { BAO_SOCIAL_DIRECTORY, assertTrollboxRelayPinned, type BaoSocialRoomInfo } from "@/lib/baosocial/rooms";
 import { Button } from "@/components/ui/button";
@@ -1022,11 +1022,22 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
                   className="h-7 max-w-56 text-xs"
                   maxLength={40}
                 />
-                {current?.session && (
-                  <span className="text-[10px] text-muted-foreground" title={getPublicKey(current.session.joined.authorSecretKey)}>
-                    room key: {getPublicKey(current.session.joined.authorSecretKey).slice(0, 12)}…
-                  </span>
-                )}
+                {current?.session && (() => {
+                  // Identity chips show the PUBLIC key only, and in npub form —
+                  // raw hex invites misreading it as a secret. Never render any
+                  // part of the burner secret key: screenshots/recordings of a
+                  // live-stream page would leak it (truncation is not redaction).
+                  try {
+                    const npub = npubEncode(getPublicKey(current.session.joined.authorSecretKey));
+                    return (
+                      <span className="text-[10px] text-muted-foreground" title={npub}>
+                        you: {npub.slice(0, 12)}…
+                      </span>
+                    );
+                  } catch {
+                    return null;
+                  }
+                })()}
               </div>
             )}
           </div>
@@ -1057,14 +1068,6 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
           </div>
           <p className="mt-1 text-[10px] text-muted-foreground">
             Encrypted scroll — the relay stores only fixed-size ciphertext segments.
-            {current?.session && (() => {
-              try {
-                const sk = current.session.joined.authorSecretKey;
-                return ` Burner key: ${nsecEncode(sk).slice(0, 10)}…`;
-              } catch {
-                return "";
-              }
-            })()}
           </p>
         </div>
 
