@@ -129,6 +129,7 @@
     "@tanstack/react-query": "^5.101.4",
     "@unhead/addons": "^2.1.13",
     "@unhead/react": "^2.1.13",
+    "bao-signer": "github:baocommunity/bao-signer#v0.4.4",
     "blurhash": "^2.0.5",
     "capacitor-secure-storage-plugin": "^0.13.0",
     "class-variance-authority": "^0.7.1",
@@ -173,8 +174,7 @@
     "tiny-secp256k1": "^2.2.4",
     "uri-templates": "^0.2.0",
     "vaul": "^1.1.2",
-    "zod": "^4.3.6",
-    "bao-signer": "github:baocommunity/bao-signer#v0.4.4"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@capacitor/android": "^8.1.0",
@@ -204,6 +204,7 @@
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.9",
     "fake-indexeddb": "^6.2.5",
+    "fast-check": "^4.9.0",
     "globals": "^15.9.0",
     "jsdom": "^26.1.0",
     "playwright": "^1.59.0",

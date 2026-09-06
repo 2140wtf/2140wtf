@@ -607,6 +607,21 @@ function isPrivateIPv6(ip: string): boolean {
   return false;
 }
 
+/** Expand an IPv4-mapped IPv6 address (::ffff:a.b.c.d or ::ffff:aabb:ccdd)
+ *  to its embedded IPv4 dotted-quad, or null when the address is not mapped.
+ *  Browsers resolve these onto the IPv4 stack, so a mapped loopback/private
+ *  address IS a loopback/private host — found by round-25 SSRF fuzzing,
+ *  which showed https://[::ffff:7f00:1]/ bypassing the IPv6-only blocklist. */
+function mappedIpv4Of(ip: string): string | null {
+  const lower = ip.toLowerCase();
+  const m = lower.match(/^::ffff:(?:(\d{1,3}(?:\.\d{1,3}){3})|([0-9a-f]{1,4}):([0-9a-f]{1,4}))$/);
+  if (!m) return null;
+  if (m[1]) return m[1];
+  const hi = parseInt(m[2]!, 16);
+  const lo = parseInt(m[3]!, 16);
+  return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+}
+
 /** Reject localhost, loopback, and private-network mint hosts.
  *  Require HTTPS for production mint URLs; HTTP is not auto-allowed.
  *  Optionally compare against an allow-list of normalized mint URLs.
@@ -619,7 +634,18 @@ export function isAllowedMintUrl(url: string, allowList?: string[]): boolean {
     // The URL constructor normalizes IDN hosts to punycode automatically.
     const host = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     if (host === 'localhost') return false;
-    if (isPrivateIPv4(host) || isPrivateIPv6(host)) return false;
+    // Classify by host KIND. IPv6 rules (fc00::/7, fe80::/10, ::1, and
+    // IPv4-mapped) apply ONLY to IPv6 literals — applying the fc/fd/fe[89ab]
+    // prefix checks to domain names wrongly rejected public mints like
+    // `fca.aa` or `february.mint.example` (round-25 fuzzing found this).
+    // Dotted/integer hosts go through the IPv4 classifier, which handles
+    // every textual encoding because the URL parser canonicalizes first.
+    if (host.includes(':')) {
+      const mapped = mappedIpv4Of(host);
+      if (mapped ? isPrivateIPv4(mapped) : isPrivateIPv6(host)) return false;
+    } else if (isPrivateIPv4(host)) {
+      return false;
+    }
     if (allowList && allowList.length > 0) {
       const normalized = u.href.replace(/\/+$/, '');
       const normalizedList = allowList
@@ -702,6 +728,20 @@ export function normalizeProofWitnessForEncode<T extends object>(proof: T): T {
   return proof;
 }
 
+/** Sum proof amounts fail-closed: return null when the total exceeds the
+ *  exactly-representable integer range. A crafted token with individually
+ *  valid proofs summing past 2^53-1 previously reduced to a silently ROUNDED
+ *  amount (financial corruption — displays/credits a wrong value). Real
+ *  mint-issued tokens never approach this bound; only hostile input does. */
+export function safeSumProofAmounts(proofs: Array<{ amount: number }>): number | null {
+  let sum = 0;
+  for (const p of proofs) {
+    sum += p.amount;
+    if (!Number.isSafeInteger(sum)) return null;
+  }
+  return sum;
+}
+
 function isValidProof(p: unknown): p is { id: string; amount: number; secret: string; C: string } {
   if (!p || typeof p !== 'object') return false;
   const proof = p as Record<string, unknown>;
@@ -766,7 +806,8 @@ export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
       if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) continue;
       const validProofs = proofs.filter(isValidProof);
       if (validProofs.length === 0) continue;
-      const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
+      const amount = safeSumProofAmounts(validProofs);
+      if (amount === null) continue; // overflow: fail closed, drop the entry
       entries.push({ mintUrl, proofs: validProofs, amount });
     }
   } else if ('mint' in decoded && 'proofs' in decoded) {
@@ -775,7 +816,8 @@ export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
     if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) return null;
     const validProofs = proofs.filter(isValidProof);
     if (validProofs.length === 0) return null;
-    const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
+    const amount = safeSumProofAmounts(validProofs);
+    if (amount === null) return null; // overflow: fail closed
     entries.push({ mintUrl, proofs: validProofs, amount });
   }
 
