@@ -244,6 +244,13 @@ function newRuntime(info: BaoSocialRoomInfo, relayUrl: string): RoomRuntime {
   };
 }
 
+/** Connection lifecycle of the scroll runtime, for host chrome (Fal Live
+ * TV bar) that has no other way to see relay state. */
+export interface ScrollChatStatus {
+  phase: "idle" | "joining" | "ready" | "error";
+  error?: string;
+}
+
 interface BaoScrollChatProps {
   /**
    * Single-room mode: lock the client to this room and hide the room list.
@@ -257,10 +264,14 @@ interface BaoScrollChatProps {
    * (max-lg:livestream-height) that standalone pages need.
    */
   embedded?: boolean;
+  /** Optional host callback: fired whenever the CURRENT room's connection
+   * phase changes. Lets embedded hosts (Fal Live TV bar) surface the relay
+   * state that this component's own header hides on phones. */
+  onStatus?: (status: ScrollChatStatus) => void;
 }
 
 /** The chat client itself — mounted only for authed users. */
-export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
+export function BaoScrollChat({ lockedRoom, embedded, onStatus }: BaoScrollChatProps) {
   const { user, metadata } = useCurrentUser();
   // Identity preferences are scoped to this account (see loadIdentityModeFor).
   const accountPubkey = user?.pubkey;
@@ -692,6 +703,16 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
 
   const current = currentId.current ? runtimes.current.get(currentId.current) : undefined;
 
+  // Surface connection state to embedded hosts (the Fal Live TV bar shows a
+  // status dot; this component's own header hides the text on phones).
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
+  const statusPhase = current?.joinPhase ?? "idle";
+  const statusError = current?.joinError;
+  useEffect(() => {
+    onStatusRef.current?.({ phase: statusPhase, error: statusError });
+  }, [statusPhase, statusError]);
+
   const handleFor = useCallback(
     (r: RoomRuntime, author: string) => r.roster.get(author)?.handle ?? `${author.slice(0, 8)}…`,
     [],
@@ -823,9 +844,13 @@ export function BaoScrollChat({ lockedRoom, embedded }: BaoScrollChatProps) {
               </h2>
               <p className="truncate text-xs text-muted-foreground">{current?.info.topic ?? ""}</p>
             </div>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground max-sm:hidden">
+            {/* Visible on ALL viewports — hiding this on phones made the
+                room look disconnected with zero feedback (mobile users could
+                not distinguish "joining" from "dead relay"). Embedded mode
+                (Fal Live TV bar) surfaces the same state via onStatus. */}
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Radio className={cn("size-3.5", current?.joinPhase === "ready" ? "text-success" : "text-muted-foreground/50")} />
-              {current?.joinPhase === "ready" ? "relay live" : current?.joinPhase === "joining" ? "joining…" : "idle"}
+              {current?.joinPhase === "ready" ? "relay live" : current?.joinPhase === "joining" ? "joining…" : current?.joinPhase === "error" ? "relay error" : "idle"}
             </span>
             {current?.joinPhase === "ready" && (
               <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => copy(current.info.joinLink, "Invite link")}>

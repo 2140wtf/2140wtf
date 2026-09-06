@@ -121,6 +121,9 @@ describe('FalLivePage Trollbox', () => {
     // room on the pinned relay — same metadata-minimization goal, and no
     // third-party frame at all.
     expect(source).not.toContain('BAO_HOSTED_ORIGIN');
-    expect(source).toContain('lockedRoom={BAO_TROLLBOX_ROOM} embedded');
+    // Locked-room, embedded, and status-wired to the host bar (onStatus).
+    expect(source).toContain('lockedRoom={BAO_TROLLBOX_ROOM}');
+    expect(source).toContain('embedded');
+    expect(source).toContain('onStatus={setChatStatus}');
   });
 });
