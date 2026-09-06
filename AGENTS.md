@@ -4,7 +4,35 @@ These rules exist because past agent sessions made real, costly mistakes.
 They are not suggestions. Read this file at the start of every work session.
 If a rule blocks what you're about to do, that is the point.
 
-## 1. Nostr publishing safety (MANDATORY)
+## 1. Branch/PR metadata hygiene (MANDATORY — cost the user three bad PR titles)
+
+**Mistake that caused this rule:** the audit branch was named
+`security/audit-rounds-3-14` for its first scope. Three PR waves later it
+carried rounds 18–25, but every PR GitHub auto-created from it inherited
+the stale auto-title "Security/audit rounds 3 14" — one with an empty
+description. The user asked "are you losing track of previous PRs?" —
+fair. The agent controls the branch name and PR metadata, not GitHub.
+
+Rules:
+
+1. **Rename the branch when its scope changes.** The branch name must
+   describe what the NEXT PR from it contains, not what it contained
+   when created. (`git branch -m old new && git push -u origin new &&
+   git push origin --delete old`.)
+2. **Never let GitHub auto-fill a PR title.** With `gh` authenticated:
+   create PRs via `gh pr create --title ... --body ...` — never by
+   telling the user to click the compare URL. If a PR must be opened in
+   the browser, hand over the exact title + description text with it.
+3. **Every PR gets a real description** — summary, fixes per round/area,
+   verification results. An empty description is a failed handoff.
+4. **One PR = one named batch.** If pushing more work to an open PR,
+   update its title/body to cover the new content:
+   `gh pr edit <n> --title ... --body ...`.
+5. **`main` is branch-protected.** Never attempt `git push origin main`;
+   go through a PR every time. Do not reset local `main` and retry —
+   that push will always be declined.
+
+## 2. Nostr publishing safety (MANDATORY)
 
 **Mistake that caused this rule:** demo auction scripts published test
 listings to the **public Nostr relays** (ditto, primal, nos.lol, dreamith)
@@ -27,7 +55,7 @@ Rules:
 4. **Anything user-visible on shared infrastructure needs the same care:**
    public relays, shared caches, production databases, third-party APIs.
 
-## 2. Chat privacy — NEVER leak to public Nostr (MANDATORY)
+## 3. Chat privacy — NEVER leak to public Nostr (MANDATORY)
 
 **Mistake that caused this rule:** the Fal Live TV "trollbox" chat published
 plaintext **kind-1 notes to public relays** (ditto, primal, …), signed with
@@ -49,7 +77,7 @@ Rules:
 4. If a chat's storage relay is not confirmed writable/private, the safe
    default is: no composer, no publish path.
 
-## 3. Bearer capabilities are secrets (MANDATORY)
+## 4. Bearer capabilities are secrets (MANDATORY)
 
 **Mistake that caused this rule:** production ₿AO room invite URLs were
 hardcoded in `src/lib/baosocial/rooms.ts`. That put invite secrets, room IDs,
@@ -90,7 +118,7 @@ Rules for every human and LLM agent:
 9. **No agent may downgrade this rule based on intent.** If it is unclear
    whether a value is live, treat it as live and ask the operator privately.
 
-## 4. Money safety (MANDATORY)
+## 5. Money safety (MANDATORY)
 
 1. **Never publish or log nsec/seed/private keys** — not in code, not in
    terminal output, not in screenshots, not in commit messages.
@@ -101,7 +129,7 @@ Rules for every human and LLM agent:
    are saved to gitignored local storage with mode 0600 and a backup copy
    outside the repo. Losing keys = losing funds. This is unacceptable.
 
-## 5. Relay/event hygiene
+## 6. Relay/event hygiene
 
 1. **Deleting Nostr events requires the original author's key** (NIP-09).
    A deletion from any other key is accepted by relays but has zero effect.
@@ -110,7 +138,7 @@ Rules for every human and LLM agent:
    code does NOT clean up the Nostr ecosystem. Cleanup must happen on the
    relays, and must be verified there (query the relays afterward).
 
-## 6. Session memory is volatile — verify claims, don't recall them
+## 7. Session memory is volatile — verify claims, don't recall them
 
 **Mistake that caused this rule:** sessions repeatedly claimed work was
 "done" when it wasn't (events left on relays, files not deleted, scripts
@@ -123,7 +151,7 @@ committed then re-added as debug garbage).
 3. If you cannot verify (no auth, no network), say so explicitly instead of
    assuming success.
 
-## 7. Ephemeral key patterns
+## 8. Ephemeral key patterns
 
 Any key generated in a script (`generateSecretKey()`) is a liability:
 
@@ -132,7 +160,7 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 - Never print the full secret; print at most a prefix for identification.
 - Record event ids alongside the key that can delete them.
 
-## 8. Debug/test scripts lifecycle
+## 9. Debug/test scripts lifecycle
 
 1. One-off debug scripts must never be committed. Delete them (or place
    them in gitignored paths) before the commit stage of any task.
@@ -141,13 +169,13 @@ Any key generated in a script (`generateSecretKey()`) is a liability:
 3. Before pushing a branch, run `git status --porcelain -uall` and clean
    untracked leftovers. The working tree must be clean at PR time.
 
-## 9. Language
+## 10. Language
 
 The user works in English. All responses, comments, and commit messages
 are English. No other languages, even by accident from mixed training
 data — check your own output.
 
-## 10. Verify before merge
+## 11. Verify before merge
 
 The pre-merge checklist (run it, paste the tail of the output):
 
