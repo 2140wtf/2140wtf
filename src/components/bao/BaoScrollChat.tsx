@@ -5,7 +5,7 @@
  * joins, hash-chained ciphertext scroll, presence roster, @mentions,
  * receipts, identity modes) can be mounted from two entry points:
  *
- *   1. 2140 Social page   → multi-room mode (full directory sidebar)
+ *   1. 2140 Trollbox page → multi-room mode (full directory sidebar)
  *   2. Fal Live TV panel  → single-room mode (lockedRoom, no sidebar)
  *
  * PRIVACY CONTRACT: every message is an E2E-encrypted envelope posted ONLY
@@ -135,7 +135,7 @@ function previewText(env: Envelope): string {
   return s.length > 200 ? `${s.slice(0, 200)}…` : s;
 }
 
-// ── Auth gate + identity module (2140 Social access policy) ─────────────────
+// ── Auth gate + identity module (2140 Trollbox access policy) ───────────────
 //
 // Mirrors production 2140.social: the chat itself stays isolated/anonymous,
 // but ENTERING is for authed users only. After login, EVERY entry to the

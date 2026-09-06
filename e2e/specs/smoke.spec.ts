@@ -64,7 +64,7 @@ test.describe('smoke', () => {
 
     // Spot-check default sidebar items (scoped to the drawer to avoid duplicates
     // from the desktop sidebar and mobile bottom nav). The legacy ₿AOs
-    // collapsible group was split by the 2140 Social migration: 2140 Social is
+    // collapsible group was split by the 2140 Trollbox migration: 2140 Trollbox is
     // now a standalone destination and the three ₿AO links render flat, so each
     // is a link rather than a group trigger. The chat was rebranded to
     // "2140 Trollbox" (separate app from BAO Markets).

@@ -3,7 +3,7 @@
  * X-Frame-Options and no CSP frame-ancestors, so it can be embedded
  * without a proxy).
  *
- * Chat: the right panel is the REAL 2140 Social encrypted scroll client
+ * Chat: the right panel is the REAL 2140 Trollbox encrypted scroll client
  * (BaoScrollChat) locked to the Trollbox room. It stays on this page —
  * no redirect, no external host. Every message is an E2E-encrypted
  * envelope posted ONLY to the single wss://2140.social/ws relay:
@@ -14,7 +14,7 @@
  *  - The room is PUBLIC (shared General scroll) but READ/WRITE requires
  *    an account — authed users see it, anonymous users get the join gate.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
 import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, LogOut, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -32,7 +32,7 @@ import { FAL_LIVE_URL } from "@/lib/falLive";
 import { cn } from "@/lib/utils";
 
 /** Members-only gate for the chat panel — the room is public on the relay
- * but posting/reading is for signed-in users (2140 Social parity). */
+ * but posting/reading is for signed-in users (members-only). */
 function ChatGate() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
@@ -44,7 +44,7 @@ function ChatGate() {
         <div>
           <h2 className="text-sm font-semibold">Members-only chat</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            The trollbox is a 2140 Social room — sign in to join.
+            2140 Trollbox is members-only — sign in to join.
           </p>
         </div>
         <Button size="sm" onClick={() => setLoginOpen(true)}>Join to enter</Button>
@@ -70,6 +70,54 @@ export function FalLivePage() {
   const { user } = useCurrentUser();
   const { logout } = useLoginActions();
   const [chatExpanded, setChatExpanded] = useState(false);
+  const videoColumnRef = useRef<HTMLDivElement | null>(null);
+  const [pinnedVideoHeight, setPinnedVideoHeight] = useState<number | null>(null);
+
+  // Cross-origin video inside the studio iframe pauses in several mobile
+  // browser engines whenever the iframe's rendered box changes size. Two
+  // user actions used to trigger that:
+  //   1. expanding the trollbox (the chat panel squeezed the flex-1 iframe),
+  //   2. typing in the chat (the mobile keyboard resizes the layout viewport,
+  //      which shrinks the 100dvh page container and the iframe with it).
+  // Fix for (1): on mobile the expanded chat becomes a floating OVERLAY over
+  // the video's bottom edge instead of participating in the column flow —
+  // the iframe's box is identical collapsed and expanded.
+  // Fix for (2): while the chat is open, pin the video column to its
+  // measured pixel height (width changes — rotation — re-measure; height-only
+  // changes — keyboards, URL bar — are ignored, they cannot distinguish
+  // themselves from each other and must not resize the video).
+  // Desktop layout (Tailwind lg) puts the chat back in flow beside the
+  // video; the mobile pin and overlay are irrelevant there.
+  const isDesktopLayout = () => window.matchMedia("(min-width: 1024px)").matches;
+
+  useEffect(() => {
+    if (!chatExpanded) {
+      setPinnedVideoHeight(null);
+      return;
+    }
+    const box = videoColumnRef.current;
+    if (box && box.offsetHeight > 0 && !isDesktopLayout()) setPinnedVideoHeight(box.offsetHeight);
+  }, [chatExpanded]);
+
+  useEffect(() => {
+    if (pinnedVideoHeight == null) return;
+    let lastWidth = window.innerWidth;
+    const onResize = () => {
+      if (window.innerWidth === lastWidth) return; // height-only change (keyboard) — keep the pin
+      lastWidth = window.innerWidth;
+      if (isDesktopLayout()) {
+        setPinnedVideoHeight(null); // side-by-side layout manages its own sizing
+        return;
+      }
+      setPinnedVideoHeight(null); // rotation: re-measure from the fluid layout
+      requestAnimationFrame(() => {
+        const box = videoColumnRef.current;
+        if (box && box.offsetHeight > 0) setPinnedVideoHeight(box.offsetHeight);
+      });
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [pinnedVideoHeight]);
 
   // Expanded mode: collapse the left sidebar to its icon rail and hide the
   // right sidebar so the studio gets the full width (same pattern as
@@ -88,8 +136,15 @@ export function FalLivePage() {
     // Mobile: the studio owns all remaining height and Trollbox starts as a
     // compact bar, keeping fal.live's answer controls visible. Desktop keeps
     // the chat as a narrow full-height panel beside the studio.
-    <main className="fal-live-height flex flex-col overflow-hidden lg:flex-row">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <main className="fal-live-height relative flex flex-col overflow-hidden lg:flex-row">
+      <div
+        ref={videoColumnRef}
+        // Mobile: the bottom bar strip (pb-11) is reserved PERMANENTLY so the
+        // iframe box is byte-identical whether the trollbox bar is collapsed
+        // or expanded — the chat floats OVER the video and never resizes it.
+        className="flex min-h-0 min-w-0 flex-1 flex-col pb-11 lg:pb-0"
+        style={pinnedVideoHeight != null ? { flex: "1 0 auto", height: pinnedVideoHeight } : undefined}
+      >
         <div className="flex h-10 shrink-0 items-center gap-1 border-b px-2 sm:h-auto sm:gap-3 sm:px-4 sm:py-2">
           <Button variant="ghost" size="sm" className="size-8 shrink-0 px-0 sm:h-9 sm:w-auto sm:px-3" asChild>
             <Link to="/" aria-label="Back to home">
@@ -121,10 +176,17 @@ export function FalLivePage() {
           allow="autoplay; fullscreen; clipboard-write; storage-access"
         />
       </div>
+      {/* Mobile: always an overlay anchored to the bottom (collapsed bar or
+          expanded panel) — being out of flow, its height changes can never
+          resize the cross-origin iframe, whose playback pauses in several
+          mobile engines when its rendered box changes. Desktop: static side
+          panel, unchanged. */}
       <aside
         className={cn(
-          "flex min-h-0 flex-none flex-col border-t bg-muted/30 transition-[height] duration-200 lg:h-auto lg:w-80 lg:flex-none lg:border-l lg:border-t-0",
-          chatExpanded ? "h-[min(40dvh,360px)]" : "h-11",
+          "absolute inset-x-0 bottom-0 z-20 flex min-h-0 flex-col border-t bg-muted/30 transition-[height] duration-200 lg:static lg:h-auto lg:w-80 lg:flex-none lg:border-l lg:border-t-0 lg:shadow-none",
+          chatExpanded
+            ? "h-[min(40dvh,360px)] bg-background shadow-[0_-12px_32px_rgba(0,0,0,0.45)] lg:bg-muted/30"
+            : "h-11",
         )}
       >
         <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
@@ -153,7 +215,7 @@ export function FalLivePage() {
         </div>
         <div className={cn("min-h-0 flex-1", !chatExpanded && "hidden lg:flex")}>
           {user ? (
-            // Authed: the real encrypted 2140 Social scroll client, locked to
+            // Authed: the real encrypted 2140 Trollbox scroll client, locked to
             // the Trollbox room. The compact parent header is the only chrome
             // shown in this embedded view.
             <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} embedded />

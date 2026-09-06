@@ -922,7 +922,7 @@ function JoinLinkChip({ url }: { url: string }) {
         event.stopPropagation();
         void openUrl(url);
       }}
-      title="₿AO room invite — open in 2140 Social to join"
+      title="₿AO room invite — open in 2140 Trollbox to join"
     >
       <Hash className="size-3" />
       {label}

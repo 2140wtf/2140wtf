@@ -105,7 +105,7 @@ function SidebarGroup({ id, active, editing, onRemove, onClick, compact, minimal
         <div className={cn('ml-4 border-l border-border', minimal ? 'my-1' : 'my-1')}>
           {children.map((child) => {
             const childActive = location.pathname === child.path || location.pathname.startsWith(`${child.path}/`);
-            // External destinations (2140 Social etc.) open in a new tab —
+            // External destinations (2140 Trollbox etc.) open in a new tab —
             // same chat, served by its own deployment.
             if (/^https?:\/\//.test(child.path)) {
               return (
