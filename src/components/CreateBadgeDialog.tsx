@@ -24,6 +24,7 @@ import { useAwardBadge } from '@/hooks/useAwardBadge';
 import { useAcceptBadge } from '@/hooks/useAcceptBadge';
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { useToast } from '@/hooks/useToast';
+import { MAX_PREVIEW_DATA_URL_SIZE, describeUploadRejection, validateUploadFile } from '@/lib/fileValidation';
 import { useShareOrigin } from '@/hooks/useShareOrigin';
 import { BADGE_DEFINITION_KIND } from '@/lib/badgeUtils';
 
@@ -115,6 +116,13 @@ export function CreateBadgeDialog({ open, onOpenChange }: CreateBadgeDialogProps
   const handleFileSelect = useCallback(async (file: File) => {
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Invalid file', description: 'Please select an image file.', variant: 'destructive' });
+      return;
+    }
+    // Previews are held as base64 data URLs in state — bound the file before
+    // inflating it ~4/3× into memory.
+    const rejection = validateUploadFile(file, MAX_PREVIEW_DATA_URL_SIZE);
+    if (rejection) {
+      toast({ title: 'Invalid file', description: describeUploadRejection(rejection), variant: 'destructive' });
       return;
     }
     const reader = new FileReader();

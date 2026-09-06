@@ -9,6 +9,7 @@ import { useAppContext } from "./useAppContext";
 import { getEffectiveBlossomServers } from "@/lib/appBlossom";
 import { stripFileMetadata } from "@/lib/stripMetadata";
 import { baoError, ErrorCodes } from "@/lib/errorCodes";
+import { describeUploadRejection, validateUploadFile } from "@/lib/fileValidation";
 
 export function useUploadFile() {
   const { user } = useCurrentUser();
@@ -16,6 +17,16 @@ export function useUploadFile() {
 
   return useMutation({
     mutationFn: async (file: File) => {
+      // Fail fast on empty/oversized selections before any file read or
+      // network I/O — see lib/fileValidation for why the client bounds these.
+      const rejection = validateUploadFile(file);
+      if (rejection) {
+        throw baoError(
+          rejection.reason === 'too-large' ? ErrorCodes.UPLOAD_TOO_LARGE : ErrorCodes.UPLOAD_EMPTY,
+          describeUploadRejection(rejection),
+        );
+      }
+
       if (!user) {
         throw baoError(ErrorCodes.UPLOAD_NOT_LOGGED_IN);
       }
