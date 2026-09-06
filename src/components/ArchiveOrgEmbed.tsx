@@ -117,7 +117,8 @@ export function ArchiveOrgEmbed({ identifier, className }: ArchiveOrgEmbedProps)
             <iframe
               src={`https://archive.org/embed/${identifier}&autoplay=1`}
               title="Internet Archive"
-              allow="autoplay"
+              // Same as above: fullscreen must be delegated via `allow`.
+              allow="autoplay; fullscreen"
               allowFullScreen
               style={{
                 width: nativeW,
@@ -134,7 +135,8 @@ export function ArchiveOrgEmbed({ identifier, className }: ArchiveOrgEmbedProps)
             <iframe
               src={`https://archive.org/embed/${identifier}&autoplay=1`}
               title="Internet Archive"
-              allow="autoplay"
+              // Same as above: fullscreen must be delegated via `allow`.
+              allow="autoplay; fullscreen"
               allowFullScreen
               className="absolute inset-0 w-full h-full"
             />
