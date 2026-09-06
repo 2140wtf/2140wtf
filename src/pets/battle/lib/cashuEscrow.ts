@@ -197,11 +197,19 @@ export function extractTokenLockPubkeys(tokenStr: string, options?: ParseP2PKOpt
 
 /**
  * Sum the amount of all token entries.
+ * Cross-entry total is overflow-guarded: per-entry sums are already fail-closed
+ * in decodeCashuToken, but a hostile multi-entry token could still overflow the
+ * combined total — return 0 (no credit) instead of a silently rounded number.
  */
 export function getTokenAmount(tokenStr: string): number {
   const entries = decodeCashuToken(tokenStr);
   if (!entries) return 0;
-  return entries.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+  let total = 0;
+  for (const e of entries) {
+    total += e.amount ?? 0;
+    if (!Number.isSafeInteger(total)) return 0;
+  }
+  return total;
 }
 
 export interface EscrowDepositValidation {
