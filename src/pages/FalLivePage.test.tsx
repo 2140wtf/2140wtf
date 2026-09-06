@@ -126,6 +126,21 @@ describe('FalLivePage trollbox', () => {
     }
   });
 
+  it('shows the relay connection status dot on every viewport (no more dead-air on phones)', async () => {
+    // The chat's own "relay live" text was hidden on phones (max-sm:hidden)
+    // and absent entirely in embedded mode — a slow join looked like a dead
+    // relay. The bar now carries a live status dot driven by onStatus.
+    mocks.currentUser = { pubkey: 'a'.repeat(64) };
+    renderPage();
+
+    await vi.waitFor(() => expect(screen.getByText('TROLLBOX')).toBeInTheDocument());
+    const dot = screen.getByRole('status');
+    expect(dot).toHaveAttribute('aria-label', expect.stringContaining('Trollbox relay'));
+    // The real chat component fires onStatus on mount (idle → joining → …);
+    // the label must track whatever phase it reports.
+    expect(dot.getAttribute('aria-label')).toMatch(/Trollbox relay: (idle|joining|ready|error)/);
+  });
+
   it('relay-pin guard accepts the bundled trollbox room', () => {
     expect(() => assertTrollboxRelayPinned(BAO_TROLLBOX_ROOM)).not.toThrow();
     expect(BAO_SOCIAL_DIRECTORY.relayUrl).toBe(BAO_HOSTED_RELAY);

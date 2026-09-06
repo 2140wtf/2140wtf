@@ -24,7 +24,7 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { useLoginActions } from "@/hooks/useLoginActions";
-import { BaoScrollChat } from "@/components/bao/BaoScrollChat";
+import { BaoScrollChat, type ScrollChatStatus } from "@/components/bao/BaoScrollChat";
 import LoginDialog from "@/components/auth/LoginDialog";
 import SignupDialog from "@/components/auth/SignupDialog";
 import { BAO_TROLLBOX_ROOM } from "@/lib/baosocial/rooms";
@@ -70,6 +70,7 @@ export function FalLivePage() {
   const { user } = useCurrentUser();
   const { logout } = useLoginActions();
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [chatStatus, setChatStatus] = useState<ScrollChatStatus>({ phase: "idle" });
   const [kbOverlap, setKbOverlap] = useState(0);
   const videoColumnRef = useRef<HTMLDivElement | null>(null);
   const [pinnedVideoHeight, setPinnedVideoHeight] = useState<number | null>(null);
@@ -249,6 +250,21 @@ export function FalLivePage() {
           />
           <MessageSquare className="pointer-events-none relative z-10 size-4 shrink-0 text-primary" />
           <span className="pointer-events-none relative z-10 flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLLBOX</span>
+          {/* Relay connection state, visible on ALL viewports — phones
+              previously had zero feedback ("is it connected?"). Colors:
+              green = relay live, amber pulse = joining (PoW + key wrap),
+              red = join error, gray = idle/disconnected. */}
+          <span
+            aria-label={`Trollbox relay: ${chatStatus.phase}`}
+            role="status"
+            className={cn(
+              "pointer-events-none relative z-10 size-2 shrink-0 rounded-full",
+              chatStatus.phase === "ready" && "bg-success",
+              chatStatus.phase === "joining" && "animate-pulse bg-amber-500",
+              chatStatus.phase === "error" && "bg-destructive",
+              chatStatus.phase === "idle" && "bg-muted-foreground/40",
+            )}
+          />
           {user && (
             <Button
               variant="ghost"
@@ -269,7 +285,11 @@ export function FalLivePage() {
             // Authed: the real encrypted 2140 Trollbox scroll client, locked to
             // the Trollbox room. The compact parent header is the only chrome
             // shown in this embedded view.
-            <BaoScrollChat lockedRoom={BAO_TROLLBOX_ROOM} embedded />
+            <BaoScrollChat
+              lockedRoom={BAO_TROLLBOX_ROOM}
+              embedded
+              onStatus={setChatStatus}
+            />
           ) : (
             <ChatGate />
           )}
