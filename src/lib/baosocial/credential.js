@@ -342,8 +342,14 @@ export function verifyCredential(credential, signature, opts = {}) {
  * a spent nullifier cannot be re-presented while it could still be valid.
  */
 export class NullifierCache {
-    constructor(clock = systemClock) {
+    constructor(clock = systemClock, limit = 8192) {
         this.clock = clock;
+        /** Hard growth cap (round 26, parity with ReplayCache/TtlKeySet): a
+         * flood of validly-issued, validly-solved credentials would otherwise
+         * grow the Map for the whole TTL+grace window. Expired entries are
+         * swept first; over the cap, OLDEST survivors are evicted per key —
+         * never a bulk wipe (that would drop ALL nullifier protection). */
+        this.limit = limit;
         this.seen = new Map(); // nullifier -> cache expiry
     }
     /**
@@ -358,7 +364,15 @@ export class NullifierCache {
         if (this.seen.has(nullifier))
             return false;
         this.seen.set(nullifier, this.clock.nowSec() + ttlWithGraceSec);
+        this.evictOldestIfOverLimit();
         return true;
+    }
+    evictOldestIfOverLimit() {
+        if (this.seen.size <= this.limit)
+            return;
+        const oldest = [...this.seen.entries()].sort((a, b) => a[1] - b[1]);
+        for (let i = 0; i < oldest.length && this.seen.size > this.limit; i++)
+            this.seen.delete(oldest[i][0]);
     }
     has(nullifier) {
         this.sweep();

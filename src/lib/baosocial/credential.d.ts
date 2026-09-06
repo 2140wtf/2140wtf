@@ -174,7 +174,7 @@ export declare function verifyCredential(credential: Credential, signature: stri
 export declare class NullifierCache {
     private readonly clock;
     private readonly seen;
-    constructor(clock?: Clock);
+    constructor(clock?: Clock, limit?: number);
     /**
      * Returns true when the nullifier was NEW (admission may proceed);
      * false on replay. `ttlWithGraceSec` bounds the entry lifetime — callers
