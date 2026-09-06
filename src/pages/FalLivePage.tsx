@@ -112,7 +112,13 @@ export function FalLivePage() {
           src={FAL_LIVE_URL}
           title="fal.live AI generation studio"
           className="min-h-0 w-full flex-1 border-0 bg-black"
-          allow="fullscreen; clipboard-write"
+          // Delegated permissions are required for the cross-origin studio to
+          // play on mobile: without `autoplay` the embedded player gets the
+          // strictest policy (no Media Engagement history on phones), so the
+          // stream never starts — desktop only worked via engagement heuristics.
+          // `storage-access` lets fal.live's session state function under
+          // third-party storage partitioning instead of failing silently.
+          allow="autoplay; fullscreen; clipboard-write; storage-access"
         />
       </div>
       <aside
