@@ -17,6 +17,8 @@ export const ErrorCodes = {
   UPLOAD_NO_SERVERS: "UPLOAD_002",
   UPLOAD_FAILED: "UPLOAD_003",
   UPLOAD_TIMEOUT: "UPLOAD_004",
+  UPLOAD_TOO_LARGE: "UPLOAD_005",
+  UPLOAD_EMPTY: "UPLOAD_006",
   // ₿AO Markets
   MARKET_TRADE_NOT_READY: "MARKET_001",
   MARKET_INSUFFICIENT_BALANCE: "MARKET_002",
@@ -42,6 +44,14 @@ const MESSAGES: Record<string, { message: string; hint?: string }> = {
   UPLOAD_004: {
     message: "The file server took too long to respond.",
     hint: "Check your connection and try again.",
+  },
+  UPLOAD_005: {
+    message: "That file is too large to upload.",
+    hint: "Choose a file of 100 MB or smaller, or compress it first.",
+  },
+  UPLOAD_006: {
+    message: "That file is empty, so there was nothing to upload.",
+    hint: "Check the file and pick it again.",
   },
   MARKET_001: {
     message: "Trading is temporarily unavailable while payments and payouts are being made safe.",

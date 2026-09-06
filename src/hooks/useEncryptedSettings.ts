@@ -14,7 +14,7 @@ import { buildBlossomBackupTag, createBackupFile, fetchEncryptedBackup, parseBlo
 import type { Theme, FeedSettings, ContentWarningPolicy, SavedFeed, WidgetConfig } from '@/contexts/AppContext';
 import type { ThemeConfig } from '@/themes';
 import type { ContentFilter } from './useContentFilters';
-import { EncryptedSettingsSchema } from '@/lib/schemas';
+import { EncryptedSettingsSchema, sanitizePartialSettings } from '@/lib/schemas';
 import { toast } from '@/hooks/useToast';
 
 /**
@@ -267,8 +267,11 @@ export function useEncryptedSettings() {
         const result = EncryptedSettingsSchema.safeParse(json);
         if (!result.success) {
           console.warn('Encrypted settings failed validation, using partial data:', result.error.issues);
-          // Return whatever fields are valid rather than wiping everything
-          return (json ?? {}) as EncryptedSettings;
+          // Keep only the fields that individually pass their schema — never
+          // the raw payload. The previous raw-JSON fallback let fields that
+          // FAILED validation (relay allowlists, URL templates, numeric
+          // bounds) apply anyway, silently defeating the schema.
+          return sanitizePartialSettings(json) as EncryptedSettings;
         }
         return result.data as EncryptedSettings;
       } catch (error) {
@@ -331,7 +334,9 @@ export function useEncryptedSettings() {
               const decrypted = await user.signer.nip44.decrypt(user.pubkey, ciphertext);
               const json = JSON.parse(decrypted);
               const result = EncryptedSettingsSchema.safeParse(json);
-              currentSettings = result.success ? (result.data as EncryptedSettings) : (json ?? {}) as EncryptedSettings;
+              currentSettings = result.success
+                ? (result.data as EncryptedSettings)
+                : (sanitizePartialSettings(json) as EncryptedSettings);
             } else {
               currentSettings = settings.data ?? {};
             }

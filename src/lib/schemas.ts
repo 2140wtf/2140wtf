@@ -481,3 +481,34 @@ export const EncryptedSettingsSchema = z.looseObject({
     })
   ).optional(),
 });
+
+/**
+ * Salvage only the schema-valid fields of a settings payload.
+ *
+ * Previously, when a decrypted settings blob failed full validation, callers
+ * fell back to the RAW JSON cast to settings — meaning any field that failed
+ * its schema (relay allowlists, URL templates, numeric bounds) was applied
+ * anyway. That silently defeated the schema exactly when the data was
+ * malformed or hostile. This keeps the "don't wipe everything" behavior for
+ * mixed payloads while guaranteeing every retained field individually passed
+ * its schema. Unknown keys are dropped (downstream defaults merge fills them).
+ */
+export type PartialEncryptedSettings = Partial<z.infer<typeof EncryptedSettingsSchema>>;
+
+export function sanitizePartialSettings(json: unknown): PartialEncryptedSettings {
+  if (typeof json !== 'object' || json === null || Array.isArray(json)) return {};
+  const input = json as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(EncryptedSettingsSchema.shape)) {
+    if (!(key in input)) continue;
+    // JSON never yields undefined values; skip them so in-memory callers don't
+    // materialize explicit-undefined keys.
+    if (input[key] === undefined) continue;
+    const fieldSchema = EncryptedSettingsSchema.shape[key as keyof typeof EncryptedSettingsSchema.shape];
+    const result = fieldSchema.safeParse(input[key]);
+    if (result.success) {
+      out[key] = result.data;
+    }
+  }
+  return out as PartialEncryptedSettings;
+}

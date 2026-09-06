@@ -231,6 +231,10 @@ export function YouTubeEmbed({ videoId, className }: { videoId: string; classNam
             src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`}
             title="YouTube video"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            // Same sandbox as components/YouTubeEmbed.tsx — this inline variant
+            // previously shipped without one, so untrusted video URLs got a
+            // full-privilege frame (forms, same-origin storage, top navigation).
+            sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-fullscreen"
             allowFullScreen
             className="absolute inset-0 w-full h-full"
           />

@@ -52,6 +52,11 @@ test('fal.live mobile studio keeps its bottom controls above app chrome', async 
   expect(geometry.iframeTop).toBeLessThan(geometry.iframeBottom);
 
   await page.getByRole('button', { name: 'Expand Trollbox' }).click();
+  // The aside animates height over 200ms; poll until the transition settles
+  // instead of racing the animation.
+  await expect
+    .poll(async () => (await readGeometry(page)).chatHeight, { timeout: 5_000 })
+    .toBeGreaterThan(44);
   const expanded = await readGeometry(page);
   expect(expanded.chatHeight).toBeGreaterThan(44);
   expect(expanded.iframeBottom).toBeLessThanOrEqual(expanded.navTop + 1);
