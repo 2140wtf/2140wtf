@@ -22,7 +22,7 @@ import type { NostrEvent } from "@nostrify/nostrify";
  */
 export const BOT_DISCOVERY_RELAYS = [
   "wss://nos.lol",
-  "wss://purplepag.es",
+  // purplepag.es removed: measured dead (HTTP 502, see scripts/relay-latency-bench.mjs).
   "wss://relay.nostr.band",
 ];
 

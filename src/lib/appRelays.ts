@@ -89,9 +89,12 @@ export const APP_RELAYS: RelayMetadata = {
     { url: 'wss://nostr.jcloud.es/', read: true, write: true },
     // Directory/bridge relays: great for profile, relay-list, and contact
     // discovery; read-only here to keep publishes on full-content relays.
-    { url: 'wss://purplepag.es/', read: true, write: false },
     { url: 'wss://relay.mostr.pub/', read: true, write: false },
-    { url: 'wss://nostr-relay.psfoundation.info/', read: true, write: false },
+    // Removed after measurement (scripts/relay-latency-bench.mjs, 2026-09-06):
+    // purplepag.es → HTTP 502 on every connect attempt; nostr-relay.
+    // psfoundation.info → never sends EOSE (8s query abort). A relay that
+    // never EOSEs holds every grouped pool query until the abort, which made
+    // the whole feed wait ~8s. Re-add only after it passes the bench.
   ],
   updatedAt: 0,
 };

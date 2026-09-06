@@ -12,7 +12,8 @@ const ZAPSTORE_KINDS = [32267, 30063, 3063];
 const OUTBOX_DISCOVERY_RELAYS = [
   'wss://relay.ditto.pub/',
   'wss://nos.lol/',
-  'wss://purplepag.es/',
+  // purplepag.es removed: measured dead (HTTP 502, see scripts/relay-latency-bench.mjs).
+  // A dead relay in this set held the outbox lookup until the abort.
 ];
 
 interface QueryableNostr {
