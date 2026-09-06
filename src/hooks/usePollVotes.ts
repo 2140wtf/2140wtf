@@ -27,14 +27,15 @@ export const BAO_POLL_RELAYS = [
   'wss://nostr.bitcoiner.social',
   'wss://eden.nostr.land',
   'wss://atlas.nostr.land',
-  'wss://nostr-relay.psfoundation.info',
   'wss://filter.nostr.wine',
   'wss://relay.nostr.band',
   'wss://nostr.jcloud.es',
   'wss://nostr.swiss-enigma.ch',
   'wss://relay.nsecbunker.com',
   'wss://relay.bao.network',
-  'wss://purplepag.es',
+  // purplepag.es and nostr-relay.psfoundation.info removed: measured dead
+  // (HTTP 502 / never EOSEs — see scripts/relay-latency-bench.mjs). They held
+  // every poll query until the abort.
   // Expanded relay set for better poll discovery
   'wss://relay.nostrich.land',
   'wss://nostr.mom',
