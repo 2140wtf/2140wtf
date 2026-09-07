@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useNWC } from '@/hooks/useNWCContext';
 import { useWallet } from '@/hooks/useWallet';
+import { bolt11Info } from '@/lib/zaps';
 import type { GammaPaymentOption } from '@/lib/gammaMarkets';
 
 export type GammaPaymentKind = 'bolt11' | 'bolt12' | 'bitcoin' | 'ecash' | 'unknown';
@@ -58,6 +59,14 @@ export function useGammaPayment() {
       const value = option.value.trim();
 
       if (kind === 'bolt11') {
+        // Round 29: the option value is seller-supplied listing metadata and
+        // NWC/WebLN/Cashu all pay "whatever the invoice encodes". A malicious
+        // or buggy listing could carry an invoice for a different amount than
+        // the user confirmed (amount-substitution). Verify before ANY provider.
+        const invoiceMsats = bolt11Info(value).amountMsats;
+        if (invoiceMsats === null || invoiceMsats !== amountSats * 1000) {
+          throw new Error('This payment option\'s invoice does not match the confirmed amount.');
+        }
         if (activeNWC) {
           const result = await sendNwcPayment(activeNWC, value);
           return { success: true, amountSats, proof: result.preimage };
