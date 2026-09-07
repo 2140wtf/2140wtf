@@ -25,7 +25,8 @@ import { useProfileUrl } from '@/hooks/useProfileUrl';
 import { useToast } from '@/hooks/useToast';
 import { CreateOrderDialog } from '@/components/CreateOrderDialog';
 import { CreateAuctionDialog } from '@/components/marketplace/CreateAuctionDialog';
-import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, type Nip99Listing } from '@/lib/nip99';
+import { formatDeliveryMethod, formatNip99Price, formatNip99PaymentMethod, isValidListingPrice, type Nip99Listing } from '@/lib/nip99';
+import { MAX_ORDER_SATS } from '@/lib/marketplace';
 import { cn } from '@/lib/utils';
 
 interface Nip99ListingCardProps {
@@ -111,20 +112,21 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
   const priceDisplay = useMemo(() => {
     const price = listing.price;
     if (!price) return { kind: 'no-price' as const };
-    if (!Number.isFinite(price.value) || price.value <= 0) return { kind: 'unsupported' as const };
+    if (!isValidListingPrice(price.value) || price.value <= 0) return { kind: 'unsupported' as const };
 
     const currency = price.currency.trim().toLowerCase();
     const hasBtcPrice = btcPrice && Number.isFinite(btcPrice) && btcPrice > 0;
 
     if (currency === 'sats' || currency === 'sat') {
       const amountSats = Math.round(price.value);
+      if (amountSats <= 0 || amountSats > MAX_ORDER_SATS) return { kind: 'unsupported' as const };
       const usdAmount = hasBtcPrice ? (amountSats / 100_000_000) * btcPrice : undefined;
       return { kind: 'sats' as const, amountSats, usdAmount };
     }
 
     if (currency === 'btc') {
       const amountSats = Math.round(price.value * 100_000_000);
-      if (amountSats <= 0) return { kind: 'unsupported' as const };
+      if (amountSats <= 0 || amountSats > MAX_ORDER_SATS) return { kind: 'unsupported' as const };
       const usdAmount = hasBtcPrice ? price.value * btcPrice : undefined;
       return { kind: 'sats' as const, amountSats, usdAmount };
     }
@@ -134,7 +136,7 @@ export function Nip99ListingCard({ listing }: Nip99ListingCardProps): React.JSX.
         return { kind: 'loading' as const };
       }
       const amountSats = Math.round((price.value / btcPrice) * 100_000_000);
-      if (amountSats <= 0) return { kind: 'unsupported' as const };
+      if (amountSats <= 0 || amountSats > MAX_ORDER_SATS) return { kind: 'unsupported' as const };
       return { kind: 'sats' as const, amountSats, usdAmount: price.value };
     }
 

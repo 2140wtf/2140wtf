@@ -3306,6 +3306,20 @@ export function useCashuWallet(
         );
         const pendingMint = await storageRef.current.loadPendingMint(normalizedMint, encKey, legacyEncKeyRef.current ?? undefined);
         const bolt12Available = checkedBolt12 ? checkedBolt12.amount_paid - checkedBolt12.amount_issued : 0;
+        // Round 30: the mint-reported delta is the amount that gets minted for
+        // BOLT12 quotes, so validate it like user input — a buggy or hostile
+        // mint reporting a negative or non-integer delta previously flowed
+        // straight into mintProofsBolt12 as the issuance amount. Zero is the
+        // legitimate "no new increment" case (handled by the UNPAID path
+        // below), and no upper cap applies: a payer can legitimately pay any
+        // amount into a reusable offer (tips), so the delta is only bounded by
+        // safe-integer range; the post-mint `mintedAmount !== mintAmount`
+        // check still catches wrong issuance totals.
+        if (checkedBolt12 && (!Number.isSafeInteger(bolt12Available) || bolt12Available < 0)) {
+          throw new Error(
+            `Mint reported an invalid BOLT12 paid amount (${bolt12Available}). Contact the mint operator if this persists.`,
+          );
+        }
         const mintAmount = checkedBolt12 ? bolt12Available : amount;
         // If a BOLT12 mint call committed but its response was lost, the mint's
         // amount_issued already consumed the available balance. The durable
