@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useEncryptedSecureLocalStorage } from '@/hooks/useEncryptedSecureLocalStorage';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useToast } from '@/hooks/useToast';
@@ -88,6 +88,14 @@ export function useNWCInternal(userPubkey?: string) {
   const [connections, setConnections] = useEncryptedSecureLocalStorage<NWCConnection[]>(storagePrefix, [], nip44, pubkey);
   const [activeConnection, setActiveConnection] = useEncryptedSecureLocalStorage<string | null>(activePrefix, null, nip44, pubkey);
   const [connectionInfo, setConnectionInfo] = useState<Record<string, NWCInfo>>({});
+
+  // Auto-select the first connection when none is active (effect, not a
+  // render-phase write — see getActiveConnection below).
+  useEffect(() => {
+    if (!activeConnection && connections.length > 0) {
+      setActiveConnection(connections[0].connectionString);
+    }
+  }, [activeConnection, connections, setActiveConnection]);
 
   // Add new connection
   const addConnection = async (uri: string, alias?: string): Promise<boolean> => {
@@ -195,18 +203,17 @@ export function useNWCInternal(userPubkey?: string) {
     });
   };
 
-  // Get active connection
+  // Get active connection.
+  // Round 29: pure read — the previous auto-heal wrote state with
+  // setActiveConnection, which fired inside render whenever useWallet called
+  // this during render ("Cannot update a component while rendering a
+  // different component" class of bugs). Callers that want auto-select can do
+  // it explicitly in an effect.
   const getActiveConnection = useCallback((): NWCConnection | null => {
-    if (!activeConnection && connections.length > 0) {
-      setActiveConnection(connections[0].connectionString);
-      return connections[0];
-    }
-
     if (!activeConnection) return null;
-
     const found = connections.find(c => c.connectionString === activeConnection);
     return found || null;
-  }, [activeConnection, connections, setActiveConnection]);
+  }, [activeConnection, connections]);
 
   // Send payment using the SDK
   const sendPayment = useCallback(async (
@@ -243,31 +250,42 @@ export function useNWCInternal(userPubkey?: string) {
       throw new Error(`Failed to create NWC client: ${redactSecrets(rawMessage)}`);
     }
 
+    // Round 29: a client-side timeout race does NOT stop the in-flight NWC
+    // payment — the wallet may still settle the invoice after we report
+    // failure, so the caller must never auto-retry. Distinguish "we gave up
+    // waiting" (MONEY MAY HAVE MOVED) from a genuine wallet rejection.
+    const clientPayment = client.pay(invoice) as Promise<{ preimage: string }>;
+    let timedOut = false;
     try {
       let timeoutId: NodeJS.Timeout | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('Payment timeout after 15 seconds')), 15000);
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error('Payment timeout after 15 seconds'));
+        }, 15000);
       });
 
-      const paymentPromise = client.pay(invoice);
-
-      try {
-        const response = await Promise.race([paymentPromise, timeoutPromise]) as { preimage: string };
-        if (timeoutId) clearTimeout(timeoutId);
-        return response;
-      } catch (error) {
-        if (timeoutId) clearTimeout(timeoutId);
-        throw error;
-      }
+      const response = (await Promise.race([
+        clientPayment,
+        timeoutPromise,
+      ])) as { preimage: string };
+      if (timeoutId) clearTimeout(timeoutId);
+      return response;
     } catch (error) {
+      if (timedOut) {
+        // Do not surface a misleading "try again": the wallet may complete
+        // the payment in the background. Callers treat this as indeterminate.
+        console.error('NWC payment timed out client-side; the wallet may still settle the invoice.');
+        throw new Error(
+          'The wallet took too long to answer. The payment may still complete — check your wallet before retrying.',
+        );
+      }
       if (error instanceof Error) {
         console.error('NWC payment failed:', redactSecrets(error.message));
         // Avoid echoing the secret connection string back to the user if the
         // SDK ever includes it in an error message.
         const safeMessage = redactSecrets(error.message);
-        if (safeMessage.includes('timeout')) {
-          throw new Error('Payment timed out. Please try again.');
-        } else if (safeMessage.includes('insufficient')) {
+        if (safeMessage.includes('insufficient')) {
           throw new Error('Insufficient balance in connected wallet.');
         } else if (safeMessage.includes('invalid')) {
           throw new Error('Invalid invoice or connection. Please check your wallet.');
