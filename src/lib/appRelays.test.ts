@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { APP_RELAYS } from './appRelays';
+import { APP_RELAYS, NIP99_RELAYS } from './appRelays';
+import { BAO_POLL_RELAYS } from '@/hooks/usePollVotes';
 
 /**
  * Measured dead on 2026-09-06 (scripts/relay-latency-bench.mjs):
@@ -31,5 +32,24 @@ describe('APP_RELAYS', () => {
       seen.add(norm);
     }
     expect(APP_RELAYS.relays.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('AUTH-gated relay exclusions (user-requested policy)', () => {
+  // *.nostr.land and nostr.wine AUTH-gate real traffic: anonymous queries get
+  // an AUTH challenge instead of events, so grouped pool queries stall until
+  // abort. Keep every app relay list free of them.
+  const AUTH_GATED = [/nostr\.land/, /nostr\.wine/];
+
+  it.each([
+    ['APP_RELAYS', () => APP_RELAYS.relays.map((r) => r.url)],
+    ['NIP99_RELAYS', () => NIP99_RELAYS],
+    ['BAO_POLL_RELAYS', () => BAO_POLL_RELAYS],
+  ])('%s contains no AUTH-gated relays', (_name, urls) => {
+    for (const url of urls()) {
+      for (const pattern of AUTH_GATED) {
+        expect(url).not.toMatch(pattern);
+      }
+    }
   });
 });

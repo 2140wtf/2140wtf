@@ -25,9 +25,8 @@ export const BAO_POLL_RELAYS = [
   'wss://offchain.pub',
   'wss://bitcoiner.social',
   'wss://nostr.bitcoiner.social',
-  'wss://eden.nostr.land',
-  'wss://atlas.nostr.land',
-  'wss://filter.nostr.wine',
+  // *.nostr.land removed: AUTH-gated for real traffic — anonymous queries get
+  // an AUTH challenge instead of events, stalling grouped pool queries.
   'wss://relay.nostr.band',
   'wss://nostr.jcloud.es',
   'wss://nostr.swiss-enigma.ch',

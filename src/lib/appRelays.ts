@@ -37,7 +37,6 @@ export const NIP99_RELAYS: string[] = [
   'wss://relay.ditto.pub',
   'wss://relay.dreamith.to',
   'wss://relay.noswhere.com',
-  'wss://nostr.wine',
   'wss://antiprimal.net',
   'wss://relay.primal.net',
   'wss://nos.lol',
@@ -47,8 +46,8 @@ export const NIP99_RELAYS: string[] = [
   'wss://offchain.pub',
   'wss://bitcoiner.social',
   'wss://nostr.bitcoiner.social',
-  'wss://eden.nostr.land',
-  'wss://atlas.nostr.land',
+  // *.nostr.land removed: AUTH-gated for real traffic (the pool would stall on
+  // their AUTH challenges) — consistent with the APP_RELAYS exclusion policy.
   'wss://nostr.mom',
   'wss://relay.nostr.bg',
   'wss://relay.0xchat.com',
