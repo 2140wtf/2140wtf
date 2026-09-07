@@ -10,6 +10,32 @@ export type DeliveryMethod = 'post' | 'collect-in-person' | 'digital';
 export const NIP99_PAYMENT_METHODS = ['cashu', 'lightning', 'bitcoin', 'silent-payments', 'bolt12', 'xmr'] as const;
 export type Nip99PaymentMethod = typeof NIP99_PAYMENT_METHODS[number];
 
+/** Caps on attacker-controlled listing fields (round 30).
+ *
+ * Everything here comes from relay-supplied kind-30402 events, so every
+ * renderer that touches these values is a potential DoS/layout-break vector:
+ * - Prices are capped at the Bitcoin supply bound in msat-scale units. A
+ *   value like `9e99` parses as a finite float, so "price: 0.00001 BTC"
+ *   multiplied out (round 27b's lossy-float class) or a raw `1e300` sats
+ *   price would otherwise overflow downstream conversion math.
+ * - String fields are trimmed to lengths that survive every consumer
+ *   (title into `<h3>`, summary/content into dialog text, images into
+ *   gallery grids) without corrupting layout or bloating IndexedDB caches.
+ */
+export const MAX_LISTING_PRICE = 21_000_000_000_000_000; // 21e6 BTC * 1e6 (msat-scale sats)
+export const MAX_LISTING_STRING_LENGTH = 2_000;
+export const MAX_LISTING_IMAGES = 20;
+export const MAX_LISTING_CATEGORIES = 30;
+export const MAX_LISTING_SHIPPING_REFS = 20;
+
+/** Whole-unit check for attacker-supplied listing prices.
+ *  Fractional sats prices (`0.5`) previously fell through `Math.round` in
+ *  conversion paths and rounded unpredictably; BTC prices keep their natural
+ *  fraction, so those are allowed through and handled per-currency. */
+export function isValidListingPrice(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= MAX_LISTING_PRICE;
+}
+
 export interface ShippingOptionRef {
   /** NIP-33 address of the referenced kind 30406 shipping option: `30406:<pubkey>:<d>`. */
   address: string;
@@ -118,12 +144,15 @@ function parseDeliveryMethod(value: string | undefined): DeliveryMethod | undefi
 function parseShippingOptionRefs(tags: string[][]): ShippingOptionRef[] {
   return tags
     .filter((t) => t[0] === 'shipping_option' && t[1])
+    .slice(0, MAX_LISTING_SHIPPING_REFS)
     .map((t) => {
-      const address = t[1];
+      const address = t[1].slice(0, 200);
+      // Round 30: finite check — `Number('1e999')` is Infinity, which passed
+      // the old NaN guard and produced extraCost: Infinity.
       const extra = t[2] ? Number(t[2]) : NaN;
       return {
         address,
-        extraCost: Number.isNaN(extra) || extra < 0 ? undefined : extra,
+        extraCost: Number.isFinite(extra) && extra >= 0 && extra <= MAX_LISTING_PRICE ? extra : undefined,
       };
     });
 }
@@ -142,21 +171,29 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
   // Merchants feed. (demo-auction-* is also filtered in the auction parser.)
   if (/^demo-auction-/.test(dTag) || /^test-\d{13}/.test(dTag)) return null;
 
-  const title = getTag(event, 'title')?.trim() || dTag;
-  const summary = getTag(event, 'summary')?.trim() || '';
+  const title = (getTag(event, 'title')?.trim() || dTag).slice(0, MAX_LISTING_STRING_LENGTH);
+  const summary = getTag(event, 'summary')?.trim().slice(0, MAX_LISTING_STRING_LENGTH) || '';
 
   const priceTag = event.tags.find((t) => t[0] === 'price');
   const priceValue = priceTag?.[1] ? Number(priceTag[1]) : NaN;
-  const price = !Number.isNaN(priceValue) && priceValue >= 0
+  // Round 30: use isValidListingPrice, not `!Number.isNaN(...)` — Infinity
+  // passes a NaN check, and a listing priced `1e999` (Number('1e999') ===
+  // Infinity) would poison every downstream conversion with Infinity sats.
+  const price = isValidListingPrice(priceValue)
     ? {
         value: priceValue,
-        currency: (priceTag?.[2] || '').trim() || 'sats',
-        frequency: priceTag?.[3]?.trim() || undefined,
+        currency: (priceTag?.[2] || '').trim().slice(0, 16) || 'sats',
+        frequency: priceTag?.[3]?.trim().slice(0, 64) || undefined,
       }
     : null;
 
-  const images = getTags(event, 'image').filter(isAllowedImageUrl);
-  const categories = getTags(event, 't').map((t) => t.toLowerCase());
+  const images = getTags(event, 'image')
+    .slice(0, MAX_LISTING_IMAGES)
+    .filter(isAllowedImageUrl)
+    .map((u) => u.slice(0, MAX_LISTING_STRING_LENGTH));
+  const categories = getTags(event, 't')
+    .slice(0, MAX_LISTING_CATEGORIES)
+    .map((t) => t.toLowerCase().slice(0, 64));
   const paymentMethods = getTags(event, 'payment')
     .map((p) => p.toLowerCase())
     .map((p) => (p === 'monero' ? 'xmr' : p))
@@ -168,6 +205,8 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
   if (statusRaw === 'active') status = 'active';
 
   const publishedAtRaw = getTag(event, 'published_at');
+  // Finite + sane-range check: `Number('1e999')` is Infinity, and a bogus
+  // 1e18 timestamp would sort the listing to the very top (or bottom) of feeds.
   const publishedAt = publishedAtRaw ? Number(publishedAtRaw) : undefined;
 
   const stockRaw = getTag(event, 'stock');
@@ -184,14 +223,20 @@ export function parseNip99Listing(event: NostrEvent): Nip99Listing | null {
     dTag,
     title,
     summary,
-    content: event.content || '',
+    content: (event.content || '').slice(0, MAX_LISTING_STRING_LENGTH),
     price,
     images,
-    location: getTag(event, 'location')?.trim() || undefined,
+    location: getTag(event, 'location')?.trim().slice(0, 200) || undefined,
     categories,
     paymentMethods,
     status,
-    publishedAt: publishedAt && Number.isFinite(publishedAt) ? publishedAt : undefined,
+    publishedAt:
+      publishedAt !== undefined &&
+      Number.isFinite(publishedAt) &&
+      publishedAt > 0 &&
+      publishedAt <= 4_102_444_800 // 2100-01-01
+        ? publishedAt
+        : undefined,
     createdAt: event.created_at,
     stock: Number.isFinite(stock) && stock >= 0 ? stock : undefined,
     type: parseListingType(typeTag),

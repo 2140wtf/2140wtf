@@ -78,7 +78,12 @@ export function CreateOrderDialog({
   }, [sellerShippingOptions, listing.shippingOptionRefs]);
 
   const unitSats = priceState.kind === 'ready' ? priceState.amountSats : 0;
-  const totalSats = unitSats * quantity;
+  // Round 30: clamp the total to the Bitcoin supply bound. quantity × unitSats
+  // with attacker-controlled unit pricing could overflow the order amount sent
+  // to the seller (and past every downstream amount check).
+  const MAX_ORDER_TOTAL_SATS = 2_100_000_000_000_000;
+  const maxQuantity = unitSats > 0 ? Math.max(1, Math.floor(MAX_ORDER_TOTAL_SATS / unitSats)) : 1;
+  const totalSats = unitSats * Math.min(quantity, maxQuantity);
 
   const resetForm = () => {
     setQuantity(1);
@@ -156,7 +161,7 @@ export function CreateOrderDialog({
                   value={quantity}
                   onChange={(e) => {
                     const value = Number(e.target.value);
-                    setQuantity(Number.isNaN(value) || value < 1 ? 1 : value);
+                    setQuantity(Number.isNaN(value) || value < 1 ? 1 : Math.min(value, maxQuantity));
                   }}
                   className="w-20"
                 />

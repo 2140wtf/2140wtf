@@ -2,6 +2,19 @@ import type { Nip17Message } from '@/lib/nip17';
 import { NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
 import { SHIPPING_OPTION_KIND } from '@/lib/shippingOption';
 
+/** Caps on attacker-controlled Gamma order-message fields (round 30).
+ *
+ * Order messages arrive as NIP-17 gift-wrapped DMs from ANY pubkey that knows
+ * the recipient's npub — there is no authentication beyond the wrap itself.
+ * Every numeric field below is sender-supplied, so each gets a hard bound:
+ * amounts and quantities are capped at the Bitcoin supply bound (a hostile
+ * `amount: 9e15` tag would otherwise render as an absurd sats figure and be
+ * forwarded into payment dialogs), and counters/timestamps must be in a sane
+ * range to keep the aggregate sorted output meaningful.
+ */
+export const MAX_ORDER_AMOUNT_SATS = 2_100_000_000_000_000; // Bitcoin supply bound
+export const MAX_ORDER_QUANTITY = 1_000_000;
+
 /** Gamma Markets order-message types carried in kind 16 DMs. */
 export type GammaOrderMessageType = 1 | 2 | 3 | 4;
 
@@ -171,8 +184,19 @@ function parseItemTag(tag: string[]): GammaOrderItem | null {
   if (tag.length < 3) return null;
   const address = tag[1];
   const qty = Number(tag[2]);
-  if (!address || !Number.isInteger(qty) || qty <= 0) return null;
+  // Round 30: cap + finite check. Number('1e999') is Infinity, which passed
+  // the old isInteger() test as false — but Number('1e15') is a genuine
+  // integer and previously produced quantity 1e15.
+  if (!address || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0 || qty > MAX_ORDER_QUANTITY) return null;
   return { listingAddress: address, quantity: qty };
+}
+
+/** Parse a sender-supplied sats amount with the round-30 caps. */
+function parseOrderAmount(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  const amount = Number(raw);
+  if (!Number.isFinite(amount) || amount < 0 || amount > MAX_ORDER_AMOUNT_SATS) return null;
+  return amount;
 }
 
 function parsePaymentOptionTag(tag: string[]): GammaPaymentOption | null {
@@ -203,7 +227,7 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
   const type = typeRaw ? (Number(typeRaw) as GammaOrderMessageType) : undefined;
   if (!type || !([1, 2, 3, 4] as number[]).includes(type)) return null;
   const orderId = getTag(message.tags, 'order');
-  if (!orderId) return null;
+  if (!orderId || orderId.length > 200) return null;
 
   const sender = message.sender;
   const recipient = message.recipients[0];
@@ -211,9 +235,8 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
 
   switch (type) {
     case 1: {
-      const amountRaw = getTag(message.tags, 'amount');
-      const amount = amountRaw ? Number(amountRaw) : NaN;
-      if (!Number.isFinite(amount) || amount < 0) return null;
+      const amount = parseOrderAmount(getTag(message.tags, 'amount'));
+      if (amount === null) return null;
       const items = getTags(message.tags, 'item')
         .map(parseItemTag)
         .filter((i): i is GammaOrderItem => i !== null);
@@ -234,9 +257,8 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
       };
     }
     case 2: {
-      const amountRaw = getTag(message.tags, 'amount');
-      const amount = amountRaw ? Number(amountRaw) : NaN;
-      if (!Number.isFinite(amount) || amount < 0) return null;
+      const amount = parseOrderAmount(getTag(message.tags, 'amount'));
+      if (amount === null) return null;
       const paymentOptions = getTags(message.tags, 'payment')
         .map(parsePaymentOptionTag)
         .filter((p): p is GammaPaymentOption => p !== null);
@@ -271,6 +293,10 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
       const status = getTag(message.tags, 'status') as GammaShippingStatus | undefined;
       if (!status || !isGammaShippingStatus(status)) return null;
       const etaRaw = getTag(message.tags, 'eta');
+      // Round 30: eta must be a sane epoch-seconds value — `eta: 9e15` or a
+      // negative value previously flowed straight into timeAgo() rendering.
+      const eta = etaRaw ? Number(etaRaw) : NaN;
+      const etaValid = Number.isFinite(eta) && eta > 1_600_000_000 && eta < 4_102_444_800; // 2020..2100
       return {
         kind: 16,
         type: 4,
@@ -278,9 +304,9 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
         merchantPubkey: sender,
         buyerPubkey: recipient,
         status,
-        tracking: getTag(message.tags, 'tracking') ?? undefined,
-        carrier: getTag(message.tags, 'carrier') ?? undefined,
-        eta: etaRaw ? Number(etaRaw) : undefined,
+        tracking: getTag(message.tags, 'tracking')?.slice(0, 200) ?? undefined,
+        carrier: getTag(message.tags, 'carrier')?.slice(0, 100) ?? undefined,
+        eta: etaValid ? eta : undefined,
         note: message.content || undefined,
         createdAt: message.createdAt,
         eventId: message.id,
@@ -294,10 +320,9 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
 export function parseGammaPaymentReceipt(message: Nip17Message): GammaPaymentReceipt | null {
   if (message.kind !== 17) return null;
   const orderId = getTag(message.tags, 'order');
-  if (!orderId) return null;
-  const amountRaw = getTag(message.tags, 'amount');
-  const amount = amountRaw ? Number(amountRaw) : NaN;
-  if (!Number.isFinite(amount) || amount < 0) return null;
+  if (!orderId || orderId.length > 200) return null;
+  const amount = parseOrderAmount(getTag(message.tags, 'amount'));
+  if (amount === null) return null;
   const payments = getTags(message.tags, 'payment')
     .map(parseReceiptPaymentTag)
     .filter((p): p is GammaPaymentReceipt['payments'][number] => p !== null);
@@ -429,6 +454,40 @@ export function buildPaymentReceiptPayload(
   };
 }
 
+/**
+ * Whether `sender` is allowed to emit a given order message for an order
+ * created by `creation` (round 30).
+ *
+ * Order/receipt messages are NIP-17 DMs — anyone who knows a participant's
+ * npub can send a kind-16/17 message carrying ANY `order` tag value, and it
+ * lands in the same DM inbox. Without role checks, a forged type-2 payment
+ * request from a non-merchant would overwrite `order.paymentRequest` (blocking
+ * the real merchant's request-payment action), and a forged type-3 could
+ * cancel or complete someone else's order. Only lifecycle participants may
+ * mutate state: the merchant drives payment requests + shipping, the buyer
+ * drives receipts, and status updates may come from either party only.
+ */
+function isSenderAuthorizedForOrder(
+  creation: GammaOrderCreation,
+  parsed: GammaOrderMessage | GammaPaymentReceipt,
+  sender: string,
+): boolean {
+  if ('type' in parsed) {
+    switch (parsed.type) {
+      case 1:
+        return parsed.buyerPubkey === creation.buyerPubkey && parsed.merchantPubkey === creation.merchantPubkey;
+      case 2:
+        return sender === creation.merchantPubkey;
+      case 3:
+        return sender === creation.buyerPubkey || sender === creation.merchantPubkey;
+      case 4:
+        return sender === creation.merchantPubkey;
+    }
+  }
+  // Payment receipts are sent by the buyer.
+  return sender === creation.buyerPubkey;
+}
+
 /** Aggregate all order-related messages into per-order state. */
 export function aggregateGammaOrders(messages: Nip17Message[]): GammaOrder[] {
   const byOrder = new Map<string, { creation?: GammaOrderCreation; messages: Nip17Message[] }>();
@@ -438,7 +497,20 @@ export function aggregateGammaOrders(messages: Nip17Message[]): GammaOrder[] {
     if (!parsed) continue;
     const entry = byOrder.get(parsed.orderId) ?? { messages: [] };
     if ('type' in parsed && parsed.type === 1) {
-      entry.creation = parsed;
+      // Round 30: the FIRST valid creation for an orderId wins. Anyone who
+      // knows an order id can send a kind-16 type-1 message — without this
+      // guard a hijack message (different buyer) silently replaced the real
+      // creation, and even a legitimately re-sent older copy could overwrite
+      // a newer one (the old code had no createdAt comparison at all).
+      const existing = entry.creation;
+      if (
+        !existing ||
+        (parsed.buyerPubkey === existing.buyerPubkey &&
+          parsed.merchantPubkey === existing.merchantPubkey &&
+          parsed.createdAt > existing.createdAt)
+      ) {
+        entry.creation = parsed;
+      }
     }
     entry.messages.push(message);
     byOrder.set(parsed.orderId, entry);
@@ -467,6 +539,9 @@ export function aggregateGammaOrders(messages: Nip17Message[]): GammaOrder[] {
     for (const msg of entry.messages) {
       const parsed = parseGammaOrderMessage(msg) ?? parseGammaPaymentReceipt(msg);
       if (!parsed) continue;
+      // Round 30: role check — see isSenderAuthorizedForOrder. Forged messages
+      // from non-participants are ignored for state aggregation.
+      if (!isSenderAuthorizedForOrder(creation, parsed, msg.sender)) continue;
       order.updatedAt = Math.max(order.updatedAt, parsed.createdAt);
 
       if ('type' in parsed) {

@@ -77,6 +77,70 @@ describe('parseNip99Listing', () => {
     const listing = parseNip99Listing(event)!;
     expect(listing.images).toEqual(['https://example.com/ok.png']);
   });
+
+  // ── Round 30: adversarial ingestion (relay-supplied attacker fields) ──
+
+  it('rejects an Infinity price tag (Number("1e999") === Infinity)', () => {
+    const listing = parseNip99Listing(makeEvent([['price', '1e999', 'sats']]));
+    expect(listing?.price).toBeNull();
+  });
+
+  it('rejects prices above the Bitcoin supply bound', () => {
+    const listing = parseNip99Listing(makeEvent([['price', '9e16', 'sats']]));
+    expect(listing?.price).toBeNull();
+  });
+
+  it('accepts a price at the exact supply bound', () => {
+    const listing = parseNip99Listing(makeEvent([['price', '21000000000000000', 'sats']]));
+    expect(listing?.price?.value).toBe(21_000_000_000_000_000);
+  });
+
+  it('caps image count and length', () => {
+    const images = Array.from({ length: 50 }, (_, i) => [`image`, `https://example.com/${i}.png`] as string[]);
+    const long = 'https://example.com/' + 'a'.repeat(5000) + '.png';
+    const listing = parseNip99Listing(makeEvent([...images, ['image', long]]));
+    expect(listing!.images.length).toBeLessThanOrEqual(20);
+    expect(listing!.images.every((u) => u.length <= 2_000)).toBe(true);
+  });
+
+  it('caps category count and length', () => {
+    const cats = Array.from({ length: 60 }, (_, i) => ['t', `cat${i}`.padEnd(100, 'x')] as string[]);
+    const listing = parseNip99Listing(makeEvent(cats));
+    expect(listing!.categories.length).toBeLessThanOrEqual(30);
+    expect(listing!.categories.every((c) => c.length <= 64)).toBe(true);
+  });
+
+  it('caps title, summary, content, and location lengths', () => {
+    const blob = 'x'.repeat(10_000);
+    const listing = parseNip99Listing(
+      makeEvent([['title', blob], ['summary', blob], ['location', blob]], blob),
+    );
+    expect(listing!.title.length).toBeLessThanOrEqual(2_000);
+    expect(listing!.summary.length).toBeLessThanOrEqual(2_000);
+    expect(listing!.content.length).toBeLessThanOrEqual(2_000);
+    expect(listing!.location!.length).toBeLessThanOrEqual(200);
+  });
+
+  it('caps shipping_option refs and rejects non-finite extraCost', () => {
+    const refs = Array.from({ length: 40 }, (_, i) => ['shipping_option', `30406:pk:d${i}`, '500'] as string[]);
+    const listing = parseNip99Listing(
+      makeEvent([...refs, ['shipping_option', '30406:pk:extra', '1e999']]),
+    );
+    expect(listing!.shippingOptionRefs.length).toBeLessThanOrEqual(20);
+    expect(listing!.shippingOptionRefs.every((r) => r.extraCost === undefined || Number.isFinite(r.extraCost))).toBe(true);
+  });
+
+  it('rejects absurd published_at timestamps', () => {
+    const listing = parseNip99Listing(makeEvent([['published_at', '99999999999999']]));
+    expect(listing?.publishedAt).toBeUndefined();
+  });
+
+  it('caps currency and frequency tag lengths', () => {
+    const blob = 'c'.repeat(5_000);
+    const listing = parseNip99Listing(makeEvent([['price', '100', blob, blob]]));
+    expect(listing!.price!.currency.length).toBeLessThanOrEqual(16);
+    expect(listing!.price!.frequency!.length).toBeLessThanOrEqual(64);
+  });
 });
 
 describe('formatNip99Price', () => {

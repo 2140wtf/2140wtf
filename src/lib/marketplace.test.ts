@@ -33,10 +33,39 @@ describe('getListingPriceState', () => {
     expect(getListingPriceState(makeListing({ value: 0, currency: 'USD' }), 100_000).kind).toBe('unsupported');
     expect(getListingPriceState(makeListing({ value: -5, currency: 'USD' }), 100_000).kind).toBe('unsupported');
     expect(getListingPriceState(makeListing({ value: NaN, currency: 'USD' }), 100_000).kind).toBe('unsupported');
+    // Round 30: Infinity passed the old !Number.isFinite gate is false —
+    // the old code only NaN-checked, so Infinity reached conversions.
+    expect(getListingPriceState(makeListing({ value: Infinity, currency: 'USD' }), 100_000).kind).toBe('unsupported');
   });
 
-  it('returns loading when BTC price is needed but unavailable', () => {
-    expect(getListingPriceState(makeListing({ value: 1000, currency: 'sats' }), undefined).kind).toBe('loading');
+  it('returns ready for sats prices even without a BTC rate (round 30)', () => {
+    // Round 30: sats/btc are intrinsically denominated — they previously
+    // required the BTC rate and were stuck on "Loading price…" whenever the
+    // rate API was down, making every sats listing unorderable.
+    expect(getListingPriceState(makeListing({ value: 1000, currency: 'sats' }), undefined)).toEqual({
+      kind: 'ready',
+      amountSats: 1000,
+      initialAmountSats: 1000,
+    });
+    expect(getListingPriceState(makeListing({ value: 0.001, currency: 'btc' }), undefined)).toEqual({
+      kind: 'ready',
+      amountSats: 100_000,
+      initialAmountSats: 100_000,
+    });
+  });
+
+  it('still returns loading for fiat prices without a BTC rate', () => {
+    expect(getListingPriceState(makeListing({ value: 50, currency: 'usd' }), undefined).kind).toBe('loading');
+  });
+
+  it('rejects prices above the order ceiling (round 30)', () => {
+    expect(getListingPriceState(makeListing({ value: 3e15, currency: 'sats' }), 100_000).kind).toBe('unsupported');
+  });
+
+  it('rejects a broken BTC rate for fiat conversion (round 30)', () => {
+    expect(getListingPriceState(makeListing({ value: 50, currency: 'usd' }), 0).kind).toBe('loading');
+    expect(getListingPriceState(makeListing({ value: 50, currency: 'usd' }), -5).kind).toBe('loading');
+    expect(getListingPriceState(makeListing({ value: 50, currency: 'usd' }), NaN).kind).toBe('loading');
   });
 
   it('converts sats to ready state', () => {
