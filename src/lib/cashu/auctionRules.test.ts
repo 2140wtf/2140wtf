@@ -227,6 +227,40 @@ describe('proxy raise computation', () => {
     expect(raises).toHaveLength(0);
   });
 
+  it('does not raise to beat my own earlier equal-price tie (overpay guard)', () => {
+    // eBay rule: at equal price the EARLIEST bid stands. `standing` may be an
+    // earlier equal bid from ME while `myLatestBid` is a later duplicate of the
+    // same amount (relay re-read). Event identity differs, but we are already
+    // leading — raising would overpay against our own committed max.
+    const earlierMine = bid(A, 3_000, 100);
+    const laterDup = bid(A, 3_000, 200);
+    const raises = proxyRaises({
+      standing: earlierMine,
+      standingSats: 3_000,
+      myLatestBid: laterDup,
+      maxSats: 50_000,
+      startingSats: 1_000,
+      bidderPubkey: A,
+    });
+    expect(raises).toHaveLength(0);
+  });
+
+  it('raises a rival-owner equal-price standing bid that is NOT mine', () => {
+    // The guard is ownership-aware: a rival's equal-priced standing bid is not
+    // my lead — I must still raise by one increment to take the lead.
+    const rival = bid(B, 3_000, 100);
+    const raises = proxyRaises({
+      standing: rival,
+      standingSats: 3_000,
+      myLatestBid: bid(A, 2_000, 500),
+      maxSats: 50_000,
+      startingSats: 1_000,
+      bidderPubkey: A,
+    });
+    expect(raises).toHaveLength(1);
+    expect(raises[0].amountSats).toBeGreaterThan(3_000);
+  });
+
   it('zero/negative max never raises', () => {
     const rival = bid(B, 2_000, 200);
     expect(

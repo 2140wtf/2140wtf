@@ -218,8 +218,14 @@ export function proxyRaises(args: {
 
   if (maxSats <= 0) return [];
 
-  // Already leading? Nothing to do.
-  if (myLatestBid && standing && myLatestBid.eventId === standing.eventId) return [];
+  // Already leading? Nothing to do. Wealthier than a self-referencing check:
+  // eBay tie rules (earliest equal-price bid stands) mean a bidder can be the
+  // CURRENT winner even when `myLatestBid` is a LATER duplicate of an earlier
+  // equal raise (e.g. after a relay split re-read), so event identity alone is
+  // insufficient. Treat "my visible bid equals the standing price AND is mine"
+  // as the lead — raising now would overpay against our own committed max.
+  const mySats = myLatestBid?.amountSats ?? 0;
+  if (standing && mySats >= standing.amountSats) return [];
 
   // Price we must beat: standing price, or the auction floor.
   const toBeat = standingSats ?? 0;
