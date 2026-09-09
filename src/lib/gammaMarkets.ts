@@ -15,6 +15,18 @@ import { SHIPPING_OPTION_KIND } from '@/lib/shippingOption';
 export const MAX_ORDER_AMOUNT_SATS = 2_100_000_000_000_000; // Bitcoin supply bound
 export const MAX_ORDER_QUANTITY = 1_000_000;
 
+// Round 33: string and array caps. Round 30 bounded the numeric fields but
+// left tag strings (payment values, proofs, addresses, notes) and tag counts
+// unbounded — a hostile counterparty DM could carry megabyte proofs or
+// thousands of item/payment tags that then render in the order dialogs.
+export const MAX_ORDER_STRING_LENGTH = 2_000;
+export const MAX_ORDER_ITEMS = 50;
+export const MAX_ORDER_PAYMENTS = 10;
+// Tightened order-id cap: order ids are short identifiers and doubling as an
+// unbounded display string would let a DM thread pin absurd widths. 200 chars
+// is firm and matches the pre-round-33 contract (orderId > 200 rejected).
+export const MAX_ORDER_ID_LENGTH = 200;
+
 /** Gamma Markets order-message types carried in kind 16 DMs. */
 export type GammaOrderMessageType = 1 | 2 | 3 | 4;
 
@@ -188,6 +200,8 @@ function parseItemTag(tag: string[]): GammaOrderItem | null {
   // the old isInteger() test as false — but Number('1e15') is a genuine
   // integer and previously produced quantity 1e15.
   if (!address || !Number.isFinite(qty) || !Number.isInteger(qty) || qty <= 0 || qty > MAX_ORDER_QUANTITY) return null;
+  // Round 33: the address renders in the orders list / detail dialog.
+  if (address.length > MAX_ORDER_STRING_LENGTH) return null;
   return { listingAddress: address, quantity: qty };
 }
 
@@ -205,6 +219,8 @@ function parsePaymentOptionTag(tag: string[]): GammaPaymentOption | null {
   const value = tag[2];
   if (!medium || !value) return null;
   if (!isGammaPaymentMedium(medium)) return null;
+  // Round 33: the value (invoice / address / token) renders in the pay dialog.
+  if (value.length > MAX_ORDER_STRING_LENGTH) return null;
   return { medium, reference: value, value };
 }
 
@@ -218,6 +234,8 @@ function parseReceiptPaymentTag(tag: string[]): GammaPaymentReceipt['payments'][
   const reference = tag[2];
   const proof = tag[3];
   if (!medium || !reference || !proof || !isGammaPaymentMedium(medium)) return null;
+  // Round 33: references/proofs render in the merchant's order dialogs.
+  if (reference.length > MAX_ORDER_STRING_LENGTH || proof.length > MAX_ORDER_STRING_LENGTH) return null;
   return { medium, reference, proof };
 }
 
@@ -227,7 +245,7 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
   const type = typeRaw ? (Number(typeRaw) as GammaOrderMessageType) : undefined;
   if (!type || !([1, 2, 3, 4] as number[]).includes(type)) return null;
   const orderId = getTag(message.tags, 'order');
-  if (!orderId || orderId.length > 200) return null;
+  if (!orderId || orderId.length > MAX_ORDER_ID_LENGTH) return null;
 
   const sender = message.sender;
   const recipient = message.recipients[0];
@@ -239,8 +257,11 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
       if (amount === null) return null;
       const items = getTags(message.tags, 'item')
         .map(parseItemTag)
-        .filter((i): i is GammaOrderItem => i !== null);
+        .filter((i): i is GammaOrderItem => i !== null)
+        .slice(0, MAX_ORDER_ITEMS);
       if (items.length === 0) return null;
+      // Round 33: address/note strings render in the order dialogs.
+      const shippingAddress = getTag(message.tags, 'address');
       return {
         kind: 16,
         type: 1,
@@ -249,9 +270,9 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
         merchantPubkey: recipient,
         amountSats: amount,
         items,
-        shippingOptionAddress: getTag(message.tags, 'shipping') ?? undefined,
-        shippingAddress: getTag(message.tags, 'address') ?? undefined,
-        note: message.content || undefined,
+        shippingOptionAddress: getTag(message.tags, 'shipping')?.slice(0, MAX_ORDER_STRING_LENGTH) ?? undefined,
+        shippingAddress: shippingAddress ? shippingAddress.slice(0, MAX_ORDER_STRING_LENGTH) : undefined,
+        note: message.content ? message.content.slice(0, MAX_ORDER_STRING_LENGTH) : undefined,
         createdAt: message.createdAt,
         eventId: message.id,
       };
@@ -261,7 +282,8 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
       if (amount === null) return null;
       const paymentOptions = getTags(message.tags, 'payment')
         .map(parsePaymentOptionTag)
-        .filter((p): p is GammaPaymentOption => p !== null);
+        .filter((p): p is GammaPaymentOption => p !== null)
+        .slice(0, MAX_ORDER_PAYMENTS);
       return {
         kind: 16,
         type: 2,
@@ -284,7 +306,7 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
         senderPubkey: sender,
         recipientPubkey: recipient,
         status,
-        note: message.content || undefined,
+        note: message.content ? message.content.slice(0, MAX_ORDER_STRING_LENGTH) : undefined,
         createdAt: message.createdAt,
         eventId: message.id,
       };
@@ -320,12 +342,13 @@ export function parseGammaOrderMessage(message: Nip17Message): GammaOrderMessage
 export function parseGammaPaymentReceipt(message: Nip17Message): GammaPaymentReceipt | null {
   if (message.kind !== 17) return null;
   const orderId = getTag(message.tags, 'order');
-  if (!orderId || orderId.length > 200) return null;
+  if (!orderId || orderId.length > MAX_ORDER_ID_LENGTH) return null;
   const amount = parseOrderAmount(getTag(message.tags, 'amount'));
   if (amount === null) return null;
   const payments = getTags(message.tags, 'payment')
     .map(parseReceiptPaymentTag)
-    .filter((p): p is GammaPaymentReceipt['payments'][number] => p !== null);
+    .filter((p): p is GammaPaymentReceipt['payments'][number] => p !== null)
+    .slice(0, MAX_ORDER_PAYMENTS);
   if (payments.length === 0) return null;
   return {
     kind: 17,
@@ -334,7 +357,7 @@ export function parseGammaPaymentReceipt(message: Nip17Message): GammaPaymentRec
     merchantPubkey: message.recipients[0] ?? '',
     amountSats: amount,
     payments,
-    note: message.content || undefined,
+    note: message.content ? message.content.slice(0, MAX_ORDER_STRING_LENGTH) : undefined,
     createdAt: message.createdAt,
     eventId: message.id,
   };

@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_ORDER_AMOUNT_SATS,
+  MAX_ORDER_ITEMS,
+  MAX_ORDER_PAYMENTS,
   MAX_ORDER_QUANTITY,
+  MAX_ORDER_STRING_LENGTH,
   aggregateGammaOrders,
   parseGammaOrderMessage,
   parseGammaPaymentReceipt,
@@ -231,5 +234,80 @@ describe('GammaOrderCreation shape — used by role tests', () => {
     };
     expect(creation.buyerPubkey).toBe(BUYER);
     expect(creation.merchantPubkey).toBe(MERCHANT);
+  });
+});
+
+// ── Round 33 adversarial cases ────────────────────────────────────────────────
+
+describe('round 33: order string/array caps', () => {
+  it('drops an oversize listing address', () => {
+    const msg = makeMessage({
+      tags: [
+        ['type', '1'],
+        ['order', 'o1'],
+        ['amount', '21000'],
+        ['item', 'x'.repeat(MAX_ORDER_STRING_LENGTH + 1), '1'],
+      ],
+    });
+    // Only item was invalid → no valid items → message rejected.
+    expect(parseGammaOrderMessage(msg)).toBeNull();
+  });
+
+  it('caps over-long shipping address and note to 2000 chars', () => {
+    const msg = makeMessage({
+      tags: [
+        ['type', '1'],
+        ['order', 'o1'],
+        ['amount', '21000'],
+        ['item', '30402:' + MERCHANT + ':x', '1'],
+        ['address', 'A'.repeat(5000)],
+      ],
+      content: 'Z'.repeat(9999),
+    });
+    const parsed = parseGammaOrderMessage(msg);
+    expect(parsed).not.toBeNull();
+    if (parsed && 'type' in parsed && parsed.type === 1) {
+      expect(parsed.shippingAddress!.length).toBe(2000);
+      expect(parsed.note!.length).toBe(2000);
+    }
+  });
+
+  it('caps items to 50', () => {
+    const itemTags = Array.from({ length: 200 }, (_, i) => ['item', `30402:${MERCHANT}:${i}`, '1']);
+    const msg = makeMessage({
+      tags: [['type', '1'], ['order', 'o1'], ['amount', '21000'], ...itemTags],
+    });
+    const parsed = parseGammaOrderMessage(msg);
+    expect(parsed).not.toBeNull();
+    if (parsed && 'type' in parsed && parsed.type === 1) expect(parsed.items.length).toBe(MAX_ORDER_ITEMS);
+  });
+
+  it('drops oversize payment option values and caps options count', () => {
+    const bigVal = 'B'.repeat(MAX_ORDER_STRING_LENGTH + 1);
+    // 40 valid + 1 oversize; valid ones get capped at MAX_ORDER_PAYMENTS.
+    const optionTags = Array.from({ length: 40 }, (_, i) => ['payment', 'lightning', `lnbc-${i}`]);
+    optionTags.push(['payment', 'lightning', bigVal]);
+    const msg = makeMessage({
+      tags: [['type', '2'], ['order', 'o2'], ['amount', '21000'], ...optionTags],
+    });
+    const parsed = parseGammaOrderMessage(msg);
+    expect(parsed).not.toBeNull();
+    if (parsed && 'type' in parsed && parsed.type === 2) {
+      expect(parsed.paymentOptions.length).toBe(MAX_ORDER_PAYMENTS);
+      expect(parsed.paymentOptions.every((p) => p.value.length <= MAX_ORDER_STRING_LENGTH)).toBe(true);
+    }
+  });
+
+  it('caps receipt payments and drops oversize proofs', () => {
+    const payTags = Array.from({ length: 30 }, (_, i) => ['payment', 'ecash', `ref-${i}`, `proof-${i}`]);
+    payTags.push(['payment', 'lightning', 'lnbc-ref', 'P'.repeat(MAX_ORDER_STRING_LENGTH + 1)]);
+    const msg = makeMessage({
+      kind: 17,
+      tags: [['order', 'o3'], ['amount', '21000'], ...payTags],
+    });
+    const receipt = parseGammaPaymentReceipt(msg);
+    expect(receipt).not.toBeNull();
+    expect(receipt!.payments.length).toBe(MAX_ORDER_PAYMENTS);
+    expect(receipt!.payments.every((p) => p.proof.length <= MAX_ORDER_STRING_LENGTH)).toBe(true);
   });
 });
