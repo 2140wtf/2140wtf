@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { useWot } from '@/hooks/useWot';
@@ -83,12 +84,20 @@ export function AuctionBidDialog({
 }: AuctionBidDialogProps) {
   const { user } = useCurrentUser();
   const wallet = useCashuWalletContext();
+  const { config } = useAppContext();
   const { mutateAsync: publishEvent } = useNostrPublish();
   const { toast } = useToast();
   // WoT gate: score the bidder from the seller's perspective (community view).
   const { scores } = useWot(user ? [user.pubkey] : [], { anchor: sellerPubkey });
   const wotScore = user ? scores.get(user.pubkey)?.score ?? 0 : null;
   const wotGate = useMemo(() => canBidWot(auction, wotScore), [auction, wotScore]);
+
+  // Round 31 fix (F-31-1): the escrow lock needs THREE DISTINCT keys
+  // {bidder, seller, operator} — the primitive rejects duplicate keys, so
+  // passing the seller as operator made every bid fail at the lock step.
+  // Use the same neutral escrow operator the pet battles use; fail closed
+  // when it is not configured.
+  const operatorPubkey = config.petsBattleEscrowPubkey;
 
   const [amount, setAmount] = useState(String(minNextBid));
   const [proxyOn, setProxyOn] = useState(proxyMode);
@@ -119,6 +128,7 @@ export function AuctionBidDialog({
   const canBid =
     !!user &&
     !!wallet.getWalletP2pkPubkey() &&
+    !!operatorPubkey &&
     Number.isFinite(numericAmount) &&
     !bidError &&
     !insufficient &&
@@ -143,7 +153,7 @@ export function AuctionBidDialog({
         {
           partyAPubkey: bidderP2pk,
           partyBPubkey: sellerPubkey,
-          operatorPubkey: sellerPubkey,
+          operatorPubkey,
           refundPubkey: bidderP2pk,
           locktime,
         },
@@ -170,6 +180,16 @@ export function AuctionBidDialog({
         ['p2pk', bidderP2pk],
         ['alt', `Bid ${formatSats(numericAmount)} sats on ${auction.title}`],
       ];
+      if (buyNowMode) {
+        // Round 31 fix (F-31-2): the BUYER must not republish the seller's
+        // kind-30402 with status=sold — NIP-33 replaceability is per
+        // (pubkey, d), so a buyer-signed copy can never replace the seller's
+        // auction; it merely created a phantom duplicate owned by the buyer
+        // while the real auction stayed open. Instead the bid is tagged
+        // buy_now and the SELLER closes via their settlement flow (same as
+        // the "close now" path), which is what the settlement module expects.
+        tags.push(['buy_now', '1']);
+      }
       if (proxyOn) {
         const { commitment, secret } = createCommitment({
           auctionAddress: addr,
@@ -185,25 +205,10 @@ export function AuctionBidDialog({
         tags,
       });
 
-      // Buy-now: end the auction immediately (status=sold) so the buyer
-      // becomes the winner and the seller settles exactly as usual.
-      if (buyNowMode) {
-        const soldTags = auction.event.tags.map((t) =>
-          t[0] === 'status' ? ['status', 'sold'] : t,
-        );
-        if (!soldTags.some(([n]) => n === 'status')) soldTags.push(['status', 'sold']);
-        await publishEvent({
-          kind: auction.event.kind,
-          content: auction.event.content,
-          tags: soldTags,
-          prev: auction.event,
-        });
-      }
-
       toast({
         title: buyNowMode ? 'Buy It Now confirmed!' : 'Bid placed!',
         description: buyNowMode
-          ? `${formatSats(numericAmount)} sats locked. Auction ended — waiting for seller settlement.`
+          ? `${formatSats(numericAmount)} sats locked. The seller has been notified to close and settle the auction.`
           : `${formatSats(numericAmount)} sats locked in escrow. You'll be auto-refunded if outbid.`,
       });
       onOpenChange(false);

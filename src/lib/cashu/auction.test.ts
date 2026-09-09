@@ -16,6 +16,7 @@ import {
   AUCTION_BID_KIND,
 } from './auction';
 import { NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
+import { MAX_ORDER_SATS } from '@/lib/marketplace';
 
 const SELLER = 'a'.repeat(64);
 const BIDDER1 = 'b'.repeat(64);
@@ -78,7 +79,7 @@ describe('parseAuctionListing', () => {
 
   it('rejects non-https image URLs', () => {
     const a = parseAuctionListing(
-      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1', 'sats'], ['close', '1'], ['image', 'javascript:alert(1)']] }),
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1', 'sats'], ['close', String(NOW + 3600)], ['image', 'javascript:alert(1)']] }),
     );
     expect(a!.images).toHaveLength(0);
   });
@@ -399,5 +400,102 @@ describe('buildAuctionEvent / buildBidEvent', () => {
     expect(ev.kind).toBe(AUCTION_BID_KIND);
     expect(ev.tags).toContainEqual(['a', addr]);
     expect(ev.tags).toContainEqual(['amount', '1500', 'sats']);
+  });
+});
+
+// ── Round 31 adversarial cases ────────────────────────────────────────────────
+
+describe('round 31: parseAuctionListing bounds', () => {
+  it('rejects a starting price above the 21M-BTC supply bound', () => {
+    const a = parseAuctionListing(
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', String(MAX_ORDER_SATS + 1)], ['close', String(NOW + 3600)]] }),
+    );
+    expect(a).toBeNull();
+  });
+
+  it('rejects a far-future close time (junk auctions must not stay active forever)', () => {
+    const farFuture = parseAuctionListing(
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1000'], ['close', '99999999999999']] }),
+    );
+    expect(farFuture).toBeNull();
+    // Pre-2020 close times are equally bogus.
+    const ancient = parseAuctionListing(
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1000'], ['close', '1000']] }),
+    );
+    expect(ancient).toBeNull();
+  });
+
+  it('caps title/summary/content at the round-30 string bound', () => {
+    const huge = 'A'.repeat(5000);
+    const a = parseAuctionListing(
+      makeAuction({
+        content: huge,
+        tags: [
+          ['d', 'x'], ['auction', 'auction'], ['price', '1000'], ['close', String(NOW + 3600)],
+          ['title', huge], ['summary', huge],
+        ],
+      }),
+    );
+    expect(a).not.toBeNull();
+    expect(a!.title.length).toBeLessThanOrEqual(2000);
+    expect(a!.summary.length).toBeLessThanOrEqual(2000);
+    expect(a!.content.length).toBeLessThanOrEqual(2000);
+  });
+
+  it('caps images at 20 and categories at 30 (64 chars each)', () => {
+    const imgTags = Array.from({ length: 40 }, (_, i) => ['image', `https://cdn.example/${i}.jpg`]);
+    const catTags = Array.from({ length: 50 }, (_, i) => ['t', `cat-${i}-${'x'.repeat(80)}`]);
+    const a = parseAuctionListing(
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1000'], ['close', String(NOW + 3600)], ...imgTags, ...catTags] }),
+    );
+    expect(a).not.toBeNull();
+    expect(a!.images.length).toBeLessThanOrEqual(20);
+    expect(a!.categories.length).toBeLessThanOrEqual(30);
+    for (const c of a!.categories) expect(c.length).toBeLessThanOrEqual(64);
+  });
+
+  it('drops a buy_now price above the supply bound', () => {
+    const a = parseAuctionListing(
+      makeAuction({ tags: [['d', 'x'], ['auction', 'auction'], ['price', '1000'], ['close', String(NOW + 3600)], ['buy_now', String(MAX_ORDER_SATS + 1)]] }),
+    );
+    expect(a).not.toBeNull();
+    expect(a!.buyNowSats).toBeUndefined();
+  });
+});
+
+describe('round 31: parseAuctionBid bounds', () => {
+  const bidEvent = (tags: string[][]) =>
+    makeEvent({ kind: AUCTION_BID_KIND, pubkey: BIDDER1, tags });
+
+  it('rejects bid amounts above the supply bound', () => {
+    const b = parseAuctionBid(
+      bidEvent([['a', auctionAddress(SELLER, 'art-1')], ['amount', String(MAX_ORDER_SATS + 1)]]),
+    );
+    expect(b).toBeNull();
+  });
+
+  it('keeps well-formed p2pk keys (x-only and compressed)', () => {
+    const xOnly = bidEvent([['a', auctionAddress(SELLER, 'x')], ['amount', '100'], ['p2pk', BIDDER1]]);
+    expect(parseAuctionBid(xOnly)!.escrowPubkey).toBe(BIDDER1);
+    const compressed = bidEvent([['a', auctionAddress(SELLER, 'x')], ['amount', '100'], ['p2pk', `02${BIDDER1}`]]);
+    expect(parseAuctionBid(compressed)!.escrowPubkey).toBe(`02${BIDDER1}`);
+  });
+
+  it('drops malformed p2pk escrow keys (settlement would strand funds)', () => {
+    for (const bad of ['not-hex', '1234', 'zz'.repeat(32), `${BIDDER1}extra`]) {
+      const b = parseAuctionBid(bidEvent([['a', auctionAddress(SELLER, 'x')], ['amount', '100'], ['p2pk', bad]]));
+      expect(b!.escrowPubkey).toBeUndefined();
+    }
+  });
+});
+
+describe('round 31: validateBidAmount supply cap', () => {
+  it('rejects bids above the maximum supported amount', () => {
+    // Auction without a buy_now so the supply cap is what fires.
+    const noBuyNow = parseAuctionListing(
+      makeAuction({ tags: [['d', 'y'], ['auction', 'auction'], ['price', '1000'], ['close', String(NOW + 3600)]] }),
+    )!;
+    expect(validateBidAmount(MAX_ORDER_SATS + 1, noBuyNow, null, NOW)).toMatch(/maximum/i);
+    expect(validateBidAmount(MAX_ORDER_SATS, noBuyNow, null, NOW)).toBeNull();
   });
 });

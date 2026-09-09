@@ -83,10 +83,17 @@ export function useAuctionBids(auction: AuctionListing | null | undefined) {
 
   const bidState: AuctionBidState = useMemo(
     () => summarizeBids(
-      rawBids.map(parseAuctionBid).filter((b): b is AuctionBid => b !== null),
+      rawBids
+        .map(parseAuctionBid)
+        .filter((b): b is AuctionBid => b !== null)
+        // Defense-in-depth (round 31): the relay-side `#a` filter is
+        // advisory — a misbehaving relay could return bids for other
+        // auctions, and summarizeBids has no way to know the target.
+        // Drop any bid whose `a` tag does not match this auction's address.
+        .filter((b) => address !== null && b.auctionAddress === address),
       auction?.startingSats ?? 1,
     ),
-    [rawBids, auction?.startingSats],
+    [rawBids, address, auction?.startingSats],
   );
 
   return { bidState, isLoading, refetch };

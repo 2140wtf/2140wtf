@@ -26,7 +26,16 @@
 
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { NIP99_CLASSIFIED_KIND } from '@/lib/nip99';
+import {
+  MAX_LISTING_CATEGORIES,
+  MAX_LISTING_IMAGES,
+  MAX_LISTING_STRING_LENGTH,
+  NIP99_CLASSIFIED_KIND,
+} from '@/lib/nip99';
+// Auctions are sats-denominated, so the money bound is the sats supply cap
+// (21M BTC), not the msat-scale listing bound. Importing marketplace.ts is
+// cycle-safe: it depends only on nip99.
+import { MAX_ORDER_SATS } from '@/lib/marketplace';
 import { bidIncrementSats } from '@/lib/cashu/auctionRules';
 
 /** Kind for individual auction bids (parameterized-replaceable). */
@@ -113,10 +122,29 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
   if (dTag.startsWith('demo-auction-')) return null;
 
   const startingSats = Number(getTag(event, 'price'));
-  if (!Number.isSafeInteger(startingSats) || startingSats < 0) return null;
+  // Supply bound (round-31): MAX_SAFE_INTEGER sats passes an isSafeInteger
+  // check but is 43× Bitcoin's total supply — a hostile listing must not be
+  // able to poison the increment chain or render absurd amounts.
+  if (
+    !Number.isSafeInteger(startingSats) ||
+    startingSats < 0 ||
+    startingSats > MAX_ORDER_SATS
+  ) {
+    return null;
+  }
 
   const closesAt = Number(getTag(event, 'close'));
-  if (!Number.isSafeInteger(closesAt) || closesAt <= 0) return null;
+  // Epoch-seconds sanity window (2020–2100, mirroring round 30's published_at
+  // bound): `close: 99999999999999` (year ~5M) would otherwise keep a junk
+  // auction "active" forever, pinned at the end of the soonest-close sort.
+  if (
+    !Number.isSafeInteger(closesAt) ||
+    closesAt <= 0 ||
+    closesAt < 1_577_836_800 ||
+    closesAt > 4_102_444_800
+  ) {
+    return null;
+  }
 
   const buyNowRaw = getTag(event, 'buy_now');
   const buyNowSats = buyNowRaw ? Number(buyNowRaw) : NaN;
@@ -124,26 +152,41 @@ export function parseAuctionListing(event: NostrEvent): AuctionListing | null {
   const minWotRaw = getTag(event, 'min_wot');
   const minWot = minWotRaw ? Number(minWotRaw) : NaN;
 
+  // Field caps (round 31 — mirrors round 30's parseNip99Listing bounds):
+  // auction events come from arbitrary relays/pubkeys, so every string and
+  // array must be capped before rendering or persistence.
+  const capStr = (s: string | undefined): string => (s ?? '').slice(0, MAX_LISTING_STRING_LENGTH);
+  const images = event.tags
+    .filter((t) => t[0] === 'image' && typeof t[1] === 'string')
+    .map((t) => t[1])
+    .filter((url) => url.length <= MAX_LISTING_STRING_LENGTH)
+    .filter(isAllowedImageUrl)
+    .slice(0, MAX_LISTING_IMAGES);
+  const categories = Array.from(
+    new Set(
+      event.tags
+        .filter((t) => t[0] === 't' && typeof t[1] === 'string')
+        .map((t) => t[1].toLowerCase().slice(0, 64)),
+    ),
+  ).slice(0, MAX_LISTING_CATEGORIES);
+
   return {
     id: `${event.pubkey}:${dTag}`,
     eventId: event.id,
     pubkey: event.pubkey,
     dTag,
-    title: getTag(event, 'title')?.trim() || dTag,
-    summary: getTag(event, 'summary')?.trim() || '',
-    content: event.content || '',
-    images: event.tags
-      .filter((t) => t[0] === 'image' && typeof t[1] === 'string')
-      .map((t) => t[1])
-      .filter(isAllowedImageUrl),
-    categories: event.tags
-      .filter((t) => t[0] === 't' && typeof t[1] === 'string')
-      .map((t) => t[1].toLowerCase()),
+    title: capStr(getTag(event, 'title')?.trim()) || dTag.slice(0, MAX_LISTING_STRING_LENGTH),
+    summary: capStr(getTag(event, 'summary')?.trim()),
+    content: capStr(event.content),
+    images,
+    categories,
     status: getTag(event, 'status')?.toLowerCase() === 'sold' ? 'sold' : 'active',
     createdAt: event.created_at,
     startingSats,
     buyNowSats:
-      Number.isSafeInteger(buyNowSats) && buyNowSats > 0 ? buyNowSats : undefined,
+      Number.isSafeInteger(buyNowSats) && buyNowSats > 0 && buyNowSats <= MAX_ORDER_SATS
+        ? buyNowSats
+        : undefined,
     minWot:
       Number.isSafeInteger(minWot) && minWot > 0 ? Math.min(100, Math.round(minWot)) : undefined,
     closesAt,
@@ -174,7 +217,15 @@ export function dedupeAuctionListings(events: NostrEvent[]): AuctionListing[] {
 
 /**
  * Parse a kind-30401 bid event. Returns null for malformed events.
+ *
+ * Round 31 hardening: the bid amount is supply-capped (a MAX_SAFE_INTEGER
+ * "bid" is unpayable and poisons the increment chain), and the escrow P2PK
+ * value must be well-formed hex (64-char x-only or 66-char compressed) —
+ * the escrow lock is validated against this key at settlement, so garbage
+ * here would strand the winner's funds.
  */
+const P2PK_HEX_RE = /^(?:02|03)?[0-9a-f]{64}$/i;
+
 export function parseAuctionBid(event: NostrEvent): AuctionBid | null {
   if (event.kind !== AUCTION_BID_KIND) return null;
 
@@ -182,13 +233,20 @@ export function parseAuctionBid(event: NostrEvent): AuctionBid | null {
   if (!auctionAddress) return null;
 
   const amountSats = Number(getTag(event, 'amount'));
-  if (!Number.isSafeInteger(amountSats) || amountSats <= 0) return null;
+  if (
+    !Number.isSafeInteger(amountSats) ||
+    amountSats <= 0 ||
+    amountSats > MAX_ORDER_SATS
+  ) {
+    return null;
+  }
 
+  const p2pk = getTag(event, 'p2pk');
   return {
     eventId: event.id,
     pubkey: event.pubkey,
     amountSats,
-    escrowPubkey: getTag(event, 'p2pk'),
+    escrowPubkey: p2pk && P2PK_HEX_RE.test(p2pk) ? p2pk.toLowerCase() : undefined,
     auctionAddress,
     createdAt: event.created_at,
   };
@@ -427,6 +485,9 @@ export function validateBidAmount(
 ): string | null {
   if (!Number.isSafeInteger(amountSats) || amountSats <= 0) {
     return 'Bid must be a positive whole number of sats.';
+  }
+  if (amountSats > MAX_ORDER_SATS) {
+    return 'Bid exceeds the maximum supported amount.';
   }
   if (isAuctionClosed(auction, nowSeconds)) {
     return 'This auction has closed.';

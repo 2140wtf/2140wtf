@@ -38,7 +38,9 @@ function makeAuction(extraTags: string[][] = []) {
     ['title', 'Reserve auction'],
     ['auction', 'auction'],
     ['price', '1000', 'sats'],
-    ['close', '9999999999'],
+    // Round 31: closesAt must be a plausible epoch (2020–2100 window), so a
+    // realistic close 30 days out replaces the old year-2286 placeholder.
+    ['close', String(1_800_000_000 + 30 * 86400)],
   ];
   return parseAuctionListing(makeAuctionEvent([...base, ...extraTags]))!;
 }
