@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -78,16 +78,50 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
 
   const validOutcomes = outcomes.map((o) => o.trim()).filter(Boolean);
 
+  // Round 35: dedupe outcomes (duplicate labels poison the 1/N probability
+  // math and the outcome-tag buttons), and bounds for publishing noise.
+  const outcomeKey = validOutcomes.join('\u0000');
+  const uniqueOutcomes = useMemo(
+    () => Array.from(new Set(outcomeKey.split('\u0000'))),
+    [outcomeKey],
+  );
+  const canPublish = useMemo(() => {
+    const trimmedTitle = title.trim();
+    const days = parseInt(endDays, 10) || 0;
+    return (
+      uniqueOutcomes.length >= 2 &&
+      uniqueOutcomes.length <= 20 &&
+      uniqueOutcomes.every((o) => o.length <= 100) &&
+      trimmedTitle.length > 0 &&
+      trimmedTitle.length <= 200 &&
+      description.trim().length <= 5000 &&
+      days >= 1 &&
+      days <= 1825
+    );
+  }, [title, description, uniqueOutcomes, endDays]);
+
   const handleCreate = async () => {
     if (!user) {
       toast({ title: 'Log in first', description: 'Creating a market needs an identity to sign with.', variant: 'destructive' });
       return;
     }
-    if (validOutcomes.length < 2) {
-      toast({ title: 'Need at least two outcomes', variant: 'destructive' });
+    if (uniqueOutcomes.length < 2 || uniqueOutcomes.length > 20) {
+      toast({ title: 'Outcome count must be between 2 and 20', variant: 'destructive' });
       return;
     }
-    const days = parseInt(endDays, 10) || 30;
+    if (!title.trim() || title.trim().length > 200) {
+      toast({ title: 'Question must be 1–200 characters', variant: 'destructive' });
+      return;
+    }
+    if (description.trim().length > 5000) {
+      toast({ title: 'Description must be ≤ 5000 characters', variant: 'destructive' });
+      return;
+    }
+    const days = parseInt(endDays, 10) || 0;
+    if (days < 1 || days > 1825) {
+      toast({ title: 'Expiry must be 1 day to 5 years out', variant: 'destructive' });
+      return;
+    }
     const end = Math.floor(Date.now() / 1000) + days * 86_400;
     const id = `market-${crypto.randomUUID()}`;
 
@@ -97,7 +131,7 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
         content: JSON.stringify({
           title: title.trim(),
           description: description.trim() || undefined,
-          outcomes: validOutcomes,
+          outcomes: uniqueOutcomes,
         }),
         tags: [
           ['d', id],
@@ -105,7 +139,7 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
           ['c', category],
           ['n', BAO_MARKET_NETWORK],
           ['end', String(end)],
-          ...validOutcomes.map((o) => ['outcome', o]),
+          ...uniqueOutcomes.map((o) => ['outcome', o]),
           ['alt', 'Prediction market definition'],
         ],
         relay: BAO_MARKETS_RELAY,
@@ -220,7 +254,7 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
 
           <Button
             className="w-full"
-            disabled={isPending || !title.trim() || validOutcomes.length < 2}
+            disabled={isPending || !canPublish}
             onClick={handleCreate}
           >
             {isPending ? <Loader2 className="size-4 animate-spin" /> : 'Publish market'}

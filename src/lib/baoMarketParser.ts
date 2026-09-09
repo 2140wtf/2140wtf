@@ -5,6 +5,22 @@ export const BAO_MARKET_KIND = 38000;
 export const BAO_MARKETS_TRADE_KIND = 38001;
 export const BAO_MARKETS_DELEGATED_ORDER_KIND = 38005;
 
+// Round 35: outcome/tag caps. Long content-`outcomes` JSON arrays or a flood
+// of `outcome` tags (10k entries) previously flowed into the market card's
+// outcome buttons and the 1/N probability math with no bound.
+export const MAX_MARKET_OUTCOMES = 20;
+// Round 35: end-time window shared with the auction/order parsers — a junk
+// `end` tag (year 285508 via the ms path) must not pin a market at the end
+// of every time sort.
+const MIN_SANE_EPOCH = 1_577_836_800; // 2020-01-01
+const MAX_SANE_EPOCH = 4_102_444_800; // 2100-01-01
+
+function clampEndTime(raw: number): number {
+  if (!Number.isSafeInteger(raw)) return 0;
+  if (raw > 1e12) raw = Math.floor(raw / 1000);
+  return raw >= MIN_SANE_EPOCH && raw <= MAX_SANE_EPOCH ? raw : 0;
+}
+
 export interface BaoMarketOutcome {
   id: string;
   label: string;
@@ -74,11 +90,13 @@ function parseOutcomes(raw: unknown[]): BaoMarketOutcome[] {
     .filter((o): o is BaoMarketOutcome => o !== null);
 
   const seen = new Set<string>();
-  return outcomes.filter((o) => {
-    if (seen.has(o.id)) return false;
-    seen.add(o.id);
-    return true;
-  });
+  return outcomes
+    .filter((o) => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
+      return true;
+    })
+    .slice(0, MAX_MARKET_OUTCOMES);
 }
 
 /**
@@ -142,7 +160,7 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
   );
 
   if (outcomes.length === 0) {
-    const outcomeTags = getTagAll("outcome");
+    const outcomeTags = getTagAll("outcome").slice(0, MAX_MARKET_OUTCOMES);
     outcomes = outcomeTags.map((label, idx) => ({
       id: `outcome_${idx}`,
       label: sanitizeSingleLine(label, 100),
@@ -157,12 +175,18 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
     ];
   }
 
-  const category = String(
-    getTag("category") || getTag("c") || content.category || "world",
+  const category = sanitizeSingleLine(
+    String(
+      getTag("category") || getTag("c") || content.category || "world",
+    ),
+    64,
   ).toLowerCase();
 
-  const state = String(
-    getTag("state") || getTag("s") || content.state || "active",
+  const state = sanitizeSingleLine(
+    String(
+      getTag("state") || getTag("s") || content.state || "active",
+    ),
+    64,
   ).toLowerCase();
 
   const rawType = String(
@@ -185,12 +209,15 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
   let endTime = 0;
   const rawEnd = getTag("end") || content.endTime;
   if (typeof rawEnd === "number") {
-    endTime = rawEnd > 1e12 ? Math.floor(rawEnd / 1000) : rawEnd;
+    // Epoch seconds or epoch millis — clamp to the sane window; junk dates
+    // land on 0 (unknown) instead of distorting time sorts.
+    endTime = clampEndTime(rawEnd);
   } else if (typeof rawEnd === "string") {
     const parsed = parseInt(rawEnd, 10);
-    if (!Number.isNaN(parsed)) endTime = parsed > 1e12 ? Math.floor(parsed / 1000) : parsed;
+    endTime = Number.isNaN(parsed) ? 0 : clampEndTime(parsed);
   } else if (typeof content.endDate === "number") {
-    endTime = Math.floor(content.endDate / 1000);
+    // endDate is epoch MILLIS (mo: frontend converters) — ms→s here, then clamp.
+    endTime = clampEndTime(Math.floor(content.endDate / 1000));
   }
 
   return {
