@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { MAX_ORDER_SATS } from '@/lib/marketplace';
 import { openUrl } from '@/lib/downloadFile';
 import {
   BAO_RAILS,
@@ -239,6 +240,10 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
       out.push(`Description needs ${PROJECT_DESCRIPTION_MIN}+ characters (now ${description.trim().length})`);
     }
     if (goal < 1000) out.push('Goal must be at least 1,000 sats');
+    // Round 32: upper bound — parseInt of arbitrary digit strings yields
+    // imprecise floats (e.g. '99999999999999999' → 1e17) that would be sent
+    // to the API as goal_sats. Cap at the 21M-BTC sats supply bound.
+    if (goal > MAX_ORDER_SATS) out.push('Goal exceeds the maximum supported amount');
     if (format === 'stream') {
       if ((parseInt(streamDays, 10) || 0) < 1) out.push('Vesting window must be ≥ 1 day');
     } else {
@@ -251,6 +256,9 @@ export function CreateCampaignDialog({ open, onOpenChange, onCreated, initialTit
           out.push(`Milestone ${i + 1}: delivery criteria need ${CRITERIA_MIN}+ characters`);
         }
         if ((parseInt(m.amount, 10) || 0) <= 0) out.push(`Milestone ${i + 1}: add an amount`);
+        else if ((parseInt(m.amount, 10) || 0) > MAX_ORDER_SATS) {
+          out.push(`Milestone ${i + 1}: amount exceeds the maximum supported amount`);
+        }
         const days = parseInt(m.deadlineDays, 10) || 0;
         if (days < DEADLINE_DAYS_MIN || days > DEADLINE_DAYS_MAX) {
           out.push(`Milestone ${i + 1}: deadline must be ${DEADLINE_DAYS_MIN}–${DEADLINE_DAYS_MAX} days`);

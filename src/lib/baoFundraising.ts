@@ -203,7 +203,9 @@ export interface BaoFundraiserQuota {
  */
 export async function fetchFundraiserQuota(pubkey: string): Promise<BaoFundraiserQuota | null> {
   try {
-    const res = await apiFetch<{ data: BaoFundraiserQuota }>(`/v1/fundraisers/quota?pubkey=${pubkey}`);
+    // Round 32: encode the pubkey like every other interpolated identifier —
+    // defense-in-depth against any future key format containing URL metachars.
+    const res = await apiFetch<{ data: BaoFundraiserQuota }>(`/v1/fundraisers/quota?pubkey=${encodeURIComponent(pubkey)}`);
     return res.data;
   } catch {
     return null;
