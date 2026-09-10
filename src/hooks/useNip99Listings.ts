@@ -9,6 +9,37 @@ import { dedupeNip99Listings, isArtListing, NIP99_CLASSIFIED_KIND } from '@/lib/
 
 const QUERY_LIMIT = 500;
 const LOOKBACK_DAYS = 180;
+// Round 36: hard ceilings for caller-supplied query options. `limit: 100000`
+// asks each relay set for 100k events (memory + aggregation cost), while an
+// absurd `lookbackDays` overflows `86400 * days` into a `-Infinity` `since`
+// that makes relays scan their whole store.
+const MAX_QUERY_LIMIT = 2_000;
+const MAX_LOOKBACK_DAYS = 3_650;
+
+/**
+ * Clamp caller-supplied query options to safe ranges (round 36).
+ * Exported for testing.
+ */
+export function clampNip99QueryOptions(options: UseNip99ListingsOptions): { lookbackDays: number; limit: number } {
+  const rawDays = options.lookbackDays ?? LOOKBACK_DAYS;
+  const rawLimit = options.limit ?? QUERY_LIMIT;
+  const lookbackDays = Number.isFinite(rawDays)
+    ? Math.max(0, Math.min(MAX_LOOKBACK_DAYS, Math.floor(rawDays)))
+    : LOOKBACK_DAYS;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.max(1, Math.min(MAX_QUERY_LIMIT, Math.floor(rawLimit)))
+    : QUERY_LIMIT;
+  return { lookbackDays, limit };
+}
+
+// Round 36: categories ride into the relay `#t` filter and the react-query
+// key — cap at 64 chars (matches the per-category cap in parseNip99Listing)
+// so a hostile caller cannot bloat either.
+const MAX_CATEGORY_LENGTH = 64;
+
+export function clampNip99Category(category: string): string {
+  return category.toLowerCase().slice(0, MAX_CATEGORY_LENGTH);
+}
 /**
  * Relay queries resolve when relays EOSE or the timeout fires — so the
  * timeout IS the perceived load time. Keep it tight: the fastest relays
@@ -49,8 +80,10 @@ function categoryTag(category: string): string | undefined {
 
 export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
   const { category = 'all', search = '', onlyActive = true } = options;
-  const lookbackDays = options.lookbackDays ?? LOOKBACK_DAYS;
-  const limit = options.limit ?? QUERY_LIMIT;
+  // Round 36: clamp caller-supplied ranges before they reach the relay or
+  // the query key.
+  const { lookbackDays, limit } = clampNip99QueryOptions(options);
+  const clampedCategory = clampNip99Category(category);
   const { nostr } = useNostr();
   const { config } = useAppContext();
 
@@ -63,8 +96,8 @@ export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
   );
 
   const queryKey = useMemo(
-    () => ['nip99-listings', 'feed', category.toLowerCase(), lookbackDays, limit],
-    [category, lookbackDays, limit],
+    () => ['nip99-listings', 'feed', clampedCategory, lookbackDays, limit],
+    [clampedCategory, lookbackDays, limit],
   );
 
   const { data: rawEvents = [], isLoading, error, refetch } = useQuery<NostrEvent[]>({
@@ -76,7 +109,7 @@ export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
         limit,
         since,
       };
-      const tag = categoryTag(category);
+      const tag = categoryTag(clampedCategory);
       if (tag) {
         relayFilter['#t'] = [tag];
       }
@@ -110,10 +143,10 @@ export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
   const listings = useMemo(() => {
     let items = dedupeNip99Listings(rawEvents);
 
-    if (category === 'art') {
+    if (clampedCategory === 'art') {
       items = items.filter(isArtListing);
-    } else if (category && category !== 'all') {
-      const tag = category.toLowerCase();
+    } else if (clampedCategory && clampedCategory !== 'all') {
+      const tag = clampedCategory;
       items = items.filter((l) => l.categories.includes(tag));
     }
 
@@ -130,7 +163,7 @@ export function useNip99Listings(options: UseNip99ListingsOptions = {}) {
     }
 
     return items;
-  }, [rawEvents, category, onlyActive, search]);
+  }, [rawEvents, clampedCategory, onlyActive, search]);
 
   return {
     listings,
