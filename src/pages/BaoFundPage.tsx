@@ -17,6 +17,7 @@ import { CreateCampaignModal, type CreateMode } from "@/baofund/components/creat
 import { FundCampaignModal } from "@/baofund/components/fund/FundCampaignModal";
 import { PledgeModal } from "@/baofund/components/fund/PledgeModal";
 import { CampaignChatGate } from "@/baofund/components/fund/CampaignChatGate";
+import { OnchainReleaseSection } from "@/baofund/components/fund/OnchainReleaseSection";
 import { breakdownFromDrafts, type CampaignBreakdown } from "@/baofund/components/fund/campaignBreakdown";
 import { FundFaq, FundIntroCollapsible } from "@/baofund/components/landing/FundLanding";
 import { FundMePanel } from "@/baofund/components/landing/FundGuides";
@@ -190,6 +191,18 @@ export function BaoFundPage() {
             });
           }}
           onChat={(id, title, roomAvailable) => openChat(id, title, roomAvailable)}
+          releaseSlot={(m) =>
+            // Owner-only on-chain release, matching bao_fund_it: the founder
+            // signs the escrow release for an unlocked milestone.
+            breakdown.frId && breakdown.ownerPubkey && auth.pubkey === breakdown.ownerPubkey && m.status === "unlocked" ? (
+              <OnchainReleaseSection
+                fundraiserId={breakdown.frId}
+                milestoneId={m.id}
+                signer={auth.signer}
+                milestoneLabel={m.title}
+              />
+            ) : null
+          }
           fundLabel={breakdown.network === "mainnet" ? "Fund with real Cashu" : "Fund this project (testnet)"}
         />
       )}
