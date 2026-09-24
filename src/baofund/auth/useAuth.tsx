@@ -17,7 +17,9 @@
 import { useCallback, useMemo } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { useLoginActions } from '@/hooks/useLoginActions';
+import { useUserSeckey } from '@/hooks/useUserSeckey';
 import {
   createIdentityNip60Signer,
   type Nip60Signer,
@@ -75,7 +77,15 @@ export function useAuth(): BaoAuthCtx {
     [],
   );
 
-  const seedIdentityHex = useCallback((): string | null => null, []);
+  // The nsec login key IS the identity key, so the deterministic testnet-rail
+  // derivation and the court settlement can use it directly. Extension/bunker
+  // logins cannot expose a key and return null (the rail cards then offer the
+  // created/imported wallet path).
+  const seckey = useUserSeckey();
+  const seedIdentityHex = useCallback(
+    (): string | null => (seckey ? bytesToHex(seckey) : null),
+    [seckey],
+  );
 
   const logout = useCallback((): void => {
     void nostrifyLogout();
