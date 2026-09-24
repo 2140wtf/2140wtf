@@ -8,8 +8,8 @@
  *
  * The older 2140.wtf src/components/bao-fund fork is replaced by this surface.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/baofund/auth/useAuth";
 import { FundingCampaignCard, type CampaignCardDraft } from "@/baofund/components/frames/FundingCampaignCard";
@@ -24,6 +24,7 @@ import { breakdownFromDrafts, type CampaignBreakdown } from "@/baofund/component
 import { FundFaq, FundIntroCollapsible } from "@/baofund/components/landing/FundLanding";
 import { FundMePanel } from "@/baofund/components/landing/FundGuides";
 import { gateStripProp, useFundFeed } from "@/baofund/relay/fundFeed";
+import { fetchFundraiser } from "@/baofund/lib/baoFundraising";
 import "@/baofund/theme/newspaperTheme.css";
 import "@/baofund/theme/appTokens.css";
 
@@ -93,6 +94,40 @@ export function BaoFundPage() {
     },
     [cards],
   );
+
+  const location = useLocation();
+  const deepLinkFrId =
+    (location.state as { fundraiserId?: string } | null)?.fundraiserId ??
+    new URLSearchParams(location.search).get("fundraiser") ??
+    undefined;
+  const deepLinkHandled = useRef(false);
+
+  // "Fund from the room" / deep links: open the pledge flow for the campaign
+  // once the feed has loaded (falling back to a direct fetch when the card is
+  // not in the current feed page).
+  useEffect(() => {
+    if (!deepLinkFrId || deepLinkHandled.current || feed.loading) return;
+    deepLinkHandled.current = true;
+    const card = cards.find((c) => c.frId === deepLinkFrId || c.id === deepLinkFrId);
+    if (card) {
+      fundCard(card);
+      return;
+    }
+    void (async () => {
+      try {
+        const { fundraiser } = await fetchFundraiser(deepLinkFrId, auth.signer ?? undefined);
+        setPledgeTarget({
+          id: fundraiser.id,
+          title: fundraiser.title,
+          mainnet: fundraiser.network === "mainnet",
+          ownerPubkey: fundraiser.owner_pubkey,
+          rails: fundraiser.settlement_rail ? [fundraiser.settlement_rail] : undefined,
+        });
+      } catch {
+        /* deep link to an unknown/unavailable campaign: leave the feed as-is */
+      }
+    })();
+  }, [deepLinkFrId, feed.loading, cards, fundCard, auth.signer]);
 
   const campaignCountLabel = useMemo(() => {
     if (feed.loading) return "Fetching fundraisers…";

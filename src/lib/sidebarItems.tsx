@@ -366,7 +366,14 @@ export function isItemActive(
   }
 
   if (id === "2140-social") {
-    return pathname.startsWith("/bao/");
+    // The chat lives at /community (legacy /bao/community + /bao/chat
+    // redirect). Match only those — a bare /bao/ prefix wrongly highlighted
+    // the chat on the fund and court pages.
+    return (
+      pathname.startsWith("/community") ||
+      pathname.startsWith("/bao/community") ||
+      pathname.startsWith("/bao/chat")
+    );
   }
   if (id === "bao-fund") {
     return pathname.startsWith("/bao-fund");
