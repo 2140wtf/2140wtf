@@ -45,19 +45,17 @@ interface ChatNavState {
 function CampaignRoomOpener({ fundraiserId, title }: { fundraiserId: string; title?: string }) {
   const chat = useChatContext();
   const auth = useAuth();
-  const signerRef = useRef(auth.signer);
-  signerRef.current = auth.signer;
   const opened = useRef(false);
 
   useEffect(() => {
     if (opened.current || !fundraiserId) return;
     opened.current = true;
+    const signer = auth.signer ?? createGuestSigner();
     void (async () => {
-      const signer = signerRef.current ?? createGuestSigner();
       const meta = await chat.importCampaign(fundraiserId, title || "Campaign", signer);
       if (meta) await chat.selectRoom(meta.roomId);
     })();
-  }, [fundraiserId, title, chat]);
+  }, [fundraiserId, title, chat, auth.signer]);
 
   return null;
 }

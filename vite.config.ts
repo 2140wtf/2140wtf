@@ -315,6 +315,10 @@ export default defineConfig(({ mode }) => {
   test: {
     globals: true,
     environment: 'jsdom',
+    // The property suites (fast-check) and heavy wallet/court flows can exceed
+    // vitest's 5s default when the box is loaded; 20s keeps the gate reliable
+    // without hiding real hangs.
+    testTimeout: 20000,
     setupFiles: './src/test/setup.ts',
     exclude: ['**/node_modules/**', '**/dist/**', '.idea', '.git', '.cache', 'e2e', '.tmp', 'services', '.claude', 'vendor'],
     onConsoleLog(log) {
