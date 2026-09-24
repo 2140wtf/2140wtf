@@ -193,7 +193,9 @@ export function BaoFundPage() {
               nowSec={nowSec}
               gateStrip={gateStripProp(feed.gateViews.get(c.id), nowSec) ?? undefined}
               onFund={(id) => {
-                const card = cards.find((x) => x.id === id) ?? c;
+                // The card calls back with its frId (falling back to the card
+                // id); resolve the matching card, defaulting to this one.
+                const card = cards.find((x) => x.frId === id || x.id === id) ?? c;
                 fundCard(card);
               }}
               onChat={(id, title, roomAvailable) => openChat(id, title, roomAvailable)}
