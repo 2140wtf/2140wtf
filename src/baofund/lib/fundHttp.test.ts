@@ -210,3 +210,39 @@ it('blocks resource traversal before signing and disables HTTP redirects', async
   await fundFetch('/v1/fundraisers');
   expect(fetchMock.mock.calls[0]).toEqual(expect.arrayContaining([expect.objectContaining({ redirect: 'error' })]));
 });
+
+describe('NIP-98 signing origin (same-origin proxy)', () => {
+  it('signs the canonical origin while fetching the proxied URL', async () => {
+    // Same-origin proxy: request goes to <origin>/fund-api, but the API only
+    // trusts app.bao.network/bao.fund, so the `u` tag must name the canonical
+    // origin or the API returns 401.
+    vi.stubEnv('VITE_BAO_FUND_API_URL', '');
+    vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', 'https://app.bao.network');
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(200, { ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const s = { signEvent: vi.fn(async (e: unknown) => e) };
+
+    await fundFetch('/v1/chat/public-rooms', { signer: s });
+
+    const call = fetchMock.mock.calls[0];
+    expect(call[0]).toBe(`${location.origin}/fund-api/v1/chat/public-rooms`);
+    const header = ((call[1] as RequestInit).headers as Record<string, string>)['X-Nostr-Auth'];
+    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', 'https://app.bao.network/fund-api/v1/chat/public-rooms']);
+  });
+
+  it('signs the request URL when no signing origin is configured', async () => {
+    vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', '');
+    vi.stubEnv('VITE_BAO_FUND_API_URL', PROXY);
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(200, { ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const s = { signEvent: vi.fn(async (e: unknown) => e) };
+
+    await fundFetch('/v1/x', { signer: s });
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const header = (init.headers as Record<string, string>)['Authorization'];
+    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', 'https://proxy.test/v1/x']);
+  });
+});

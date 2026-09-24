@@ -12,19 +12,60 @@
  * The room set comes from the Fund API's public rooms, i.e. the FUND relay
  * (wss://relay.bao.fund) — the same chat as bao.fund, never a different
  * relay's room. Guests see the public landing room (Trollbox) and can post.
+ *
+ * Deep links from the fund page: `{ defaultRoomName }` lands on a public
+ * room; `{ campaignRoomId, title }` imports + opens that campaign's room.
  */
-import { useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-import { ChatProvider } from "@/baofund/chat/ChatContext";
+import { ChatProvider, useChatContext } from "@/baofund/chat/ChatContext";
 import { ChatPanel } from "@/baofund/chat/ChatPanel";
+import { useAuth } from "@/baofund/auth/useAuth";
+import { createGuestSigner } from "@/baofund/relay/guestIdentity";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import "@/baofund/baoFundChat.css";
 import "@/baofund/theme/newspaperTheme.css";
 import "@/baofund/theme/appTokens.css";
 
+interface ChatNavState {
+  /** Public room to land on (campaign-chat gate). */
+  defaultRoomName?: string;
+  /** Campaign room to import + open (fund page "Chat" action). */
+  campaignRoomId?: string;
+  title?: string;
+}
+
+/**
+ * Imports and opens a campaign's discussion room once, using the signed-in
+ * signer (or the guest key for signed-out visitors). The campaign room link is
+ * resolved through the Fund API; donor-gated rooms fail closed with the
+ * context's own error, never by silently opening another room.
+ */
+function CampaignRoomOpener({ fundraiserId, title }: { fundraiserId: string; title?: string }) {
+  const chat = useChatContext();
+  const auth = useAuth();
+  const signerRef = useRef(auth.signer);
+  signerRef.current = auth.signer;
+  const opened = useRef(false);
+
+  useEffect(() => {
+    if (opened.current || !fundraiserId) return;
+    opened.current = true;
+    void (async () => {
+      const signer = signerRef.current ?? createGuestSigner();
+      const meta = await chat.importCampaign(fundraiserId, title || "Campaign", signer);
+      if (meta) await chat.selectRoom(meta.roomId);
+    })();
+  }, [fundraiserId, title, chat]);
+
+  return null;
+}
+
 export function BaoFundChatPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = (location.state ?? null) as ChatNavState | null;
 
   // Full-width chat: collapse both side panels and lift the center column's
   // max-width so the room timeline uses the whole viewport.
@@ -59,7 +100,13 @@ export function BaoFundChatPage() {
           </p>
         </header>
         <ChatProvider>
-          <ChatPanel onFundCampaign={handleFundCampaign} />
+          {navState?.campaignRoomId && (
+            <CampaignRoomOpener fundraiserId={navState.campaignRoomId} title={navState.title} />
+          )}
+          <ChatPanel
+            defaultRoomName={navState?.defaultRoomName ?? null}
+            onFundCampaign={handleFundCampaign}
+          />
         </ChatProvider>
       </div>
     </div>
