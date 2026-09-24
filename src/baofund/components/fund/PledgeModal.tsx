@@ -806,11 +806,10 @@ export function PledgeModal({
                 </>
               ) : (
                 <>
-                  Use a Bitcoin testnet4 faucet - the canonical list lives at{' '}
-                  <a href="https://mempool.space/testnet4" target="_blank" rel="noreferrer" className="underline">mempool.space/testnet4</a>{' '}
-                  (faucet links on the explorer page; e.g. the meme/coin faucet seeded from the genesis address). Paste this
-                  tb1p… address there and free sats arrive in seconds. Watch them land on{' '}
-                  <a href={`https://mempool.space/testnet4/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">mempool.space</a>.
+                  Claim from the public Bitcoin testnet4 faucet{' '}
+                  <a href="https://coinfaucet.eu/en/btc-testnet4/" target="_blank" rel="noreferrer" className="underline">coinfaucet.eu/en/btc-testnet4</a>{' '}
+                  - paste this tb1p… address there and free sats arrive in seconds. Watch them land on{' '}
+                  <a href={`https://mempool.space/testnet4/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">mempool.space/testnet4</a>.
                 </>
               )}
             </p>

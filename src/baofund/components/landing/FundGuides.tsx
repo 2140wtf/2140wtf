@@ -109,7 +109,7 @@ const RAILS: Array<{ id: FundMeRail; label: string; badge: string; color: string
 
 const RAIL_STEPS: Record<FundMeRail, Array<{ t: string; d: string }>> = {
   testnet4: [
-    { t: 'Get free coins', d: 'A testnet4 faucet sends sats to your tb1p… taproot address (find current faucets via mempool.space/testnet4).' },
+    { t: 'Get free coins', d: 'A testnet4 faucet sends sats to your tb1p… taproot address (claim from coinfaucet.eu/en/btc-testnet4; verify on mempool.space/testnet4).' },
     { t: 'Create the campaign', d: 'Per-stage tapscript outputs are derived from YOUR key - nothing is custodial. Every pledge is a real on-chain output.' },
     { t: 'Fund it from your wallet', d: 'Hit FUND - the pledge shows the escrow address. Pay it from your testnet4 wallet, paste the txid; the probe verifies it on-chain.' },
     { t: 'Claim or refund', d: 'On delivery the founder claims through the founder tapscript; if it fails, the donor refunds through the CLTV path - all on-chain.' },
@@ -283,7 +283,7 @@ export function PlaygroundPanel({ onCreate }: { onCreate: () => void }): React.R
         steps={[
           {
             t: 'Get free testnet coins',
-            d: 'Bitcoin testnet4: a testnet4 faucet sends sats to your tb1p… address (find current faucets via mempool.space/testnet4). Liquid testnet: the Liquid testnet faucet sends LBTC to your tex1… address.',
+            d: 'Bitcoin testnet4: coinfaucet.eu/en/btc-testnet4 sends sats to your tb1p… address (verify on mempool.space/testnet4). Liquid testnet: the Liquid testnet faucet sends LBTC to your tex1… address.',
           },
           {
             t: 'Create a testnet campaign',

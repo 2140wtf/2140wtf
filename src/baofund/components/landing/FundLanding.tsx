@@ -185,7 +185,7 @@ export function FundFaq() {
     },
     {
       q: 'How does access work?',
-      a: 'Sign in with a Nostr extension, passkey, or 24-word seed - your identity doubles as your wallet. Testnet coins are free from the public faucets (mempool.space testnet4 faucet, Liquid testnet faucet).',
+      a: 'Sign in with a Nostr extension, passkey, or 24-word seed - your identity doubles as your wallet. Testnet coins are free from the public faucets (coinfaucet.eu testnet4 faucet, Liquid testnet faucet).',
     },
     {
       q: 'Testnet vs AI Agents?',

@@ -300,7 +300,7 @@ export function CreateCampaignModal({
                     onChange={() => setRail('l1')} data-testid="rail-l1" className="mt-0.5" />
                   <span>
                     <b>Bitcoin testnet4</b> - on-chain scripted escrow (tb1p address;
-                    free coins from the mempool.space testnet4 faucet).
+                    free coins from the coinfaucet.eu testnet4 faucet).
                   </span>
                 </label>
                 <label className="flex items-start gap-2 border px-2 py-1.5 text-xs"
