@@ -18,7 +18,6 @@ import { bytesToBase64, base64ToBytes } from './base64';
 import { devLog } from './devLog';
 
 export const DEFAULT_MINTS = [
-  { name: 'Mint.btcforplebs', url: 'https://mint.btcforplebs.com' },
   { name: 'Kashu', url: 'https://kashu.me' },
   { name: 'Minibits', url: 'https://mint.minibits.cash/Bitcoin' },
 ];
