@@ -163,6 +163,13 @@ export function BaoFundPage() {
           defaultMode={createMode}
           onCreated={(info) => {
             setStatus(`Created “${info.title}”`);
+            // The campaign room is the funding entry point (bao_fund_it parity):
+            // after creation, open it in the chat.
+            if (info.roomRequested) {
+              navigate("/community", {
+                state: { campaignRoomId: info.fundraiserId, title: info.title },
+              });
+            }
           }}
           onDone={(msg) => {
             setStatus(msg);
