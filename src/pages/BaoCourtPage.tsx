@@ -5,6 +5,8 @@
  * console drains the encrypted gift-wrapped inbox with the NIP-60 signer.
  * Settlement rails are Cashu + Liquid testnet + Bitcoin testnet4 (no signet).
  */
+import { useMemo } from "react";
+
 import { useAuth } from "@/baofund/auth/useAuth";
 import { CourtPanel } from "@/baofund/court/CourtPanel";
 import { baoRelayUrl } from "@/baofund/lib/baoFundraising";
@@ -16,18 +18,26 @@ export function BaoCourtPage() {
   const auth = useAuth();
   const feed = useFundFeed(auth.signer ?? undefined);
 
-  const signEvent = auth.signer
-    ? async (t: { kind: number; created_at: number; tags: string[][]; content: string }) => {
-        const signed = await auth.signer!.signEvent(t);
-        return { ...t, ...signed };
-      }
-    : null;
+  const signEvent = useMemo(
+    () =>
+      auth.signer
+        ? async (t: { kind: number; created_at: number; tags: string[][]; content: string }) => {
+            const signed = await auth.signer!.signEvent(t);
+            return { ...t, ...signed };
+          }
+        : null,
+    [auth.signer],
+  );
 
-  const campaigns = feed.cards.map((c) => ({
-    id: c.id,
-    title: c.title,
-    ...(c.frId ? { frId: c.frId } : {}),
-  }));
+  const campaigns = useMemo(
+    () =>
+      feed.cards.map((c) => ({
+        id: c.id,
+        title: c.title,
+        ...(c.frId ? { frId: c.frId } : {}),
+      })),
+    [feed.cards],
+  );
 
   return (
     <div className="newspaper min-h-screen" style={{ background: "var(--np-bg)", color: "var(--np-ink)" }}>
