@@ -25,6 +25,7 @@ import { FundFaq, FundIntroCollapsible } from "@/baofund/components/landing/Fund
 import { FundMePanel } from "@/baofund/components/landing/FundGuides";
 import { gateStripProp, useFundFeed } from "@/baofund/relay/fundFeed";
 import { fetchFundraiser } from "@/baofund/lib/baoFundraising";
+import { useLayoutOptions } from "@/contexts/LayoutContext";
 import "@/baofund/theme/newspaperTheme.css";
 import "@/baofund/theme/appTokens.css";
 
@@ -44,6 +45,9 @@ interface ChatGate {
 export function BaoFundPage() {
   const navigate = useNavigate();
   const auth = useAuth();
+
+  // The campaign grid needs more than the 600px center column; lift the cap.
+  useLayoutOptions({ noMaxWidth: true, noOverscroll: true, wrapperClassName: "max-w-none w-full" });
   const feed = useFundFeed(auth.signer ?? undefined);
   const cards = feed.cards;
 

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
+import { LayoutStore, LayoutStoreContext } from '@/contexts/LayoutContext';
 import { BaoFundPage } from './BaoFundPage';
 
 vi.mock('@/hooks/useCurrentUser', () => ({ useCurrentUser: () => ({ user: null }) }));
@@ -43,14 +44,14 @@ describe('BaoFundPage', () => {
   });
 
   it('renders the ₿AO Fund shell with the empty-feed state', async () => {
-    render(<TestApp><BaoFundPage /></TestApp>);
+    render(<LayoutStoreContext.Provider value={new LayoutStore()}><TestApp><BaoFundPage /></TestApp></LayoutStoreContext.Provider>);
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/AO Fund/);
     expect(screen.getByText(/No open campaigns yet/i)).toBeInTheDocument();
   });
 
   it('opens the pledge flow from a fund-from-the-room deep link', async () => {
     mocks.locationState = { fundraiserId: 'fr-1', title: 'Deep' };
-    render(<TestApp><BaoFundPage /></TestApp>);
+    render(<LayoutStoreContext.Provider value={new LayoutStore()}><TestApp><BaoFundPage /></TestApp></LayoutStoreContext.Provider>);
 
     await waitFor(() => expect(mocks.pledge).toHaveBeenCalledWith(expect.objectContaining({ fundraiserId: 'fr-1' })));
     expect(screen.getByTestId('pledge-modal')).toBeInTheDocument();
