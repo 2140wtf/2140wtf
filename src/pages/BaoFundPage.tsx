@@ -131,9 +131,10 @@ export function BaoFundPage() {
 
   const campaignCountLabel = useMemo(() => {
     if (feed.loading) return "Fetching fundraisers…";
+    if (feed.source === "offline") return "Live feed unreachable — nothing cached, no campaigns shown";
     if (cards.length === 0) return "No open campaigns yet — create one";
     return `${cards.length} campaign${cards.length === 1 ? "" : "s"}`;
-  }, [feed.loading, cards.length]);
+  }, [feed.loading, feed.source, cards.length]);
 
   return (
     <div className="newspaper min-h-screen" style={{ background: "var(--np-bg)", color: "var(--np-ink)" }}>
@@ -145,20 +146,33 @@ export function BaoFundPage() {
               {campaignCountLabel}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (auth.status !== "ready") {
-                setStatus("Sign in to create a campaign");
-                return;
-              }
-              setCreateMode("playground");
-            }}
-            className="px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]"
-            style={{ color: "var(--np-on-accent)", background: "var(--np-accent)", fontFamily: "var(--np-font-mono)" }}
-          >
-            Create campaign
-          </button>
+          <div className="flex items-center gap-2">
+            {feed.source === "offline" && !feed.loading && (
+              <button
+                type="button"
+                onClick={feed.reload}
+                title={feed.error ?? "Live feed unreachable"}
+                className="px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]"
+                style={{ color: "var(--np-ink)", border: "1px solid var(--np-rule)", fontFamily: "var(--np-font-mono)" }}
+              >
+                Retry live feed
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (auth.status !== "ready") {
+                  setStatus("Sign in to create a campaign");
+                  return;
+                }
+                setCreateMode("playground");
+              }}
+              className="px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]"
+              style={{ color: "var(--np-on-accent)", background: "var(--np-accent)", fontFamily: "var(--np-font-mono)" }}
+            >
+              Create campaign
+            </button>
+          </div>
         </header>
 
         {status && (
