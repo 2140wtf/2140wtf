@@ -798,11 +798,11 @@ export function PledgeModal({
               <b>Need testnet coins?</b>{' '}
               {awaiting.rail === 'liquid-testnet' ? (
                 <>
-                  Use the Liquid testnet faucet - search "Liquid testnet faucet" or visit{' '}
-                  <a href="https://blockstream.info/liquidtestnet" target="_blank" rel="noreferrer" className="underline">blockstream.info/liquidtestnet</a>{' '}
-                  for the current links - and paste this address to receive free LBTC (no value). Watch the deposit
+                  Use the public Liquid testnet faucet{' '}
+                  <a href="https://liquidtestnet.com/faucet" target="_blank" rel="noreferrer" className="underline">liquidtestnet.com/faucet</a>{' '}
+                  - paste this address to receive free LBTC (no value). Watch the deposit
                   land on{' '}
-                  <a href={`https://blockstream.info/liquidtestnet/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">the explorer</a>.
+                  <a href={`https://blockstream.info/liquidtestnet/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">blockstream.info/liquidtestnet</a>.
                 </>
               ) : (
                 <>

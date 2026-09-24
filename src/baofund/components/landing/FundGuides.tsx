@@ -115,7 +115,7 @@ const RAIL_STEPS: Record<FundMeRail, Array<{ t: string; d: string }>> = {
     { t: 'Claim or refund', d: 'On delivery the founder claims through the founder tapscript; if it fails, the donor refunds through the CLTV path - all on-chain.' },
   ],
   liquid: [
-    { t: 'Get free coins', d: 'The Liquid testnet faucet sends LBTC to your tex1… address.' },
+    { t: 'Get free coins', d: 'The Liquid testnet faucet (liquidtestnet.com/faucet) sends LBTC to your tex1… address.' },
     { t: 'Create the campaign', d: 'Same tapscript milestone escrow as testnet4, on Liquid - cheaper, faster blocks.' },
     { t: 'Fund it from your wallet', d: 'Open the campaign, hit FUND, pay the escrow address from your Liquid wallet, paste the txid.' },
     { t: 'Claim or refund', d: 'Founder claim / donor CLTV refund - identical mechanics, on-chain, no platform signature.' },
@@ -283,7 +283,7 @@ export function PlaygroundPanel({ onCreate }: { onCreate: () => void }): React.R
         steps={[
           {
             t: 'Get free testnet coins',
-            d: 'Bitcoin testnet4: coinfaucet.eu/en/btc-testnet4 sends sats to your tb1p… address (verify on mempool.space/testnet4). Liquid testnet: the Liquid testnet faucet sends LBTC to your tex1… address.',
+            d: 'Bitcoin testnet4: coinfaucet.eu/en/btc-testnet4 sends sats to your tb1p… address (verify on mempool.space/testnet4). Liquid testnet: liquidtestnet.com/faucet sends LBTC to your tex1… address.',
           },
           {
             t: 'Create a testnet campaign',
