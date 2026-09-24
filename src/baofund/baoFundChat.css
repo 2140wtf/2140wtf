@@ -1,0 +1,30 @@
+/*
+ * Scoped newspaper theme tokens for the ported ₿AO Fund chat.
+ *
+ * The chat stack was written against bao_fund_it's `.newspaper` theme. We scope
+ * the same `--np-*` tokens under `.bao-fund-chat` so the chat renders with the
+ * BAO paper look without leaking tokens into the rest of 2140.wtf (which uses
+ * its own light/dark theme system).
+ */
+.bao-fund-chat {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-error: #b91c1c;
+  --np-success: #2f5a3a;
+  --np-up: #2f5a3a;
+  --np-down: #c43a2f;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+  --np-radius: 0px;
+
+  background: var(--np-bg);
+  color: var(--np-ink);
+}

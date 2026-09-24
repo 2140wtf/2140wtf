@@ -8,7 +8,7 @@ import { AudioNavigationGuard } from "@/components/AudioNavigationGuard";
 import { BackButtonHandler } from "@/components/BackButtonHandler";
 import { InitialSyncGate } from "@/components/InitialSyncGate";
 import { DeepLinkHandler } from "@/components/DeepLinkHandler";
-import { BaoCommunitiesPage } from "@/pages/BaoCommunitiesPage";
+import { BaoFundChatPage } from "@/pages/BaoFundChatPage";
 import { HighlightSelectionButton } from "@/components/HighlightSelectionButton";
 import { AudioPlayerProvider } from "@/contexts/AudioPlayerContext";
 import { sidebarItemIcon } from "@/lib/sidebarItems";
@@ -98,7 +98,7 @@ const MessageThreadPage = lazy(() => import("./pages/MessageThreadPage").then(m 
 const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m => ({ default: m.MintDiscoveryPage })));
 const MintDetailsPage = lazy(() => import("./pages/MintDetailsPage").then(m => ({ default: m.MintDetailsPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
-const BaoFundingPage = lazy(() => import("./pages/BaoFundingPage").then(m => ({ default: m.BaoFundingPage })));
+const BaoFundPage = lazy(() => import("./pages/BaoFundPage").then(m => ({ default: m.BaoFundPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
 const LightningObservatoryFullPage = lazy(() => import("./pages/LightningObservatoryFullPage").then(m => ({ default: m.LightningObservatoryFullPage })));
 const FalLivePage = lazy(() => import("./pages/FalLivePage").then(m => ({ default: m.FalLivePage })));
@@ -354,14 +354,14 @@ export function AppRouter() {
               <Route path="/market/auction/:sellerPubkey/:dTag" element={<AuctionDetailPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
-              <Route path="/community" element={<BaoCommunitiesPage />} />
+              <Route path="/community" element={<BaoFundChatPage />} />
               <Route path="/bao/community" element={<Navigate to="/community" replace />} />
               <Route path="/bao/baocommunity" element={<Navigate to="/community" replace />} />
               <Route path="/bao/chat" element={<Navigate to="/community" replace />} />
               <Route path="/bao/markets" element={<PredictionMarketsPage />} />
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
-              <Route path="/bao/fund" element={<BaoFundingPage />} />
+              <Route path="/bao/fund" element={<BaoFundPage />} />
               <Route path="/bao/bao-fund" element={<Navigate to="/bao/fund" replace />} />
               <Route path="/bao-fund" element={<Navigate to="/bao/fund" replace />} />
               <Route

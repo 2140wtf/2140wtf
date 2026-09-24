@@ -137,10 +137,9 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "2140-social",
-    label: "2140 Trollbox",
+    label: "₿AO Chat",
     path: "/community",
     icon: MessageSquareMore,
-    requiresAuth: true,
   },
   { id: "prediction-markets", label: "₿AO MARKETS", path: "/bao/markets", icon: BarChart3 },
   { id: "bao-fund", label: "Fund my ₿AO", path: "/bao/fund", icon: HandCoins },
