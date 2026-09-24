@@ -78,7 +78,8 @@ it('renders the derived receive address, no-value badge and honest balance', asy
   await vi.waitFor(() => {
     expect(container.querySelector('[data-testid=testnet4-receive-qr]')).toBeTruthy();
   }, { timeout: 5000 });
-  expect(container.textContent).toContain('mempool.space/testnet4/faucet');
+  expect(container.textContent).toContain('coinfaucet.eu/en/btc-testnet4');
+  expect(container.textContent).toContain('mempool.space/testnet4');
 });
 
 it('persists the receive cursor per identity without storing keys', async () => {

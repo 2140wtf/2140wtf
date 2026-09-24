@@ -16,6 +16,7 @@ import {
 } from './testnet4Account';
 import {
   TESTNET4_EXPLORER_BASE,
+  TESTNET4_FAUCET_URL,
   TESTNET4_NO_VALUE_BADGE,
   testnet4ExplorerAddressUrl,
   testnet4ExplorerTxUrl,
@@ -400,10 +401,16 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
           </div>
           {loadError && <p className="text-[11px]" style={{ color: 'var(--np-error, #b91c1c)' }}>{loadError}</p>}
           <p className="text-[10px] leading-relaxed" style={{ color: 'var(--np-muted)' }}>
-            Need coins? Use a public testnet4 faucet, then send to this address -{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href="https://mempool.space/testnet4/faucet" target="_blank" rel="noreferrer">
-              mempool.space/testnet4/faucet
+            Need coins? Claim from the public testnet4 faucet, then send to this
+            address -{' '}
+            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_FAUCET_URL} target="_blank" rel="noreferrer">
+              coinfaucet.eu/en/btc-testnet4
+            </a>{' '}
+            (verify on{' '}
+            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_EXPLORER_BASE} target="_blank" rel="noreferrer">
+              mempool.space/testnet4
             </a>
+            )
           </p>
         </div>
       )}

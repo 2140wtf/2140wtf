@@ -202,6 +202,10 @@ export function isTestnet4Rail(rail: string): boolean {
 export const TESTNET4_EXPLORER_BASE: string =
   VITE_ENV.VITE_TESTNET4_EXPLORER_URL ?? 'https://mempool.space/testnet4';
 
+/** Public testnet4 faucet. mempool.space's faucet is captcha-gated; this is
+ *  the captcha-free public one users are pointed at. */
+export const TESTNET4_FAUCET_URL = 'https://coinfaucet.eu/en/btc-testnet4/';
+
 /** Explorer link for a deposit/payment transaction. Validates the txid first. */
 export function testnet4ExplorerTxUrl(txid: string): string {
   return `${TESTNET4_EXPLORER_BASE}/tx/${validateTestnet4Txid(txid)}`;

@@ -18,6 +18,8 @@ import { FundCampaignModal } from "@/baofund/components/fund/FundCampaignModal";
 import { PledgeModal } from "@/baofund/components/fund/PledgeModal";
 import { CampaignChatGate } from "@/baofund/components/fund/CampaignChatGate";
 import { OnchainReleaseSection } from "@/baofund/components/fund/OnchainReleaseSection";
+import { MilestoneCourtSection } from "@/baofund/court/MilestoneCourtSection";
+import { fundCourtGroupPubkey } from "@/baofund/lib/court/courtGroupPubkey";
 import { breakdownFromDrafts, type CampaignBreakdown } from "@/baofund/components/fund/campaignBreakdown";
 import { FundFaq, FundIntroCollapsible } from "@/baofund/components/landing/FundLanding";
 import { FundMePanel } from "@/baofund/components/landing/FundGuides";
@@ -198,6 +200,23 @@ export function BaoFundPage() {
             });
           }}
           onChat={(id, title, roomAvailable) => openChat(id, title, roomAvailable)}
+          disputeSlot={(m) =>
+            // Donor-only dispute surface (FROST court). The caller decides
+            // entitlement; the modal never shows for non-contributors.
+            breakdown.frId && auth.pubkey ? (
+              <MilestoneCourtSection
+                escrowId={`${breakdown.frId}::${m.id}`}
+                frId={breakdown.frId}
+                milestoneId={m.id}
+                contributorPubkey={auth.pubkey}
+                founderPubkey={breakdown.ownerPubkey ?? ""}
+                marketEventId={m.marketId ?? m.id}
+                secondsSinceEscrowLock={Math.max(0, nowSec - (m.deadlineAt ?? nowSec))}
+                courtGroupPubkey={fundCourtGroupPubkey()}
+                viewerRole="donor"
+              />
+            ) : null
+          }
           releaseSlot={(m) =>
             // Owner-only on-chain release, matching bao_fund_it: the founder
             // signs the escrow release for an unlocked milestone.

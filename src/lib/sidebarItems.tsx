@@ -176,7 +176,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
-  { id: "court", label: "₿AO Court", path: "/court", icon: Gavel, requiresAuth: true },
+  { id: "court", label: "₿AO Court", path: "/bao/court", icon: Gavel, requiresAuth: true },
   {
     id: "btcmap",
     label: "BTC MAP",

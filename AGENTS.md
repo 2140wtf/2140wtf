@@ -205,7 +205,10 @@ The BAO chat and fund surfaces are ported from `baocommunity/bao_fund_it`
   localhost `u`.
 - **Theme.** `src/baofund/theme/appTokens.css` remaps the ported `--np-*`
   paper tokens to this app's theme tokens. Never ship the paper palette.
-- **Rails.** Cashu mainnet + testnet4 + Liquid testnet only; no signet.
+- **Rails.** Cashu mainnet + testnet4 + Liquid testnet only; no signet. The
+  FROST court (`src/baofund/court-core` + `src/baofund/court`, route `/bao/court`)
+  settles on those rails too; its explainer links the testnet4 faucet
+  (coinfaucet.eu) + mempool.space/testnet4 and the Liquid faucet.
 - **Vendored protocol.** `src/baofund/community/` is the pinned
   `@bao/community` build. Do not point it at `src/lib/baosocial` (older build).
 - **Polyfills.** `vite-plugin-node-polyfills` is build-only (skipped under

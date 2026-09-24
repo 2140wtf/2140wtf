@@ -99,6 +99,7 @@ const MintDiscoveryPage = lazy(() => import("./pages/MintDiscoveryPage").then(m 
 const MintDetailsPage = lazy(() => import("./pages/MintDetailsPage").then(m => ({ default: m.MintDetailsPage })));
 const PredictionMarketsPage = lazy(() => import("./pages/PredictionMarketsPage").then(m => ({ default: m.PredictionMarketsPage })));
 const BaoFundPage = lazy(() => import("./pages/BaoFundPage").then(m => ({ default: m.BaoFundPage })));
+const BaoCourtPage = lazy(() => import("./pages/BaoCourtPage").then(m => ({ default: m.BaoCourtPage })));
 const LightningObservatoryPage = lazy(() => import("./pages/LightningObservatoryPage").then(m => ({ default: m.LightningObservatoryPage })));
 const LightningObservatoryFullPage = lazy(() => import("./pages/LightningObservatoryFullPage").then(m => ({ default: m.LightningObservatoryFullPage })));
 const FalLivePage = lazy(() => import("./pages/FalLivePage").then(m => ({ default: m.FalLivePage })));
@@ -362,6 +363,7 @@ export function AppRouter() {
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/bao/fund" element={<BaoFundPage />} />
+              <Route path="/bao/court" element={<BaoCourtPage />} />
               <Route path="/bao/bao-fund" element={<Navigate to="/bao/fund" replace />} />
               <Route path="/bao-fund" element={<Navigate to="/bao/fund" replace />} />
               <Route

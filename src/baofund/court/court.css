@@ -1,0 +1,51 @@
+/* Court GUI (S1/S2) - minimal styles, newspaper-theme compatible */
+.dispute-status-card {
+  border: 1px solid var(--line, #d8d2c4);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  background: var(--paper, #faf7f0);
+  font-size: 0.92rem;
+}
+.dispute-status-head { display: flex; justify-content: space-between; align-items: baseline; }
+.dispute-status-id { opacity: 0.6; font-size: 0.8rem; }
+.dispute-status-phase { margin-top: 0.35rem; }
+.dispute-status-dots { margin-left: 0.5rem; }
+.dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 1px solid var(--line, #b9b2a2); margin-right: 3px; vertical-align: middle;
+}
+.dot.done { background: var(--ink, #2b2a26); }
+.dot.cur { background: var(--accent, #8a6d1d); border-color: var(--accent, #8a6d1d); }
+.dispute-status-race, .dispute-status-invalid {
+  margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-left: 3px solid #b3591e;
+  background: rgba(179, 89, 30, 0.08);
+}
+.dispute-status-verdict {
+  margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-left: 3px solid #2e6b34;
+  background: rgba(46, 107, 52, 0.08);
+}
+.dispute-execute {
+  margin-left: 0.75rem; padding: 0.25rem 0.7rem; border-radius: 6px;
+  border: 1px solid #2e6b34; background: #2e6b34; color: #fff; cursor: pointer;
+}
+.dispute-execute:disabled { opacity: 0.5; cursor: not-allowed; }
+.dispute-status-toggle {
+  margin-top: 0.45rem; background: none; border: none; cursor: pointer;
+  color: var(--accent, #8a6d1d); font-size: 0.85rem; padding: 0;
+}
+.dispute-status-timeline { margin: 0.35rem 0 0.35rem 1rem; padding: 0; list-style: none; font-size: 0.85rem; }
+.dispute-status-timeline li { display: flex; justify-content: space-between; padding: 2px 0; opacity: 0.75; }
+.dispute-status-timeline li.done { opacity: 0.45; text-decoration: line-through; }
+.dispute-status-timeline li.cur { opacity: 1; font-weight: 600; }
+.dispute-status-meta { margin-top: 0.35rem; font-size: 0.8rem; opacity: 0.6; }
+
+/* S1 modal */
+.dispute-modal { max-width: 480px; }
+.dispute-modal-sub { font-size: 0.88rem; opacity: 0.75; }
+.dispute-winner-row { display: flex; gap: 0.75rem; margin: 0.35rem 0 0.75rem; }
+.dispute-winner-row label { cursor: pointer; }
+.dispute-winner-row label.sel { font-weight: 700; }
+.dispute-evidence-list { font-size: 0.8rem; max-height: 7rem; overflow: auto; }
+.dispute-modal-error { color: #b3591e; margin: 0.4rem 0; }
+.dispute-modal-actions { display: flex; gap: 0.6rem; margin-top: 0.8rem; }
