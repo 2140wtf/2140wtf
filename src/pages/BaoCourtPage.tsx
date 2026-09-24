@@ -45,8 +45,10 @@ export function BaoCourtPage() {
         <header className="mb-4 border-b pb-3" style={{ borderColor: "var(--np-rule)" }}>
           <h1 className="text-xl font-bold tracking-tight">₿AO Court</h1>
           <p className="text-xs" style={{ color: "var(--np-muted)" }}>
-            FROST threshold-oracle — juror candidacy, dispute intake and verdicts.
-            Rails: Cashu · Liquid testnet · Bitcoin testnet4.
+            When a funded campaign goes wrong, a randomly picked jury decides the
+            outcome. Post a small testnet bond to join the jury, vote once, and
+            earn a share of the fee if you vote with the majority. Rails: Cashu ·
+            Liquid testnet · Bitcoin testnet4.
           </p>
         </header>
         <CourtPanel
