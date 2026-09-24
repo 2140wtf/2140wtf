@@ -50,6 +50,10 @@ import { totalBaoApiBalance, BaoSendError, isSendRouteMissing, sendDemoSats, typ
 import { getRailBalance, getRailTileBalance, type WalletRailId } from '@/lib/walletRailBalance';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import { tryNpubEncode } from '@/lib/safeNip19';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { useUserSeckey } from '@/hooks/useUserSeckey';
+import { TestnetRailsPanel } from '@/components/TestnetRailsPanel';
+import { BaoWalletNetworkToggle } from '@/components/BaoWalletNetworkToggle';
 import { CHASE_RAILS } from '@/pets/chase/types';
 import type { NostrSigner } from '@nostrify/types';
 import type { Transaction } from '@/lib/cashu/storage';
@@ -290,8 +294,15 @@ const API_RAIL_LABELS: Record<keyof BaoWalletBalances, string> = {
 
 export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps) {
   const [selectedRail, setSelectedRail] = useState<WalletRailId>('cashu');
+  // Demo (private-signet custodial ledger) vs Testnet (non-custodial
+  // testnet4 + Liquid wallets).
+  const [networkMode, setNetworkMode] = useState<'demo' | 'testnet'>('demo');
 
   const cashuWallet = useBaoCashuWallet(seedPhrase, user, relayUrls, { enableAutoClaim: false });
+  // Seed identity hex for deterministic testnet-rail derivation; null for
+  // extension/bunker logins (the cards then offer a created/imported wallet).
+  const seckey = useUserSeckey();
+  const identityHex = seckey ? bytesToHex(seckey) : null;
   const apiBalances = useBaoWalletBalances();
   const { error: walletError, success: walletSuccess, clearError: clearWalletError, clearSuccess: clearWalletSuccess } = cashuWallet;
   const { toast } = useToast();
@@ -343,6 +354,12 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
 
   return (
     <div className='space-y-6'>
+      {/* Demo (private signet ledger) vs Testnet (non-custodial testnet4 + Liquid). */}
+      <BaoWalletNetworkToggle value={networkMode} onChange={setNetworkMode} />
+      {networkMode === 'testnet' ? (
+        <TestnetRailsPanel identityHex={identityHex} identityPubkey={user.pubkey} />
+      ) : (
+        <>
       <Card>
         <CardHeader className='pb-2'>
           <CardTitle className='flex items-center justify-between text-base font-medium'>
@@ -443,6 +460,8 @@ export function BaoWalletTab({ seedPhrase, user, relayUrls }: BaoWalletTabProps)
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   );
 }
