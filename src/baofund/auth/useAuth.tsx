@@ -60,9 +60,10 @@ export function useAuth(): BaoAuthCtx {
   const nip60Signer = useMemo<Nip60Signer | null>(() => {
     if (!user) return null;
     try {
-      // Nostrify's signer is shape-compatible with the NIP-60 signer contract
-      // (signEvent + optional nip44); createIdentityNip60Signer returns nulls
-      // for methods without NIP-44, which the wallet surfaces honestly.
+      // Only advertise a portable wallet signer when the login can actually do
+      // NIP-44; otherwise the wallet/court inbox show their honest "locked for
+      // this login method" state instead of failing silently.
+      if (!user.signer.nip44) return null;
       return createIdentityNip60Signer({
         pubkey: user.pubkey,
         signer: user.signer as unknown as Parameters<typeof createIdentityNip60Signer>[0]['signer'],
