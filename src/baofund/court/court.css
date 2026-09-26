@@ -1,10 +1,10 @@
 /* Court GUI (S1/S2) - minimal styles, newspaper-theme compatible */
 .dispute-status-card {
-  border: 1px solid var(--line, #d8d2c4);
+  border: 1px solid var(--np-rule);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
-  background: var(--paper, #faf7f0);
+  background: var(--np-paper);
   font-size: 0.92rem;
 }
 .dispute-status-head { display: flex; justify-content: space-between; align-items: baseline; }
@@ -13,10 +13,10 @@
 .dispute-status-dots { margin-left: 0.5rem; }
 .dot {
   display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  border: 1px solid var(--line, #b9b2a2); margin-right: 3px; vertical-align: middle;
+  border: 1px solid var(--np-rule); margin-right: 3px; vertical-align: middle;
 }
-.dot.done { background: var(--ink, #2b2a26); }
-.dot.cur { background: var(--accent, #8a6d1d); border-color: var(--accent, #8a6d1d); }
+.dot.done { background: var(--np-ink); }
+.dot.cur { background: var(--np-accent); border-color: var(--np-accent); }
 .dispute-status-race, .dispute-status-invalid {
   margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-left: 3px solid #b3591e;
   background: rgba(179, 89, 30, 0.08);
@@ -32,7 +32,7 @@
 .dispute-execute:disabled { opacity: 0.5; cursor: not-allowed; }
 .dispute-status-toggle {
   margin-top: 0.45rem; background: none; border: none; cursor: pointer;
-  color: var(--accent, #8a6d1d); font-size: 0.85rem; padding: 0;
+  color: var(--np-accent); font-size: 0.85rem; padding: 0;
 }
 .dispute-status-timeline { margin: 0.35rem 0 0.35rem 1rem; padding: 0; list-style: none; font-size: 0.85rem; }
 .dispute-status-timeline li { display: flex; justify-content: space-between; padding: 2px 0; opacity: 0.75; }

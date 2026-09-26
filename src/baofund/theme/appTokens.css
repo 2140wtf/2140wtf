@@ -17,7 +17,11 @@
   --np-muted: hsl(var(--muted-foreground));
   --np-rule: hsl(var(--border));
   --np-accent: hsl(var(--primary));
-  --np-accent-2: hsl(var(--accent-foreground, var(--primary)));
+  /* The paper theme's second accent is a page-INK colour (links, highlights).
+     `--accent-foreground` is the text colour that sits ON an accent surface -
+     usually white in light themes - so mapping it here made every `--np-accent-2`
+     label invisible on a light background. Use the primary accent instead. */
+  --np-accent-2: hsl(var(--primary));
   --np-on-accent: hsl(var(--primary-foreground));
   --np-accent-dim: hsl(var(--primary) / 0.18);
   --np-danger: hsl(var(--destructive));
