@@ -35,7 +35,7 @@ async function sha256Hex(value: string): Promise<string> {
  * a `payload` tag with the sha256 hex of the exact body string. The API
  * consumes the event id to prevent replays, so every call signs fresh.
  */
-export async function nip98Header(
+async function nip98Header(
   signer: FundHttpSigner,
   url: string,
   method: string,
@@ -121,10 +121,10 @@ function wireErrorCode(json: unknown): string | undefined {
  * NIP-98 transport header for one request. Same-origin calls ride
  * `X-Nostr-Auth` so the browser's Basic credentials for the access gate keep
  * the `Authorization` header. Cross-origin calls (the GitHub-Pages hub
- * calling `app.bao.network/fund-api`) MUST use the standard
- * `Authorization: Nostr …` form: the API's CORS preflight allowlist exposes
- * `Authorization` but not `X-Nostr-Auth`, so the custom header would be
- * blocked before the request leaves the browser.
+ * calling `app.bao.network/fund-api`, or the markets API) MUST use the
+ * standard `Authorization: Nostr …` form: the API's CORS preflight allowlist
+ * exposes `Authorization` but not `X-Nostr-Auth`, so the custom header would
+ * be blocked before the request leaves the browser.
  */
 function nip98AuthHeaderName(url: string): 'Authorization' | 'X-Nostr-Auth' {
   try {
@@ -134,10 +134,49 @@ function nip98AuthHeaderName(url: string): 'Authorization' | 'X-Nostr-Auth' {
   }
 }
 
-async function doFetch(url: string, signingUrl: string, opts: FundFetchOptions, method: string, bodyStr: string | undefined): Promise<Response> {
+/**
+ * The URL the NIP-98 `u` tag must name for a given request. Fund API requests
+ * reached through the same-origin `/fund-api` proxy are signed against the
+ * canonical Fund API origin (`VITE_BAO_FUND_API_SIGN_ORIGIN`), because the
+ * API validates `u` against its own allowlist and would reject the proxied
+ * localhost URL. Any other URL (e.g. the markets API) signs as itself.
+ */
+function nip98SigningUrl(url: string): string {
+  // Cross-origin requests (e.g. the markets API, or a cross-origin Fund API
+  // base) sign as themselves; only the same-origin `/fund-api` proxy needs the
+  // canonical origin, because the API validates `u` against its allowlist.
+  try {
+    if (new URL(url).origin !== globalThis.location?.origin) return url;
+  } catch {
+    return url;
+  }
+  const origin = fundApiOrigin();
+  if (url === origin || url.startsWith(`${origin}/`)) {
+    return `${fundApiSigningOrigin()}${url.slice(origin.length)}`;
+  }
+  return url;
+}
+
+/**
+ * NIP-98 transport headers for a RAW fetch call site (anything that cannot
+ * use `fundFetch`/`fundRequest`). Never build an auth header by hand: the
+ * same-origin/cross-origin choice above is the whole point of this module.
+ * Callers spread the result into their own headers (e.g. `...await
+ * nip98AuthHeaders(signer, url, 'GET')`).
+ */
+export async function nip98AuthHeaders(
+  signer: FundHttpSigner,
+  url: string,
+  method: string,
+  body?: string,
+): Promise<Record<string, string>> {
+  return { [nip98AuthHeaderName(url)]: await nip98Header(signer, nip98SigningUrl(url), method, body) };
+}
+
+async function doFetch(url: string, opts: FundFetchOptions, method: string, bodyStr: string | undefined): Promise<Response> {
   const headers: Record<string, string> = {};
   if (bodyStr !== undefined) headers['Content-Type'] = 'application/json';
-  if (opts.signer) headers[nip98AuthHeaderName(url)] = await nip98Header(opts.signer, signingUrl, method, bodyStr);
+  if (opts.signer) Object.assign(headers, await nip98AuthHeaders(opts.signer, url, method, bodyStr));
   return fetch(url, {
     method,
     redirect: 'error',
@@ -162,13 +201,7 @@ async function runEngine(path: string, opts: FundFetchOptions): Promise<Response
   const base = opts.base === undefined ? fundApiOrigin() : validateFundApiBase(opts.base);
   const resource = opts.base === undefined && path.startsWith('/v1/') ? path.slice(3) : path;
   const url = opts.base === undefined ? `${base}/v1${resource}` : `${base}${resource}`;
-  // NIP-98 `u` must match an origin the Fund API trusts; when this app reaches
-  // the API through a same-origin proxy, sign the canonical URL while fetching
-  // the proxied one.
-  const signingBase = opts.base === undefined ? fundApiSigningOrigin() : base;
-  const parsed = new URL(url);
-  const signingUrl = new URL(parsed.pathname + parsed.search, signingBase).href;
-  const res = await doFetch(url, signingUrl, opts, method, bodyStr);
+  const res = await doFetch(url, opts, method, bodyStr);
   if (!res.ok) {
     const body = await parseJson(res);
     throw new FundHttpError(wireErrorMessage(body, res.status), res.status, wireErrorCode(body));

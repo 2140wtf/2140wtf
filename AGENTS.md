@@ -197,7 +197,9 @@ The BAO chat and fund surfaces are ported from `baocommunity/bao_fund_it`
 
 - **The chat is the FUND relay's chat.** Rooms come from the Fund API's public
   rooms (relay `wss://relay.bao.fund`), never another relay's room. Guests see
-  and post in the public landing room (Trollbox).
+  and post in the public landing room (Troll₿ox). Cross-app parity pulls the
+  caller's market rooms (bao.markets API) and fund/campaign rooms (Fund API)
+  into the same room list, so every BAO app shares one chat.
 - **Fund API boundary.** The API's CORS + NIP-98 allowlist trusts only
   `app.bao.network` / `bao.fund`, so the browser reaches it same-origin via
   `/fund-api` (dev proxy in `vite.config.ts`) and `fundHttp` signs the NIP-98
@@ -210,7 +212,10 @@ The BAO chat and fund surfaces are ported from `baocommunity/bao_fund_it`
   settles on those rails too; its explainer links the testnet4 faucet
   (coinfaucet.eu) + mempool.space/testnet4 and the Liquid faucet.
 - **Vendored protocol.** `src/baofund/community/` is the pinned
-  `@bao/community` build. Do not point it at `src/lib/baosocial` (older build).
+  `@bao/community` build (the browser-safe `dist/*`). The legacy 2140.social /
+  Concord stack (`src/lib/baosocial`, `BaoScrollChat`, `BaoCommunitiesPage`)
+  was removed — this is the only chat, and it is shared by `/community` and
+  the Fal Live Troll₿ox panel.
 - **Polyfills.** `vite-plugin-node-polyfills` is build-only (skipped under
   `VITEST`) and injects **Buffer** only. Injecting `process` blanks the app
   ("read only property 'process'"); `global` is a `define`, not a global.

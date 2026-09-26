@@ -82,7 +82,7 @@ export function milestoneCard(f: BaoFundraiser, m: BaoMilestone, priorSats = 0):
     category: f.category ?? 'fund',
     // API network is authoritative; the legacy description marker is NOT
     // a money authority (fail closed).
-    mainnetCashu: f.network === 'mainnet',
+    mainnetCashu: f.network === 'mainnet' || f.settlement_rail === 'cashu',
     // The escrow is a single pot that fills milestones IN ORDER; crediting
     // every milestone the full raised total showed all of them as funded.
     pledgedSats: m.status === 'released'
@@ -118,7 +118,7 @@ export function fundraiserCard(f: BaoFundraiser): CampaignCardDraft {
     // API network is authoritative; the description marker is NOT a money
     // authority (twin of milestoneCard; a testnet record with the marker in
     // its owner-controlled description must never open the real-money flow).
-    mainnetCashu: f.network === 'mainnet',
+    mainnetCashu: f.network === 'mainnet' || f.settlement_rail === 'cashu',
     pledgedSats: f.raised_sats,
     goalSats: f.goal_sats,
     endTimeSec: deadlined(f),
@@ -152,10 +152,27 @@ export function mergeEnrichedCards(
   return cards.map((c) => {
     const summary = ledger.get(c.id);
     const fromLedger = summary
-      ? { ...c, pledgedSats: summary.raisedSats, ledgerVerified: true, ...(summary.closed ? { frStatus: 'completed' } : {}) }
+      ? {
+          ...c,
+          pledgedSats: summary.raisedSats,
+          ledgerVerified: true,
+          // A closed ledger is only "completed" when it ended in RELEASE;
+          // a REFUND_ALL terminal is a refunded campaign and must not be
+          // labelled (or filtered) as a completed payout.
+          ...(summary.closed ? { frStatus: summary.terminal === 'refunded' ? 'refunded' : 'completed' } : {}),
+        }
       : c;
     const f = apiById.get(c.id);
     if (!f) return fromLedger;
+    // The API record is reached through the card's ATTACKER-CHOSEN `fr` tag,
+    // so it may only lend money/authority fields to a card it provably owns:
+    // the record's owner_pubkey must equal the card's SIGNED owner (the
+    // a-coordinate author). Otherwise fail closed - a hostile card could
+    // otherwise borrow a real campaign's mainnetCashu/rail and route the
+    // donor's real sats to the card signer (nutzap goes to ownerPubkey).
+    const cardOwner = typeof fromLedger.ownerPubkey === 'string' ? fromLedger.ownerPubkey.toLowerCase() : null;
+    const apiOwner = typeof f.owner_pubkey === 'string' ? f.owner_pubkey.toLowerCase() : null;
+    if (!cardOwner || !apiOwner || cardOwner !== apiOwner) return fromLedger;
     // Shape-drifted API totals fall back to the ledger/relay value instead of
     // reaching formatSats() (which would throw during render).
     const apiRaised =
@@ -175,7 +192,7 @@ export function mergeEnrichedCards(
       // tag is attacker-chosen and must not let a card claim another
       // campaign's owner/identity. The API owner only fills a missing one.
       ownerPubkey: fromLedger.ownerPubkey || f.owner_pubkey,
-      mainnetCashu: f.network === 'mainnet',
+      mainnetCashu: f.network === 'mainnet' || f.settlement_rail === 'cashu',
       endTimeSec: deadlined(f),
     };
   });

@@ -6,7 +6,7 @@ const T0 = 1_700_000_000;
 const NOW = T0 + 1000;
 
 function summary(over: Partial<LedgerSummary> = {}): LedgerSummary {
-  return { raisedSats: 50_000, entriesCount: 5, headHash: 'aa'.repeat(32), closed: false, ...over };
+  return { raisedSats: 50_000, entriesCount: 5, headHash: 'aa'.repeat(32), closed: false, terminal: null, ...over };
 }
 
 describe('tierFromRail', () => {

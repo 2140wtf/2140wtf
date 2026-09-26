@@ -15,7 +15,11 @@ import { fetchContributions, type BaoContribution } from '../baoFundraising';
  * Pick the donor's escrowed CASHU contribution from a public contribution
  * list. Exactly one match is required: cashu rail, donor pubkey, and an
  * escrowed/confirmed lifecycle (a row without a status is treated as live for
- * compatibility with older payloads).
+ * compatibility with older payloads). Rows already refunded or with a
+ * co-signed refund swap (`refunded_at` / `refund_initiated_at`) are never
+ * candidates: the row's `status` deliberately stays confirmed/escrowed on a
+ * refund, so the markers are the ONLY signal - picking one would attempt a
+ * second refund.
  */
 export function pickDonorEscrowContribution(
   list: BaoContribution[],
@@ -24,6 +28,8 @@ export function pickDonorEscrowContribution(
   const mine = list.filter((c) =>
     c.contributor_pubkey.toLowerCase() === donorPubkey.toLowerCase()
     && c.rail === 'cashu'
+    && !c.refunded_at
+    && !c.refund_initiated_at
     && (!c.status || c.status === 'escrowed' || c.status === 'confirmed'));
   return mine.length === 1 ? mine[0] : null;
 }

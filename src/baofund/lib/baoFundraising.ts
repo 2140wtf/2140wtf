@@ -6,7 +6,9 @@ import { fundApiOrigin, fundFetch } from './fundHttp';
  * Talks to the /v1/fundraisers surface of the dedicated Fund API over
  * HTTP only - no tournament/markets code is imported into this repo. Reads
  * are anonymous; mutations authenticate with NIP-98 (a kind-27235 event
- * signed by the user's Nostr signer, sent as `X-Nostr-Auth: <b64>` so the access gate keeps `Authorization`).
+ * signed by the user's Nostr signer, carried by `fundHttp` on the transport
+ * that fits the target origin: `X-Nostr-Auth` same-origin so the access
+ * gate keeps `Authorization`, `Authorization: Nostr` cross-origin).
  * URL resolution, auth headers, envelope errors, timeouts, and the read
  * project-isolation policy live in fundHttp.
  *
@@ -100,6 +102,13 @@ export interface BaoContribution {
   deposit_address?: string | null;
   /** Server-computed block-explorer link for the payment tx. */
   explorer_tx_url?: string;
+  /** Escrow refund markers (cashu contributions). `refund_initiated_at` is
+   *  set when the oracle co-signed a refund swap; `refunded_at` when the
+   *  swap executed. The row's `status` deliberately stays confirmed/escrowed
+   *  (the campaign total is gross) - these fields are the ONLY signal that
+   *  the donor's sats went back. */
+  refund_initiated_at?: string | null;
+  refunded_at?: string | null;
 }
 
 export const BAO_RAILS = ['l1', 'lightning', 'bolt12', 'cashu', 'spark', 'ark', 'liquid', 'nwc', 'fedimint', 'btc-testnet4', 'liquid-testnet'] as const;

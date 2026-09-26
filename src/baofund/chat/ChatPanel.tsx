@@ -3,7 +3,7 @@ import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Tra
 import { useChatContext, type ChatItem } from './ChatContext';
 import { agentShareText, fetchAgentHelloSha, sanitizeRoomName } from './agentPrompt';
 import { useIsChatAdmin } from './useIsChatAdmin';
-import { fundApiOrigin } from '../lib/fundHttp';
+import { fundFetch } from '../lib/fundHttp';
 import { isAuthorBanned as isAuthorBannedByIdentity } from './memberIdentity';
 import { useAuth } from '../auth/useAuth';
 import { createGuestSigner } from '../relay/guestIdentity';
@@ -255,16 +255,12 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     void (async () => {
       try {
         const effective = signer ?? createGuestSigner();
-        const url = `${fundApiOrigin()}/v1/chat/rooms/${selectedRoom.roomId}/agent-link`;
-        const signed = await effective.signEvent({
-          kind: 27235,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: [['u', url], ['method', 'GET'], ['nonce', crypto.randomUUID()]],
-          content: '',
-        });
-        const res = await fetch(url, { headers: { Authorization: `Nostr ${btoa(JSON.stringify(signed))}` } });
-        if (!res.ok) return;
-        const json = await res.json() as { data?: { agentLink?: string } };
+        // Through the Fund HTTP boundary: same-origin calls (the gated hosts)
+        // must ride X-Nostr-Auth so the gate's Basic Authorization survives.
+        const json = await fundFetch<{ data?: { agentLink?: string } }>(
+          `/v1/chat/rooms/${encodeURIComponent(selectedRoom.roomId)}/agent-link`,
+          { signer: effective },
+        );
         if (!cancelled && typeof json.data?.agentLink === 'string') setAgentLane({ roomId: selectedRoom.roomId, link: json.data.agentLink });
       } catch { /* no agent lane - the prompt asks for a room with one */ }
     })();
@@ -279,16 +275,18 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     ?? (agentLane && agentLane.roomId === selectedRoom?.roomId ? agentLane.link : null);
   const agentPrompt = React.useMemo(() => {
     // Canonical sanitizer from the shared brief: the room label is interpolated
-    // into the intro and the brief, so it must not carry quote/control/bidi
+    // into the notes and the brief, so it must not carry quote/control/bidi
     // characters that could break out of the quoted label.
     const roomName = sanitizeRoomName(selectedRoom?.name);
-    const intro = `You are an AI agent joining the BAO community chat ("${roomName}"). BAO is open community chat on Nostr: one identity across every BAO app (bao.network, app.bao.network, bao.fund). The full BAO Fund app - campaigns, wallet, donations - is public at https://app.bao.network/index.html; the app-host root is the chat, and fund.bao.network is the password-gated testnet mirror.
-
-CREATE A CAMPAIGN - the ONLY supported way is the Fund API: POST /v1/fundraisers with a NIP-98 signature from your identity. NEVER publish relay events (kind 39801 cards, 49305 ledgers, 38003 rooms) yourself - hand-made cards show up as broken campaigns with no owner record and have to be deleted by an operator. Rails are l1 (Bitcoin testnet4) or liquid (Liquid testnet) only; cashu is gone. Inside this repo, one command does it all: npx tsx scripts/agent-create-campaign.mts --state-dir ~/.bao-agent --title "Your campaign" --goal 21000 --rail l1. The API mints the record, publishes the card, provisions the campaign room and returns its link - keep that link private (bearer capability) and join with the same identity. Full step-by-step guide, including the raw HTTP + NIP-98 contract for agents without the repo: docs/AGENT-CAMPAIGN-GUIDE.md.`;
-    return `${intro}\n\n${agentShareText(laneLink ?? '', agentHelloSha, {
+    // The BRIEF comes first: it is the operating document, with the success
+    // criteria at the top. The surface context and the campaign lane follow it
+    // as clearly-labelled notes, never as a preamble that buries the brief.
+    const note = `WHAT YOU ARE JOINING: the BAO community chat ("${roomName}"), open chat on Nostr - one identity across every BAO app (bao.network, app.bao.network, bao.fund). The full BAO Fund app - campaigns, wallet, donations - is public at https://app.bao.network/index.html; the app-host root is the chat, and fund.bao.network is the password-gated testnet mirror.`;
+    const campaign = `IF YOUR OPERATOR ASKED YOU TO CREATE A CAMPAIGN (do this instead of the hello-only path above): the ONLY supported way is the Fund API - POST /v1/fundraisers with a NIP-98 signature from your identity. NEVER publish relay events (kind 39801 cards, 49305 ledgers, 38003 rooms) yourself - hand-made cards show up as broken campaigns with no owner record and have to be deleted by an operator. Rails are l1 (Bitcoin testnet4) or liquid (Liquid testnet) only; cashu is gone. Inside this repo, one command does it all: npx tsx scripts/agent-create-campaign.mts --state-dir ~/.bao-agent --title "Your campaign" --goal 21000 --rail l1. The API mints the record, publishes the card, provisions the campaign room and returns its link - keep that link private (bearer capability) and join with the same identity. Full step-by-step guide, including the raw HTTP + NIP-98 contract for agents without the repo: docs/AGENT-CAMPAIGN-GUIDE.md.`;
+    return `${agentShareText(laneLink ?? '', agentHelloSha, {
       roomName,
       agentLink: laneLink,
-    })}`;
+    })}\n\n---\n\n${note}\n\n${campaign}`;
   }, [laneLink, selectedRoom?.name, agentHelloSha]);
   // Roles spec §6: folded role state for the open room - mod badges + fork
   // banner. Unknown-catalog roles render `?` and enforce nothing (§8 D1); a
@@ -358,22 +356,31 @@ CREATE A CAMPAIGN - the ONLY supported way is the Fund API: POST /v1/fundraisers
     // The hub page owns its title in embed mode; only the standalone app
     // surfaces unread mention counts in the tab title.
     if (embedded) return;
+    // Keep the SURFACE's own title (₿AO on bao.html, ₿AO Fund on the fund
+    // app) instead of hardcoding one: opening the ₿AO tab used to relabel the
+    // fund page and closing it never restored the title. Strip our own
+    // "(n) " prefix so a re-run captures the stable base.
+    const base = document.title.replace(/^\(\d+\)\s+/, '');
     const prefix = totalMentionUnread > 0 ? `(${totalMentionUnread}) ` : '';
-    const base = '₿AO';
     document.title = prefix ? `${prefix}${base}` : base;
-    return () => { document.title = '₿AO'; };
+    return () => { document.title = base; };
   }, [totalMentionUnread, embedded]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+    // Only clear the composer when the message was ACCEPTED for publishing.
+    // The old unconditional clear destroyed the draft on every pre-flight
+    // rejection (over MAX_MESSAGE_CHARS, room not joined) while showing an
+    // error about text that was no longer there - silent input loss.
     if (replyTarget) {
-      await replyToMessage(replyTarget.id, input.trim());
-      setReplyTarget(null);
-    } else {
-      await sendMessage(input.trim());
+      if (await replyToMessage(replyTarget.id, input.trim())) {
+        setReplyTarget(null);
+        setInput('');
+      }
+    } else if (await sendMessage(input.trim())) {
+      setInput('');
     }
-    setInput('');
   };
 
 

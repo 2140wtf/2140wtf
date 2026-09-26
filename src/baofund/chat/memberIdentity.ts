@@ -82,9 +82,14 @@ export async function resolveMemberIdentity(input: {
     const secretKey = deriveSubkey(master, KDF_LABELS.chatRoomIdentity, utf8ToBytes(roomId)).slice(0, 32);
     const identity: MemberIdentity = { pubkey: pubkeyOf(secretKey), secretKey, source: 'derived' };
     try {
+      // Persist the derived secret too: one login pubkey must resolve to ONE
+      // durable member key across sign-in methods. Without the secret, a later
+      // extension/passkey login for the same account could not restore the
+      // derived member and minted a fresh key - silently defeating bans
+      // (audit: member-key-extension-login-bypass).
       localStorage.setItem(
         storageKey(loginPubkey, roomId),
-        JSON.stringify({ v: 1, pubkey: identity.pubkey, source: 'derived' }),
+        JSON.stringify({ v: 1, secretKey: bytesToHex(secretKey), pubkey: identity.pubkey, source: 'derived' }),
       );
     } catch { /* storage unavailable - derived identity still works */ }
     return identity;
@@ -93,10 +98,12 @@ export async function resolveMemberIdentity(input: {
   try {
     const raw = localStorage.getItem(storageKey(loginPubkey, roomId));
     if (raw) {
-      const parsed = JSON.parse(raw) as { secretKey?: unknown };
+      const parsed = JSON.parse(raw) as { secretKey?: unknown; source?: unknown };
       if (typeof parsed.secretKey === 'string' && HEX64.test(parsed.secretKey)) {
         const secretKey = hexToBytes(parsed.secretKey);
-        return { pubkey: pubkeyOf(secretKey), secretKey, source: 'stored' };
+        // A restored seed-derived key stays `derived` (still reproducible on
+        // any device); everything else is a browser-local `stored` key.
+        return { pubkey: pubkeyOf(secretKey), secretKey, source: parsed.source === 'derived' ? 'derived' : 'stored' };
       }
     }
   } catch { /* fall through to a fresh key */ }

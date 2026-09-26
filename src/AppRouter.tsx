@@ -376,8 +376,8 @@ export function AppRouter() {
               <Route path="/bookmarks" element={<BookmarksPage />} />
               {/* Legacy NIP-104 group chat could fall back to the app's public
                   relay pool. Keep old links working, but never mount its
-                  composer: all room chat now uses the encrypted 2140.social
-                  scroll transport and its single scoped relay. */}
+                  composer: all room chat now uses the shared ₿AO community
+                  transport (relay.bao.fund) and its scoped relay. */}
               <Route path="/groups" element={<Navigate to="/community" replace />} />
 
               <Route path="/pets" element={<PetsPage />} />

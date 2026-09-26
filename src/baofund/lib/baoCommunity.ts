@@ -23,6 +23,7 @@ import { WebRelayConn } from '@/baofund/community/websocket.js';
 import { roomLinkPrivacy } from '@/baofund/community/agents.js';
 import type { AdmissionProofs } from '@/baofund/community/admission.js';
 import { fundFetch, type FundHttpSigner } from './fundHttp';
+import { adoptLegacyStorageKey, normalizeIdentity } from './activeIdentity';
 
 // ─── Room list persistence (localStorage) ─────────────────────────────────
 
@@ -53,9 +54,31 @@ export interface FundRoomMeta {
 
 export const ROOMS_STORAGE_KEY = 'bao-fund-community-rooms';
 
-export function loadFundRooms(storage: Pick<Storage, 'getItem'> = localStorage): FundRoomMeta[] {
+/** Scope for signed-out visitors: their own per-browser slot, never a
+ *  signed-in identity's rooms. */
+export const GUEST_ROOM_SCOPE = 'guest';
+
+type RoomStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/**
+ * The persisted room list is per-identity: a later identity must not see the
+ * previous identity's bearer join links to private/campaign rooms (audit
+ * run-2 rooms-storage-global). `identity` is a signed-in pubkey, the guest
+ * scope, or empty for the legacy low-level default.
+ */
+export function roomStorageKey(identity?: string | null): string {
+  const raw = typeof identity === 'string' ? identity.trim().toLowerCase() : '';
+  return raw ? `${ROOMS_STORAGE_KEY}:${raw}` : ROOMS_STORAGE_KEY;
+}
+
+export function loadFundRooms(storage: RoomStorage = localStorage, identity?: string | null): FundRoomMeta[] {
   try {
-    const raw = storage.getItem(ROOMS_STORAGE_KEY);
+    // One-time migration: the first SIGNED-IN identity after the upgrade
+    // adopts the legacy global list (the ACTIVE identity's rooms); guests
+    // never touch it.
+    const pk = normalizeIdentity(identity);
+    if (pk) adoptLegacyStorageKey(ROOMS_STORAGE_KEY, pk, storage);
+    const raw = storage.getItem(roomStorageKey(identity));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -91,24 +114,36 @@ export function loadFundRooms(storage: Pick<Storage, 'getItem'> = localStorage):
   }
 }
 
-export function saveFundRooms(rooms: FundRoomMeta[], storage: Pick<Storage, 'setItem'> = localStorage): void {
-  storage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(rooms));
+export function saveFundRooms(
+  rooms: FundRoomMeta[],
+  storage: RoomStorage = localStorage,
+  identity?: string | null,
+): void {
+  storage.setItem(roomStorageKey(identity), JSON.stringify(rooms));
 }
 
 /** Add (or replace) a room by roomId. Link wins: a re-join with a fresh
  *  link replaces the stale entry. */
-export function addFundRoom(room: FundRoomMeta, storage?: Pick<Storage, 'getItem' | 'setItem'>): FundRoomMeta[] {
-  const rooms = loadFundRooms(storage ?? localStorage).filter((r) => r.roomId !== room.roomId);
+export function addFundRoom(
+  room: FundRoomMeta,
+  storage?: RoomStorage,
+  identity?: string | null,
+): FundRoomMeta[] {
+  const target = storage ?? localStorage;
+  const rooms = loadFundRooms(target, identity).filter((r) => r.roomId !== room.roomId);
   rooms.push(room);
-  if (storage) saveFundRooms(rooms, storage as Pick<Storage, 'setItem'>);
-  else saveFundRooms(rooms);
+  saveFundRooms(rooms, target, identity);
   return rooms;
 }
 
-export function removeFundRoom(roomId: string, storage?: Pick<Storage, 'getItem' | 'setItem'>): FundRoomMeta[] {
-  const rooms = loadFundRooms(storage ?? localStorage).filter((r) => r.roomId !== roomId);
-  if (storage) saveFundRooms(rooms, storage as Pick<Storage, 'setItem'>);
-  else saveFundRooms(rooms);
+export function removeFundRoom(
+  roomId: string,
+  storage?: RoomStorage,
+  identity?: string | null,
+): FundRoomMeta[] {
+  const target = storage ?? localStorage;
+  const rooms = loadFundRooms(target, identity).filter((r) => r.roomId !== roomId);
+  saveFundRooms(rooms, target, identity);
   return rooms;
 }
 

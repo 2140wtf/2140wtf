@@ -44,6 +44,23 @@ describe('findRefundCandidates normalization (wave 4)', () => {
   });
 });
 
+describe('findRefundCandidates refund markers (deep-hunt 2026-09-24)', () => {
+  it('never offers a row already refunded or awaiting refund completion (status stays confirmed/escrowed)', async () => {
+    // The API keeps the row's status confirmed/escrowed on a refund - the
+    // refunded_at / refund_initiated_at markers are the ONLY signal
+    // (BaoContribution doc). Offering such a row again risks a double refund.
+    const rows = [
+      { ...contribution, id: 50, lock_secret: 'ls', cashu_token: 'ct', status: 'confirmed', refunded_at: '2026-01-02T00:00:00Z' },
+      { ...contribution, id: 51, lock_secret: 'ls', cashu_token: 'ct', status: 'escrowed', refund_initiated_at: '2026-01-01T00:00:00Z' },
+      { ...contribution, id: 52, lock_secret: 'ls', cashu_token: 'ct', status: 'confirmed' },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: rows }) }));
+    const result = await findRefundCandidates({ donorPubkey: DONOR }, ['fr_1']);
+    expect(result.map((c) => c.contributionId)).toEqual([52]);
+    vi.unstubAllGlobals();
+  });
+});
+
 describe('claimRefund fail-closed boundary', () => {
   const candidate = { contributionId: 42, fundraiserId: 'fr_1', amountSats: 999, rail: 'cashu' };
   it.each([{}, { data: { escrow_release: { swap: { mint: 'https://mint.example.com', inputs: [], outputs: [] } } } }])('does not treat an HTTP-success payload as recovered funds', async body => {

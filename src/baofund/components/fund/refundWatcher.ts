@@ -50,7 +50,12 @@ export async function findRefundCandidates(
       );
       for (const c of body.data ?? []) {
         if (String(c.contributor_pubkey ?? '').toLowerCase() !== deps.donorPubkey.toLowerCase()) continue;
-        if (c.status === 'refunded') continue; // already refunded
+        if (c.status === 'refunded') continue; // legacy status marker
+        // The row's status deliberately stays confirmed/escrowed on a refund
+        // (the campaign total is gross); the refund markers are the ONLY
+        // signal. A row already refunded or awaiting completion must never be
+        // offered as a refund candidate again.
+        if (c.refunded_at || c.refund_initiated_at) continue;
         if (!c.lock_secret && !c.cashu_token) continue;
         candidates.push({
           contributionId: Number(c.id),

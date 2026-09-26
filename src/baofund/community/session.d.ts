@@ -211,6 +211,24 @@ export declare class RoomSession {
      */
     subscribeReactions(msgId: string, onReaction: (r: ReactionEvent) => void): () => void;
     /**
+     * Live-subscribe to EVERY reaction in this room from ONE subscription.
+     * Each delivered `ReactionEvent` carries its `target` msg_id, so a host
+     * rendering a whole timeline needs ONE unsubscribe per room instead of a
+     * per-msg_id subscription map (which consumers had to cap, dropping
+     * reaction delivery for the oldest visible messages).
+     *
+     * Additive: `subscribeReactions` keeps its exact per-target API and now
+     * delegates here. Both ride the same ref-counted `subscribeLive` REQ, so
+     * the verification/decoding guarantees are identical — outer signature
+     * verification, routing-tag + envelope room binding, inner-vs-outer author
+     * equality, current/previous-epoch grace, and per-handler error isolation.
+     * Payload parsing is the same `parseReaction` (non-reaction payloads,
+     * malformed/oversized emoji and non-msg_id targets are dropped silently).
+     * Removals (`remove: true`) are delivered like adds — folding is the
+     * consumer's job, exactly as in the per-message path.
+     */
+    subscribeReactionsAll(onReaction: (r: ReactionEvent) => void): () => void;
+    /**
      * Publish this bot's command manifest as an encrypted room payload (§7).
      * Only room members can discover the interface — the relay sees
      * ciphertext, unlike a public manifest event. Republish to update.

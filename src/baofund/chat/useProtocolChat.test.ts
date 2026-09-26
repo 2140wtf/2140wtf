@@ -9,7 +9,10 @@ import { useProtocolChat, type UseProtocolChatReturn } from './useProtocolChat';
 const mocks = vi.hoisted(() => ({
   join: vi.fn(),
   probe: vi.fn(),
-  stored: [] as { roomId: string; link: string; name?: string }[],
+  stored: [] as { roomId: string; link: string; name?: string; agentLink?: string; fundraiserId?: string }[],
+  /** Scope (identity) argument recorded on every room load/save. */
+  loadedScopes: [] as (string | undefined)[],
+  savedScopes: [] as (string | undefined)[],
   roomStatus: vi.fn(),
   roomCredential: vi.fn(),
   publicRooms: vi.fn(),
@@ -22,10 +25,11 @@ vi.mock('../lib/relayStorageProbe', () => ({
   probeRelayStorage: (...args: unknown[]) => mocks.probe(...args),
 }));
 vi.mock('../lib/baoCommunity', () => ({
-  loadFundRooms: () => mocks.stored,
-  saveFundRooms: (rooms: typeof mocks.stored) => { mocks.stored = rooms; },
-  addFundRoom: (room: (typeof mocks.stored)[number]) => [...mocks.stored.filter(r => r.roomId !== room.roomId), room],
-  removeFundRoom: (id: string) => mocks.stored.filter(r => r.roomId !== id),
+  GUEST_ROOM_SCOPE: 'guest',
+  loadFundRooms: (_storage?: unknown, identity?: string) => { mocks.loadedScopes.push(identity); return mocks.stored; },
+  saveFundRooms: (rooms: typeof mocks.stored, _storage?: unknown, identity?: string) => { mocks.stored = rooms; mocks.savedScopes.push(identity); },
+  addFundRoom: (room: (typeof mocks.stored)[number], _storage?: unknown, identity?: string) => { mocks.savedScopes.push(identity); return [...mocks.stored.filter(r => r.roomId !== room.roomId), room]; },
+  removeFundRoom: (id: string, _storage?: unknown, identity?: string) => { mocks.savedScopes.push(identity); return mocks.stored.filter(r => r.roomId !== id); },
   roomMetaFromLink: (link: string, name?: string) => ({
     roomId: link,
     link,
@@ -65,18 +69,36 @@ function room(id: string, epoch = 0) {
     const v = await session.readViews();
     return { messages: v.timeline ?? [], rejected: [], coverage: new Map(), chainWarnings: [] } as unknown as MergeResult;
   });
-  return { conn: { close: vi.fn(), query: vi.fn(async () => []), subscribe: vi.fn(() => vi.fn()) }, joined: { authorSecretKey: new Uint8Array(32).fill(1), governance: 'aa'.repeat(32), epoch }, session };
+  // Raw-conn subscriptions (role editions + governance redactions) are
+  // captured so tests can drive their callbacks.
+  const subscriptions: Array<{ filter: Record<string, unknown>; onEvent: (ev: never) => void }> = [];
+  const conn = {
+    close: vi.fn(),
+    query: vi.fn(async () => []),
+    subscribe: vi.fn((filter: Record<string, unknown>, onEvent: (ev: never) => void) => {
+      subscriptions.push({ filter, onEvent });
+      return vi.fn();
+    }),
+  };
+  return {
+    conn,
+    subscriptions,
+    joined: { authorSecretKey: new Uint8Array(32).fill(1), governance: 'aa'.repeat(32), epoch, encKey: new Uint8Array(32).fill(9) },
+    session,
+  };
 }
 let current: UseProtocolChatReturn;
 let root: Root;
 let mounted: boolean;
-function Harness() {
-  const chat = useProtocolChat();
+function Harness({ identity }: { identity?: string | null }): null {
+  const chat = useProtocolChat({ identityPubkey: identity });
   React.useLayoutEffect(() => { current = chat; });
   return null;
 }
 beforeEach(async () => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  mocks.loadedScopes = [];
+  mocks.savedScopes = [];
   mocks.stored = ['A', 'B'].map(id => ({ roomId: id, link: id }));
   mocks.join.mockReset().mockImplementation(async (id: string, _opts?: unknown) => room(id));
   // Default probe: decisive not-observed-storing (honest relay).
@@ -84,7 +106,7 @@ beforeEach(async () => {
   mocks.publicRooms.mockReset().mockResolvedValue([]);
   mocks.validate.mockReset().mockImplementation((link: string) => ({ relay: `wss://relay.test/${link}`, welcomerPub: 'x', routingId: 'y' }));
   root = createRoot(document.createElement('div')); mounted = true;
-  await act(async () => root.render(React.createElement(Harness)));
+  await act(async () => root.render(React.createElement(Harness, {})));
 });
 afterEach(async () => { if (mounted) await act(async () => root.unmount()); vi.useRealTimers(); });
 it('importLink fails closed on an invalid invite (both validator modes: null AND throwing): error shown, NOTHING persisted or joined (bug-hunt 2026-09-22)', async () => {
@@ -105,6 +127,57 @@ it('importLink fails closed on an invalid invite (both validator modes: null AND
   await act(async () => { await current.importLink('good-room'); });
   expect(current.error).toBeNull();
   expect(mocks.join).toHaveBeenCalledTimes(1);
+});
+
+it('a VALIDATED invite whose admission fails is not persisted and does not stay selected (fail closed on join, bug-hunt 2026-09-24)', async () => {
+  await act(async () => current.selectRoom('A'));
+  expect(current.selectedRoomId).toBe('A');
+  mocks.join.mockRejectedValueOnce(new Error('Room admission failed'));
+  await act(async () => { await current.importLink('dead-room'); });
+  // The invite validates, but the door never opened: no dead sidebar row, no
+  // phantom selection pointing at an unlisted room.
+  expect(current.error).toContain('Room admission failed');
+  expect(current.rooms.some((r) => r.roomId === 'dead-room')).toBe(false);
+  expect(mocks.stored.some((r) => r.roomId === 'dead-room')).toBe(false);
+  expect(current.selectedRoomId).toBeNull();
+  expect(current.messages).toEqual([]);
+});
+
+it('a re-import of an already-stored room keeps its agent-lane link and campaign ref (durable extras)', async () => {
+  // The room row is the only durable home of the separate agent link and the
+  // campaign ref; importing the bare link again must not replace the entry
+  // with one that has neither (addFundRoom replaces by roomId).
+  mocks.stored = [{ roomId: 'reimport-keep', link: 'reimport-keep', name: 'Room reimpor', agentLink: 'agent-lane-link', fundraiserId: 'fr_keep' }];
+  await act(async () => { await current.importLink('reimport-keep'); });
+  const kept = mocks.stored.find((r) => r.roomId === 'reimport-keep');
+  expect(kept?.agentLink).toBe('agent-lane-link');
+  expect(kept?.fundraiserId).toBe('fr_keep');
+});
+
+it('importCampaign persists only after admission and returns null on a refused join (campaign room ruling)', async () => {
+  mocks.roomStatus.mockResolvedValue({ gate: 'open', available: true, link: 'camp-open' });
+  mocks.join.mockRejectedValueOnce(new Error('Room admission failed'));
+  let meta: unknown = 'unset';
+  await act(async () => { meta = await current.importCampaign('fr_1', 'Coop', {} as never); });
+  // The caller (App) selects the returned roomId only when non-null; a
+  // refused join must not hand back a dead room or store its link.
+  expect(meta).toBeNull();
+  expect(current.error).toContain('Room admission failed');
+  expect(mocks.stored.some((r) => r.roomId === 'camp-open')).toBe(false);
+});
+
+it('identity switch reloads the room list from the new scope and drops the old session (audit run-2 rooms-storage-global)', async () => {
+  // Initial mount (no identity) reads the guest scope only.
+  expect(mocks.loadedScopes).toContain('guest');
+  await act(async () => { await current.selectRoom('A'); });
+  expect(current.selectedRoomId).toBe('A');
+  // Sign in as identity B: the hook must re-read B's own slot and reset the
+  // live session so A's room state never leaks into B's panel.
+  const identityB = 'cc'.repeat(32);
+  await act(async () => { root.render(React.createElement(Harness, { identity: identityB })); });
+  expect(mocks.loadedScopes).toContain(identityB);
+  expect(current.selectedRoomId).toBeNull();
+  expect(current.messages).toEqual([]);
 });
 
 it('refuses a donor-gated campaign room for a non-contributor and joins nothing', async () => {
@@ -203,7 +276,7 @@ it('ignores a late failed send after switching rooms', async () => {
   a.session.post.mockReturnValue(send.promise);
   mocks.join.mockImplementation(async (id: string) => id === 'A' ? a : room(id));
   await act(async () => current.selectRoom('A'));
-  let sending!: Promise<void>;
+  let sending!: Promise<boolean>;
   await act(async () => { sending = current.sendMessage('hello'); });
   await act(async () => current.selectRoom('B'));
   await act(async () => { send.reject(new Error('old room failed')); await sending; });
@@ -254,7 +327,7 @@ it('keeps a live echo pending and merges it with the optimistic bubble', async (
   a.session.post.mockReturnValue(published.promise);
   mocks.join.mockResolvedValue(a);
   await act(async () => current.selectRoom('A'));
-  let sending!: Promise<void>;
+  let sending!: Promise<boolean>;
   await act(async () => { sending = current.sendMessage('hello'); });
   const echo = { msg_id: 'hello-id', author: current.selfAuthor, payload: { text: 'hello' } } as Envelope;
   await act(async () => {
@@ -279,7 +352,7 @@ it('renders the confirming scroll without an additional history fetch', async ()
   a.session.read.mockResolvedValue({ messages: [initial, { envelope, redacted: false, scribes: ['scribe'] }], coverage: new Map(), rejected: [], chainWarnings: [] });
   mocks.join.mockResolvedValue(a);
   await act(async () => current.selectRoom('A'));
-  let sending!: Promise<void>;
+  let sending!: Promise<boolean>;
   await act(async () => { sending = current.sendMessage('confirmed text'); });
   await act(async () => { await vi.advanceTimersByTimeAsync(2_000); await sending; });
   // Stable order: the already-rendered history (A) stays; the confirmed
@@ -453,7 +526,8 @@ it('a superseded probe does not clear the in-flight flag while a newer probe run
 // ─── vsk:4 §6.1: admission consumes the banlist at join ───────────────────
 
 import { buildBanEditionEvent } from './banEditions';
-import { finalizeEvent, generateSecretKey, getPublicKey } from '@/baofund/community/crypto.js';
+import { deriveScrollWrapperKey, finalizeEvent, generateSecretKey, getPublicKey, scrollScope } from '@/baofund/community/crypto.js';
+import { encodeRedactionListEvent } from '@/baofund/community/redaction.js';
 
 it('refuses the join when THIS session key is on the room banlist (typed BanJoinRejected, room closed)', async () => {
   // The session key is derived from authorSecretKey (all-1s fixture).
@@ -569,6 +643,30 @@ it('guest defaults import ONLY the requested public door', async () => {
   });
   expect(mocks.stored.some((r) => r.name === 'Trollbox')).toBe(true);
   expect(mocks.stored.some((r) => r.name === 'Public Chat')).toBe(false);
+});
+
+it('refreshes a stored default in place when the API renames the landing room', async () => {
+  // The reported bug: a browser holding the legacy 'BAO' entry shares the
+  // roomId with the API's renamed landing room, so the import used to skip it
+  // and the old name shadowed the canonical one forever (guests, importing
+  // fresh, saw the new name while signed-in readers did not).
+  mocks.stored = [
+    { roomId: 'room-trollbox', name: 'BAO', link: 'stale-link', shielded: false, joinedAt: 42 },
+  ] as unknown as typeof mocks.stored;
+  mocks.publicRooms.mockResolvedValue([
+    // The harness derives roomId from the link (the real parser reads it from
+    // the fragment), so the fresh link IS the room's identity here.
+    { roomId: 'room-trollbox', name: 'Trollbox', link: 'room-trollbox' },
+    { roomId: 'room-public', name: 'Public Chat', link: 'room-public' },
+  ]);
+  await act(async () => { await current.ensureDefaultRooms({} as never, true); });
+  const landing = mocks.stored.find((r) => r.roomId === 'room-trollbox');
+  expect(landing?.name).toBe('Trollbox');
+  expect(landing?.link).toBe('room-trollbox');
+  // The original join time is kept: only the name and the fresh link move.
+  expect((landing as { joinedAt?: number } | undefined)?.joinedAt).toBe(42);
+  expect(mocks.stored.some((r) => r.name === 'BAO')).toBe(false);
+  expect(mocks.stored.some((r) => r.name === 'Public Chat')).toBe(true);
 });
 
 it('lands in the freshly imported public door (no stale rooms closure)', async () => {
@@ -799,4 +897,127 @@ it('resetSessions clears mention badges from the signed-out session (mentions-on
   expect(current.mentionUnread.size).toBe(0);
   // WS3 option C: the hook no longer exposes message unread counts at all.
   expect('unread' in current).toBe(false);
+});
+
+// ─── deep-hunt 2026-09-24: live governance redactions (kind 31146) ─────────
+
+/** Timeline with exactly one message and an explicit redacted flag. */
+function redactionViews(author: string, msgId: string, redacted: boolean): ScrollViews {
+  return {
+    timeline: [{ envelope: { msg_id: msgId, author, payload: { text: 'visible text' } }, redacted }],
+    roster: new Map(), reactions: new Map(), threadIndex: { threads: new Map(), orphans: [] },
+  } as unknown as ScrollViews;
+}
+
+it('a verified governance redaction refetches the quiet room and drops the message', async () => {
+  const AUTHOR = 'ab'.repeat(32);
+  const MSG = 'cd'.repeat(16);
+  const govSk = generateSecretKey();
+  const encKey = new Uint8Array(32).fill(9);
+  const scope = scrollScope(deriveScrollWrapperKey(encKey), 'A');
+  const a = room('A');
+  a.joined.governance = getPublicKey(govSk);
+  a.joined.encKey = encKey;
+  a.session.readViews.mockResolvedValue(redactionViews(AUTHOR, MSG, false));
+  mocks.join.mockResolvedValue(a);
+  await act(async () => current.selectRoom('A'));
+  expect(current.messages.map((m) => m.id)).toEqual([MSG]);
+
+  // The redaction lands while the screen is quiet; the next scroll read
+  // reports the message as redacted.
+  a.session.readViews.mockResolvedValue(redactionViews(AUTHOR, MSG, true));
+  const readsBefore = a.session.read.mock.calls.length;
+  const event = encodeRedactionListEvent(
+    [{ author: AUTHOR, msg_id: MSG, action: 'redact', reason: 'mod', ts: 1_700_000_000 }],
+    govSk,
+    { roomId: 'A', encKey, scope },
+  );
+  const sub = a.subscriptions.find((s) => (s.filter.kinds as number[] | undefined)?.includes(31146));
+  expect(sub).toBeDefined();
+  // The subscription is scoped to the room's opaque redaction document.
+  expect(sub!.filter['#d']).toEqual([`bao-redact:${scope}`]);
+  await act(async () => { sub!.onEvent(event as never); await Promise.resolve(); });
+
+  expect(a.session.read.mock.calls.length).toBeGreaterThan(readsBefore);
+  expect(current.messages).toEqual([]);
+  expect(current.error).toBeNull();
+});
+
+it('ignores a kind-31146 event not authored by the room governance key (fail closed, no refetch)', async () => {
+  const AUTHOR = 'ab'.repeat(32);
+  const MSG = 'cd'.repeat(16);
+  const govSk = generateSecretKey();
+  const encKey = new Uint8Array(32).fill(9);
+  const scope = scrollScope(deriveScrollWrapperKey(encKey), 'A');
+  const a = room('A');
+  a.joined.governance = getPublicKey(govSk);
+  a.joined.encKey = encKey;
+  a.session.readViews.mockResolvedValue(redactionViews(AUTHOR, MSG, true));
+  mocks.join.mockResolvedValue(a);
+  await act(async () => current.selectRoom('A'));
+  const readsBefore = a.session.read.mock.calls.length;
+  const sub = a.subscriptions.find((s) => (s.filter.kinds as number[] | undefined)?.includes(31146));
+
+  // A well-formed document signed by ANY other key must not move state.
+  const forged = encodeRedactionListEvent(
+    [{ author: AUTHOR, msg_id: MSG, action: 'redact', reason: 'impersonation', ts: 1_700_000_000 }],
+    generateSecretKey(),
+    { roomId: 'A', encKey, scope },
+  );
+  await act(async () => { sub!.onEvent(forged as never); await Promise.resolve(); });
+  expect(a.session.read.mock.calls.length).toBe(readsBefore);
+  expect(current.error).toBeNull();
+
+  // Same for a structurally malformed event.
+  await act(async () => { sub!.onEvent({ kind: 31146, id: 'x' } as never); await Promise.resolve(); });
+  expect(a.session.read.mock.calls.length).toBe(readsBefore);
+  expect(current.error).toBeNull();
+});
+
+it('dedupes a replayed redaction event id (no refetch storm)', async () => {
+  const AUTHOR = 'ab'.repeat(32);
+  const MSG = 'cd'.repeat(16);
+  const govSk = generateSecretKey();
+  const encKey = new Uint8Array(32).fill(9);
+  const scope = scrollScope(deriveScrollWrapperKey(encKey), 'A');
+  const a = room('A');
+  a.joined.governance = getPublicKey(govSk);
+  a.joined.encKey = encKey;
+  a.session.readViews.mockResolvedValue(redactionViews(AUTHOR, MSG, true));
+  mocks.join.mockResolvedValue(a);
+  await act(async () => current.selectRoom('A'));
+  const sub = a.subscriptions.find((s) => (s.filter.kinds as number[] | undefined)?.includes(31146));
+  const event = encodeRedactionListEvent(
+    [{ author: AUTHOR, msg_id: MSG, action: 'redact', reason: 'mod', ts: 1_700_000_000 }],
+    govSk,
+    { roomId: 'A', encKey, scope },
+  );
+  await act(async () => { sub!.onEvent(event as never); await Promise.resolve(); });
+  const readsAfterFirst = a.session.read.mock.calls.length;
+  // The same event id again: already folded, no second read.
+  await act(async () => { sub!.onEvent(event as never); await Promise.resolve(); });
+  expect(a.session.read.mock.calls.length).toBe(readsAfterFirst);
+});
+
+it('syncExternalRooms picks the NIP-98 transport per source URL (same-origin fund API -> X-Nostr-Auth, markets -> Authorization)', async () => {
+  const seen: Array<{ url: string; headers: Record<string, string> }> = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
+    seen.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string> });
+    return { ok: true, json: async () => ({ data: { rooms: [] } }) } as unknown as Response;
+  }));
+  try {
+    const signer = { signEvent: async (e: unknown) => e } as unknown as Parameters<UseProtocolChatReturn['syncExternalRooms']>[0];
+    await act(async () => { await current.syncExternalRooms(signer); });
+    const markets = seen.find((s) => s.url.includes('relay.bao.network'));
+    const fundApi = seen.find((s) => s.url.endsWith('/fund-api/v1/chat/fund-rooms'));
+    // Markets API: cross-origin -> standard Authorization (CORS-exposed).
+    expect(markets?.headers.Authorization).toMatch(/^Nostr /);
+    expect(markets?.headers['X-Nostr-Auth']).toBeUndefined();
+    // Fund API: `/fund-api` is same-origin on the gated hosts -> X-Nostr-Auth,
+    // so the access gate's Basic Authorization header survives.
+    expect(fundApi?.headers['X-Nostr-Auth']).toMatch(/^Nostr /);
+    expect(fundApi?.headers.Authorization).toBeUndefined();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

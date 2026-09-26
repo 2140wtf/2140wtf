@@ -26,7 +26,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }): React
     },
     [pubkey, seedIdentityHex],
   );
-  const chat = useProtocolChat({ resolveMemberIdentity: resolveIdentity });
+  // The persisted room list is scoped to the signed-in identity; signed-out
+  // visitors use a separate guest scope (never a signed-in identity's rooms).
+  const chat = useProtocolChat({ resolveMemberIdentity: resolveIdentity, identityPubkey: pubkey });
   return <ChatCtx.Provider value={chat}>{children}</ChatCtx.Provider>;
 }
 

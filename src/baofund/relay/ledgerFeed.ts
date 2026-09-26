@@ -23,6 +23,11 @@ export interface LedgerSummary {
   entriesCount: number;
   headHash: string;
   closed: boolean;
+  /** Terminal VALUE disposition of the accepted fold: the last accepted
+   *  RELEASE or REFUND_ALL entry. null when no settlement entry was folded.
+   *  A closed ledger whose terminal is 'refunded' was refunded - labelling it
+   *  "completed" (the pre-fix behavior) misreports the money's fate. */
+  terminal: 'released' | 'refunded' | null;
 }
 
 export interface RegistrarPin {
@@ -78,6 +83,7 @@ export function summarizeLedger(
     try {
       let state: LedgerFoldState = initialLedgerFold(campaign);
       const lockAmounts: number[] = [];
+      let terminal: LedgerSummary['terminal'] = null;
       for (const ev of [...evs].sort((a, b) => {
         const ca = contentOf(a)?.seq ?? 0;
         const cb = contentOf(b)?.seq ?? 0;
@@ -96,6 +102,10 @@ export function summarizeLedger(
         const accepted = state.entriesCount === before.entriesCount + 1;
         if (c?.type === 'CONTRIB_LOCK' && accepted && typeof c.amountSats === 'number') {
           lockAmounts.push(c.amountSats);
+        } else if (accepted && (c?.type === 'RELEASE' || c?.type === 'REFUND_ALL')) {
+          // Last accepted settlement wins: a REFUND_ALL after a RELEASE (or
+          // the reverse) is the campaign's terminal value disposition.
+          terminal = c.type === 'REFUND_ALL' ? 'refunded' : 'released';
         }
       }
       out.set(campaign, {
@@ -103,6 +113,7 @@ export function summarizeLedger(
         entriesCount: state.entriesCount,
         headHash: state.headHash,
         closed: state.closed,
+        terminal,
       });
     } catch {
       /* invalid/forked stream - leave the campaign un-enriched */

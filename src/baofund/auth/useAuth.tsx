@@ -14,7 +14,7 @@
 // seed to this layer, so the chat's per-room member identity falls back to the
 // device-scoped random key (`source: 'stored'`) instead of a seed-derived one.
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { bytesToHex } from '@noble/hashes/utils.js';
@@ -25,6 +25,7 @@ import {
   type Nip60Signer,
 } from '@/baofund/cashu-wallet/lib/cashu/cashuNip60';
 
+import { setActiveIdentity } from '../lib/activeIdentity';
 import type { BaoSigner } from '../relay/guestIdentity';
 
 export type AuthMethod = 'nip07' | 'passkey' | 'nip46' | 'seed' | null;
@@ -49,6 +50,14 @@ export interface BaoAuthCtx {
 export function useAuth(): BaoAuthCtx {
   const { user } = useCurrentUser();
   const { logout: nostrifyLogout } = useLoginActions();
+
+  // The ONE identity whose per-identity local storage (rooms, wallet) this
+  // session may read or write. Set on login/restore, cleared on logout; the
+  // storage modules scope their keys off it so one identity can never observe
+  // another's bearer room links or funds.
+  useEffect(() => {
+    setActiveIdentity(user?.pubkey ?? null);
+  }, [user?.pubkey]);
 
   const signer = useMemo<BaoSigner | null>(() => {
     if (!user) return null;

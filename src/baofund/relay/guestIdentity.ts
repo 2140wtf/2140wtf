@@ -22,6 +22,23 @@ export function getGuestPubkeyHex(): string {
   return getPublicKey(hexToBytes(getGuestKeyHex()));
 }
 
+/**
+ * Drop the stored guest key; the next guest read mints a FRESH key.
+ *
+ * The guest key is a persistent per-browser NIP-98 identity. Called on the
+ * auth transitions (sign-in, sign-out, account switch), it guarantees a
+ * later visitor to a shared browser never inherits the previous guest's
+ * identity (hunt: guest-key-not-rotated). A plain reload of the same
+ * signed-out state does NOT rotate: the current guest keeps their identity.
+ */
+export function rotateGuestKey(): void {
+  try {
+    localStorage.removeItem(KEY_STORAGE);
+  } catch {
+    // Storage unavailable (privacy mode): nothing was persisted to rotate.
+  }
+}
+
 export interface BaoSigner {
   signEvent(event: {
     kind: number;

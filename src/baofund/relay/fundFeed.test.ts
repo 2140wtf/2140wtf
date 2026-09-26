@@ -18,6 +18,9 @@ const card = (over: Partial<CampaignCardDraft> = {}): CampaignCardDraft => ({
   pledgedSats: 0,
   goalSats: 1000,
   endTimeSec: 0,
+  // Signed card owner (a-coordinate author). The API record only enriches a
+  // card whose signed owner matches, so fixtures mirror the normal case.
+  ownerPubkey: 'ab'.repeat(32),
   ...over,
 });
 
@@ -26,6 +29,7 @@ const summary = (over: Partial<LedgerSummary> = {}): LedgerSummary => ({
   entriesCount: 0,
   headHash: 'a'.repeat(64),
   closed: false,
+  terminal: null,
   ...over,
 });
 
@@ -124,6 +128,15 @@ describe('mergeEnrichedCards display semantics', () => {
     expect(merged[0].frStatus).toBe('completed');
   });
 
+  it('labels a closed REFUNDED ledger refunded, never completed', () => {
+    const merged = mergeEnrichedCards(
+      [card({ frId: 'fr_1' })],
+      ledgerOf([['c1', summary({ raisedSats: 5000, closed: true, terminal: 'refunded' })]]),
+      new Map([['c1', api({ raised_sats: 100, status: 'open' })]]),
+    );
+    expect(merged[0].frStatus).toBe('refunded');
+  });
+
   it('uses API status while the ledger chain is open', () => {
     const merged = mergeEnrichedCards(
       [card({ frId: 'fr_1' })],
@@ -193,6 +206,87 @@ describe('gate authority stays ledger-only (owner bug 2026-09-22)', () => {
     const apiOnly = [card({ id: 'c_api_only', frId: 'fr_1' })];
     const merged = mergeEnrichedCards(apiOnly, new Map(), new Map([['c_api_only', api({ raised_sats: 151_000 })]]));
     expect(gateViewsForCards(merged, new Map(), 1_700_000_000).size).toBe(0);
+  });
+});
+
+describe('hostile card fr-tag cannot borrow API money authority (audit)', () => {
+  const ATTACKER = 'cd'.repeat(32);
+  const REAL_OWNER = 'ab'.repeat(32);
+  const hostileCard = (over: Partial<CampaignCardDraft> = {}): CampaignCardDraft =>
+    card({
+      id: `39801:${ATTACKER}:fake`,
+      frId: 'fr_real',
+      ownerPubkey: ATTACKER,
+      rail: 'l1',
+      mainnetCashu: false,
+      ...over,
+    });
+  const realApi = (over: Partial<BaoFundraiser> = {}): BaoFundraiser =>
+    api({
+      id: 'fr_real',
+      owner_pubkey: REAL_OWNER,
+      network: 'mainnet',
+      settlement_rail: 'cashu',
+      raised_sats: 151_000,
+      goal_sats: 999_999,
+      status: 'funded',
+      ...over,
+    });
+
+  it('applies NO API field when the API owner differs from the signed card owner', () => {
+    const hostile = hostileCard();
+    const merged = mergeEnrichedCards(
+      [hostile],
+      new Map(),
+      new Map([[hostile.id, realApi()]]),
+    );
+    // Fail closed: the signed card's values survive - mainnetCashu stays
+    // false and the donor is never routed into the real-money flow.
+    expect(merged[0].mainnetCashu).toBe(false);
+    expect(merged[0].rail).toBe('l1');
+    expect(merged[0].ownerPubkey).toBe(ATTACKER);
+    expect(merged[0].pledgedSats).toBe(0);
+    expect(merged[0].goalSats).toBe(1000);
+    expect(merged[0].frStatus).toBeUndefined();
+  });
+
+  it('still enriches when the API owner matches the signed card owner (case-insensitive)', () => {
+    const legit = card({ id: '39801:' + REAL_OWNER + ':real', frId: 'fr_real', ownerPubkey: REAL_OWNER.toUpperCase() });
+    const merged = mergeEnrichedCards([legit], new Map(), new Map([[legit.id, realApi()]]));
+    expect(merged[0].mainnetCashu).toBe(true);
+    expect(merged[0].rail).toBe('cashu');
+    expect(merged[0].pledgedSats).toBe(151_000);
+    expect(merged[0].ownerPubkey).toBe(REAL_OWNER.toUpperCase());
+  });
+
+  it('fails closed when the card carries no signed owner or the API owner is missing', () => {
+    const noOwner = hostileCard({ ownerPubkey: undefined });
+    const mergedNoOwner = mergeEnrichedCards([noOwner], new Map(), new Map([[noOwner.id, realApi()]]));
+    expect(mergedNoOwner[0].mainnetCashu).toBe(false);
+    expect(mergedNoOwner[0].pledgedSats).toBe(0);
+
+    const noApiOwner = hostileCard({ ownerPubkey: ATTACKER });
+    const mergedNoApiOwner = mergeEnrichedCards(
+      [noApiOwner],
+      new Map(),
+      new Map([[noApiOwner.id, realApi({ owner_pubkey: undefined } as Partial<BaoFundraiser>)]]),
+    );
+    expect(mergedNoApiOwner[0].mainnetCashu).toBe(false);
+    expect(mergedNoApiOwner[0].pledgedSats).toBe(0);
+  });
+
+  it('keeps the registrar ledger display fallback on a mismatched card (no API money fields)', () => {
+    const hostile = hostileCard();
+    const merged = mergeEnrichedCards(
+      [hostile],
+      ledgerOf([[hostile.id, summary({ raisedSats: 1000, closed: true })]]),
+      new Map([[hostile.id, realApi()]]),
+    );
+    expect(merged[0].pledgedSats).toBe(1000);
+    expect(merged[0].ledgerVerified).toBe(true);
+    expect(merged[0].frStatus).toBe('completed');
+    expect(merged[0].mainnetCashu).toBe(false);
+    expect(merged[0].rail).toBe('l1');
   });
 });
 
@@ -311,6 +405,14 @@ describe('money-authority failures (deep-hunt wave 3)', () => {
     expect(card.mainnetCashu).toBe(false);
     const real = fundraiserCard(fr({ description: 'campaign desc', network: 'mainnet' }));
     expect(real.mainnetCashu).toBe(true);
+  });
+
+  it('cashu settlement rail is mainnet authority even when the network field lags (owner fix 2026-09-23)', () => {
+    const cashu = fundraiserCard(fr({ network: 'testnet', settlement_rail: 'cashu' }));
+    expect(cashu.mainnetCashu).toBe(true);
+    expect(milestoneCard(fr({ network: 'testnet', settlement_rail: 'cashu' }), ms()).mainnetCashu).toBe(true);
+    const l1 = fundraiserCard(fr({ network: 'testnet', settlement_rail: 'l1' }));
+    expect(l1.mainnetCashu).toBe(false);
   });
 
   it('milestone pledged follows the waterfall order (prior milestones first)', () => {

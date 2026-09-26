@@ -3,20 +3,15 @@
  * X-Frame-Options and no CSP frame-ancestors, so it can be embedded
  * without a proxy).
  *
- * Chat: the right panel is the REAL 2140 Trollbox encrypted scroll client
- * (BaoScrollChat) locked to the Trollbox room. It stays on this page —
- * no redirect, no external host. Every message is an E2E-encrypted
- * envelope posted ONLY to the single wss://2140.social/ws relay:
- *
- *  - NO kind-1 notes, NO hashtags, nothing to the app's public Nostr
- *    relays — no publish path exists in this component by construction
- *    (guarded by assertTrollboxRelayPinned at boot).
- *  - The room is PUBLIC (shared General scroll) but READ/WRITE requires
- *    an account — authed users see it, anonymous users get the join gate.
+ * Chat: the right panel is the SAME ₿AO community chat as `/community` —
+ * the ported @bao/community stack over the Fund relay (`wss://relay.bao.fund`,
+ * Troll₿ox as the landing room). Every message is an E2E-encrypted envelope
+ * posted only to that relay; there is no kind-1 note path. This is the single
+ * shared chat across bao.fund / app.bao.network / 2140.wtf.
  */
 import { useEffect, useRef, useState } from "react";
 import { useSeoMeta } from "@unhead/react";
-import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, LogOut, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, ExternalLink, LogOut, MessageSquare, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -24,53 +19,20 @@ import { useAppContext } from "@/hooks/useAppContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { useLoginActions } from "@/hooks/useLoginActions";
-import { BaoScrollChat, type ScrollChatStatus } from "@/components/bao/BaoScrollChat";
-import LoginDialog from "@/components/auth/LoginDialog";
-import SignupDialog from "@/components/auth/SignupDialog";
-import { BAO_TROLLBOX_ROOM } from "@/lib/baosocial/rooms";
+import { ChatProvider } from "@/baofund/chat/ChatContext";
+import { ChatPanel } from "@/baofund/chat/ChatPanel";
+import { DEFAULT_LANDING_ROOM } from "@/baofund/lib/baoCommunity";
+import "@/baofund/baoFundChat.css";
+import "@/baofund/theme/newspaperTheme.css";
+import "@/baofund/theme/appTokens.css";
 import { FAL_LIVE_URL } from "@/lib/falLive";
 import { cn } from "@/lib/utils";
-
-/** Members-only gate for the chat panel — the room is public on the relay
- * but posting/reading is for signed-in users (members-only). */
-function ChatGate() {
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [signupOpen, setSignupOpen] = useState(false);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-        <ShieldCheck className="size-8 text-muted-foreground" />
-        <div>
-          <h2 className="text-sm font-semibold">Members-only chat</h2>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            2140 Trollbox is members-only — sign in to join.
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setLoginOpen(true)}>Join to enter</Button>
-        <p className="text-[11px] text-muted-foreground">
-          No account yet?{" "}
-          <button
-            type="button"
-            className="font-medium text-primary underline-offset-2 hover:underline"
-            onClick={() => setSignupOpen(true)}
-          >
-            Create account
-          </button>
-        </p>
-      </div>
-      <LoginDialog isOpen={loginOpen} onClose={() => setLoginOpen(false)} onLogin={() => setLoginOpen(false)} />
-      <SignupDialog isOpen={signupOpen} onClose={() => setSignupOpen(false)} />
-    </div>
-  );
-}
 
 export function FalLivePage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const { logout } = useLoginActions();
   const [chatExpanded, setChatExpanded] = useState(false);
-  const [chatStatus, setChatStatus] = useState<ScrollChatStatus>({ phase: "idle" });
   const [kbOverlap, setKbOverlap] = useState(0);
   const videoColumnRef = useRef<HTMLDivElement | null>(null);
   const [pinnedVideoHeight, setPinnedVideoHeight] = useState<number | null>(null);
@@ -249,22 +211,7 @@ export function FalLivePage() {
             onClick={() => setChatExpanded((expanded) => !expanded)}
           />
           <MessageSquare className="pointer-events-none relative z-10 size-4 shrink-0 text-primary" />
-          <span className="pointer-events-none relative z-10 flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLLBOX</span>
-          {/* Relay connection state, visible on ALL viewports — phones
-              previously had zero feedback ("is it connected?"). Colors:
-              green = relay live, amber pulse = joining (PoW + key wrap),
-              red = join error, gray = idle/disconnected. */}
-          <span
-            aria-label={`Trollbox relay: ${chatStatus.phase}`}
-            role="status"
-            className={cn(
-              "pointer-events-none relative z-10 size-2 shrink-0 rounded-full",
-              chatStatus.phase === "ready" && "bg-success",
-              chatStatus.phase === "joining" && "animate-pulse bg-amber-500",
-              chatStatus.phase === "error" && "bg-destructive",
-              chatStatus.phase === "idle" && "bg-muted-foreground/40",
-            )}
-          />
+          <span className="pointer-events-none relative z-10 flex-1 truncate text-xs font-bold tracking-[0.16em]">TROLL₿OX</span>
           {user && (
             <Button
               variant="ghost"
@@ -280,19 +227,12 @@ export function FalLivePage() {
             {chatExpanded ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
           </span>
         </div>
-        <div className={cn("min-h-0 flex-1", !chatExpanded && "hidden lg:flex")}>
-          {user ? (
-            // Authed: the real encrypted 2140 Trollbox scroll client, locked to
-            // the Trollbox room. The compact parent header is the only chrome
-            // shown in this embedded view.
-            <BaoScrollChat
-              lockedRoom={BAO_TROLLBOX_ROOM}
-              embedded
-              onStatus={setChatStatus}
-            />
-          ) : (
-            <ChatGate />
-          )}
+        <div className={cn("min-h-0 flex-1 overflow-hidden", !chatExpanded && "hidden lg:flex lg:flex-col")}>
+          {/* The single shared ₿AO community chat (relay.bao.fund). Guests see
+              and post in the public landing room; signing in unlocks the rest. */}
+          <ChatProvider>
+            <ChatPanel embedded defaultRoomName={DEFAULT_LANDING_ROOM} />
+          </ChatProvider>
         </div>
       </aside>
     </main>

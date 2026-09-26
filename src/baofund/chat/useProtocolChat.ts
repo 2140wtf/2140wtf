@@ -23,7 +23,9 @@ import type { Mention } from '@/baofund/community/mention.js';
 import { aggregateScroll, type ScrollViews } from '@/baofund/community/aggregate.js';
 import type { MergedMessage } from '@/baofund/community/merge.js';
 import type { RosterEntry } from '@/baofund/community/presence.js';
-import { getPublicKey } from '@/baofund/community/crypto.js';
+import { deriveScrollWrapperKey, getPublicKey, scrollScope } from '@/baofund/community/crypto.js';
+import { REDACTION_LIST, redactDTag } from '@/baofund/community/kinds.js';
+import { decodeRedactionListEvent } from '@/baofund/community/redaction.js';
 import type { NostrEvent } from '@/baofund/community/crypto.js';
 import { TypingSignal } from '@/baofund/community/typing.js';
 import {
@@ -41,7 +43,9 @@ import {
   provisionFundRoom,
   fetchPublicRooms,
   DEFAULT_LANDING_ROOM,
+  GUEST_ROOM_SCOPE,
 } from '../lib/baoCommunity';
+import { normalizeIdentity } from '../lib/activeIdentity';
 import { fetchFundraiser, type SignerLike } from '../lib/baoFundraising';
 import { createCredentialRequest, finalizeCredential } from '@/baofund/community/credential.js';
 import type { AdmissionProofs } from '@/baofund/community/admission.js';
@@ -65,6 +69,8 @@ import {
   roleEditionFilter,
   hasPerm,
   buildRoleEditionEvent,
+  isControlEditionForRoom,
+  mergeControlEventCache,
   type FoldedRoles,
   type EditionSpec,
   type Perm,
@@ -80,7 +86,7 @@ import {
 } from './banEditions';
 import { buildMemberClaim, verifyMemberClaim, type MemberIdentity } from './memberIdentity';
 import { probeRelayStorage } from '../lib/relayStorageProbe';
-import { nip98Header } from '../lib/fundHttp';
+import { fundApiOrigin, nip98AuthHeaders } from '../lib/fundHttp';
 import { fetchIsChatAdmin } from './useIsChatAdmin';
 import { validateRoomInvite } from '../lib/roomInvite';
 
@@ -103,7 +109,12 @@ export interface UseProtocolChatReturn {
   selectRoom(roomId: string, opts?: { force?: boolean }): Promise<void>;
   /** Close every live session and clear room-scoped state (sign-out). */
   resetSessions(): void;
-  sendMessage(text: string): Promise<void>;
+  /** Send a chat message. Resolves false when the payload was REJECTED
+   *  before publishing (empty, over MAX_MESSAGE_CHARS, no room joined) - the
+   *  composer must keep the draft on false instead of silently clearing it.
+   *  True means the message was accepted for publishing (an error may still
+   *  surface if the relay refuses it). */
+  sendMessage(text: string): Promise<boolean>;
   /** Post a text message to a SPECIFIC joined room, bypassing selection.
    *  Closure-safe for async flows (a release finalizing while the user has
    *  navigated to another room): resolves the live session from liveRef at
@@ -120,8 +131,9 @@ export interface UseProtocolChatReturn {
   toggleReaction(msgId: string, emoji: string): Promise<void>;
   /** Retract one of this author's own messages. */
   retractMessage(msgId: string): Promise<void>;
-  /** Reply to a message (thread root). */
-  replyToMessage(replyTo: string, text: string): Promise<void>;
+  /** Reply to a message (thread root). Same acceptance contract as
+   *  sendMessage: false = rejected before publishing (keep the draft). */
+  replyToMessage(replyTo: string, text: string): Promise<boolean>;
   /** This session's author pubkey (throwaway per-room key) - lets the UI
    *  only offer retract for the user's OWN messages. */
   selfAuthor: string | null;
@@ -134,8 +146,8 @@ export interface UseProtocolChatReturn {
   importCampaign(fundraiserId: string, title: string, signer: SignerLike): Promise<FundRoomMeta | null>;
   createRoom(name: string, opts: { policy?: 'open' | 'cap-pow' | 'invite'; audience?: 'human' | 'agent'; audienceMode?: 'humans' | 'agents' | 'both'; label?: string }, signer: SignerLike): Promise<void>;
   removeRoom(roomId: string): void;
-  /** Ensure the default public rooms (Troll₿ox + Public Chat) exist and
-   *  optionally land in Troll₿ox (skipLanding=true after an invite join).
+  /** Ensure the default public rooms (Trollbox + Public Chat) exist and
+   *  optionally land in Trollbox (skipLanding=true after an invite join).
    *  `onlyRoomName` restricts the import to one room (signed-out guests get
    *  the public landing room only - never Public Chat or stored rooms). */
   ensureDefaultRooms(signer: SignerLike, skipLanding: boolean, opts?: { onlyRoomName?: string }): Promise<void>;
@@ -201,6 +213,13 @@ interface LiveRoom {
   /** Roles spec §4: live subscription for kind-3308 control editions
    *  (vsk:1 roles AND vsk:4 banlist - one subscription, two folds). */
   unsubRoles?: () => void;
+  /** Governance redaction list (kind 31146) live subscription. Redactions
+   *  only land on the next scroll read, so a quiet room must refetch when a
+   *  verified governance redaction document arrives. */
+  unsubRedactions?: () => void;
+  /** Last redaction event id folded for this session (replay dedupe: a relay
+   *  re-sending the same replaceable document must not re-trigger reads). */
+  lastRedactionEventId?: string;
   /** This room session's secret key - the only key that can be named in a
    *  roster/banlist, hence the only one that may sign control editions. */
   authorSecretKey: Uint8Array;
@@ -228,11 +247,18 @@ export interface UseProtocolChatOptions {
    *  tests). Presence of an identity never requires any human attestation -
    *  it is a key-control claim only. */
   resolveMemberIdentity?: (roomId: string) => Promise<MemberIdentity | null>;
+  /** Signed-in identity that OWNS the persisted room list. The room list is
+   *  per-identity (audit run-2 rooms-storage-global): a later identity must
+   *  not see the previous identity's private/campaign join links. Guests
+   *  (null/absent) get a per-browser guest scope instead. */
+  identityPubkey?: string | null;
 }
 
 export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolChatReturn {
   const resolveMemberIdentity = opts.resolveMemberIdentity;
-  const [rooms, setRooms] = React.useState<FundRoomMeta[]>(() => loadFundRooms());
+  // Signed-in pubkey or the guest scope - never another identity's slot.
+  const roomsScope = normalizeIdentity(opts.identityPubkey) ?? GUEST_ROOM_SCOPE;
+  const [rooms, setRooms] = React.useState<FundRoomMeta[]>(() => loadFundRooms(localStorage, roomsScope));
   const [messages, setMessages] = React.useState<ChatItem[]>([]);
   const [typing, setTyping] = React.useState<TypingState>({ authors: [] });
   const [roster, setRoster] = React.useState<Map<string, RosterEntry>>(new Map());
@@ -311,14 +337,50 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
   const rolesByRoomRef = React.useRef<Map<string, FoldedRoles>>(new Map());
   const bansByRoomRef = React.useRef<Map<string, FoldedBanlist>>(new Map());
   const controlEventsRef = React.useRef<Map<string, NostrEvent[]>>(new Map());
+  // Per-room id set for the raw control cache: dedupe is O(1) instead of a
+  // linear scan, and the set is rebuilt when the cache is trimmed so it can
+  // never outgrow the bounded array.
+  const controlEventIdsRef = React.useRef<Map<string, Set<string>>>(new Map());
   // Per-room control metadata captured at join (fold authority anchors) +
   // the scoped fold applier, so publishers can re-fold optimistically.
   const controlMetaRef = React.useRef<Map<string, { founder: string; epoch: number }>>(new Map());
   const applyControlRef = React.useRef<Map<string, (events: NostrEvent[]) => void>>(new Map());
 
+  // All room persistence is scoped to THIS identity's slot (or the guest
+  // slot). The helpers below are the only load/save entry points so no call
+  // site can accidentally fall back to the legacy global key.
+  const loadRooms = React.useCallback(
+    () => loadFundRooms(localStorage, roomsScope),
+    [roomsScope],
+  );
   const persist = React.useCallback((next: FundRoomMeta[]) => {
     setRooms(next);
-    saveFundRooms(next);
+    saveFundRooms(next, localStorage, roomsScope);
+  }, [roomsScope]);
+  const addRoom = React.useCallback(
+    (room: FundRoomMeta) => addFundRoom(room, localStorage, roomsScope),
+    [roomsScope],
+  );
+  const removeRoomFromStore = React.useCallback(
+    (roomId: string) => removeFundRoom(roomId, localStorage, roomsScope),
+    [roomsScope],
+  );
+
+  /**
+   * Merge control editions (kind 3308) into a room's bounded raw cache:
+   * id-dedupe, `MAX_CONTROL_EVENTS` newest-first bound, never unbounded. The
+   * caller passes only editions that passed `isControlEditionForRoom` (valid,
+   * signed, this room + epoch); the folds re-check authority.
+   */
+  const mergeControlEvents = React.useCallback((roomId: string, incoming: NostrEvent[]): NostrEvent[] => {
+    const merged = mergeControlEventCache(
+      controlEventsRef.current.get(roomId) ?? [],
+      controlEventIdsRef.current.get(roomId) ?? new Set<string>(),
+      incoming,
+    );
+    controlEventsRef.current.set(roomId, merged.events);
+    controlEventIdsRef.current.set(roomId, merged.ids);
+    return merged.events;
   }, []);
 
   const closeRoom = React.useCallback((roomId: string) => {
@@ -329,6 +391,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     live.unsubTyping?.();
     live.unsubMentions?.();
     live.unsubRoles?.();
+    live.unsubRedactions?.();
     for (const unsub of live.reactionSubs.values()) unsub();
     live.reactionSubs.clear();
     live.typingSignal?.dispose();
@@ -340,6 +403,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     controlMetaRef.current.delete(roomId);
     applyControlRef.current.delete(roomId);
     controlEventsRef.current.delete(roomId);
+    controlEventIdsRef.current.delete(roomId);
     rolesByRoomRef.current.delete(roomId);
     bansByRoomRef.current.delete(roomId);
     memberIdsRef.current.delete(roomId);
@@ -521,8 +585,13 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     }
   }, []);
 
-  const activateRoom = React.useCallback(async (meta: FundRoomMeta, opts?: { proofs?: AdmissionProofs; force?: boolean }) => {
-    if (!opts?.force && selectionRef.current.roomId === meta.roomId && liveRef.current.has(meta.roomId)) return;
+  /** Join (or re-join, `force`) a room. Resolves TRUE when the room is live
+   *  under this call's generation, FALSE when the join failed, was refused
+   *  (ban/expired/wrong relay) or was superseded by a newer selection. Callers
+   *  that PERSIST a room (invite import) gate persistence on the result - a
+   *  validated invite whose admission fails must not leave a dead room row. */
+  const activateRoom = React.useCallback(async (meta: FundRoomMeta, opts?: { proofs?: AdmissionProofs; force?: boolean }): Promise<boolean> => {
+    if (!opts?.force && selectionRef.current.roomId === meta.roomId && liveRef.current.has(meta.roomId)) return true;
     // Identity change: drop the old session so the join re-derives the
     // per-room member key under the new login (otherwise a guest burner or a
     // signed-out member keeps posting under the previous identity).
@@ -562,7 +631,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       });
       if (generation !== selectionRef.current.generation) {
         conn.close();
-        return;
+        return false;
       }
       const live: LiveRoom = { generation, abort: new AbortController(), conn, session, reactionSubs: new Map(), authorSecretKey: joined.authorSecretKey };
       liveRef.current.set(meta.roomId, live);
@@ -658,6 +727,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // tier). Failures NEVER break chat - the role surface degrades to
       // status 'none' and a console note.
       controlEventsRef.current.set(meta.roomId, []);
+      controlEventIdsRef.current.set(meta.roomId, new Set());
       controlMetaRef.current.set(meta.roomId, { founder: joined.governance, epoch: joined.epoch });
       // Row E: the capability doc's epoch is the JOINED room's current epoch.
       // The probe runs pre-join, so record it here and patch an already
@@ -730,9 +800,12 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       if (typeof live.conn.query === 'function') {
         try {
           const roleEvents = await live.conn.query(roleEditionFilter(meta.roomId), 5_000);
-          if (!isCurrent(live)) return;
-          controlEventsRef.current.set(meta.roomId, roleEvents);
-          applyControlFold(roleEvents);
+          if (!isCurrent(live)) return false;
+          // Cache only valid, signed, this-room/this-epoch editions: any
+          // writer can publish 3308 for a known room id, so the raw re-fold
+          // input must not carry foreign junk (bounded + id-deduped).
+          const accepted = roleEvents.filter((event) => isControlEditionForRoom(event, meta.roomId, joined.epoch));
+          applyControlFold(mergeControlEvents(meta.roomId, accepted));
         } catch (err) {
           console.warn('role fold skipped (query failed):', errorMessage(err));
         }
@@ -740,16 +813,49 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       if (typeof live.conn.subscribe === 'function') {
         live.unsubRoles = live.conn.subscribe(roleEditionFilter(meta.roomId), (event: NostrEvent) => {
           if (!isCurrent(live)) return;
-          const events = controlEventsRef.current.get(meta.roomId) ?? [];
-          if (events.some((e) => e.id === event.id)) return;
-          const next = [...events, event];
-          controlEventsRef.current.set(meta.roomId, next);
+          if (!isControlEditionForRoom(event, meta.roomId, joined.epoch)) return;
           try {
-            applyControlFold(next);
+            applyControlFold(mergeControlEvents(meta.roomId, [event]));
           } catch (err) {
             console.warn('control re-fold failed:', errorMessage(err));
           }
         });
+      }
+      // Governance redactions (kind 31146, spec §3): the redaction list is
+      // read by read(), so a redaction published while the room is quiet
+      // lingered on screen until the next join/send/reaction read. Follow the
+      // room's redaction documents live and refetch the scroll on a VERIFIED
+      // governance event. Fail closed on malformed/foreign events: decode
+      // verifies the signature, the governance author and the room's opaque
+      // scope, and anything else is ignored (never a state change, never a
+      // stream crash). Same-event replays are deduped by event id.
+      if (typeof live.conn.subscribe === 'function') {
+        try {
+          const redactionScope = scrollScope(deriveScrollWrapperKey(joined.encKey), meta.roomId);
+          live.unsubRedactions = live.conn.subscribe(
+            { kinds: [REDACTION_LIST], '#d': [redactDTag(redactionScope)] },
+            (event: NostrEvent) => {
+              if (!isCurrent(live)) return;
+              if (event?.id && event.id === live.lastRedactionEventId) return;
+              try {
+                decodeRedactionListEvent(
+                  event,
+                  { roomId: meta.roomId, encKey: joined.encKey, scope: redactionScope },
+                  joined.governance,
+                );
+              } catch {
+                return; // malformed/foreign: no state change
+              }
+              live.lastRedactionEventId = event.id;
+              void refreshScrollRef.current(live).catch((err) => {
+                if (isCurrent(live)) setError(errorMessage(err));
+              });
+            },
+          );
+        } catch {
+          // Missing/undecodable scope key material: skip the live lane.
+          // read() still applies redactions on the next join/send read.
+        }
       }
       // §6.1 admission enforcement: a banlist entry for THIS session key
       // refuses the join (deny-only list, consumed at the door). Checked
@@ -774,20 +880,27 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // message via ensureReactionSubs (driven by refreshScroll).
       // Read the scroll (receipts + history + views + reaction subs).
       await refreshScroll(live);
+      return true;
     } catch (err) {
       if (generation === selectionRef.current.generation) {
         closeRoom(meta.roomId);
-        // The door never opened: live envelopes that raced the admission
-        // check (they can land while the control query is awaited) must not
-        // remain rendered after a rejected join.
+        // The door never opened: the failed room is NOT the selection. Drop
+        // the selection too (the old code left the UI pointing at a room that
+        // is not joined - and, for an unpersisted invite, not even listed).
+        selectionRef.current.roomId = null;
+        setSelectedRoomId(null);
+        // Live envelopes that raced the admission check (they can land while
+        // the control query is awaited) must not remain rendered after a
+        // rejected join.
         setMessages([]);
         setTyping({ authors: [] });
         setRoster(new Map());
         setMentions([]);
         setError(errorMessage(err));
       }
+      return false;
     }
-  }, [refreshScroll, closeRoom, isCurrent, measureCapabilities, resolveMemberIdentity, mergeMemberClaim]);
+  }, [refreshScroll, closeRoom, isCurrent, measureCapabilities, resolveMemberIdentity, mergeMemberClaim, mergeControlEvents]);
 
   const selectRoom = React.useCallback(async (roomId: string, opts?: { force?: boolean }) => {
     const meta = rooms.find((room) => room.roomId === roomId);
@@ -797,16 +910,16 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     setMentionUnread((prev) => (prev.get(roomId) ? new Map([...prev.entries()].filter(([id]) => id !== roomId)) : prev));
   }, [rooms, activateRoom]);
 
-  const sendMessage = React.useCallback(async (text: string) => {
+  const sendMessage = React.useCallback(async (text: string): Promise<boolean> => {
     const trimmed = text.trim();
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0) return false;
     if (trimmed.length > MAX_MESSAGE_CHARS) {
       setError(`Message too long - max ${MAX_MESSAGE_CHARS} characters.`);
-      return;
+      return false;
     }
-    if (!selectedRoomId) return;
+    if (!selectedRoomId) return false;
     const live = liveRef.current.get(selectedRoomId);
-    if (!live) { setError('room not joined'); return; }
+    if (!live) { setError('room not joined'); return false; }
     setIsSending(true);
     setError(null);
     // Optimistic bubble with a client-side temp id: the message must remain
@@ -832,7 +945,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
             : prev.map(m => m.id === tempId ? { ...m, id: envelope.msg_id, author: envelope.author } : m));
         },
       });
-      if (!isCurrent(live)) return;
+      if (!isCurrent(live)) return true; // publish was attempted; not a rejection
       if (tracked.state === 'timeout') {
         setError('message not confirmed by scribes yet');
       } else {
@@ -849,6 +962,8 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     } finally {
       if (isCurrent(live)) setIsSending(false);
     }
+    // Accepted for publishing (the optimistic bubble carries the outcome).
+    return true;
   }, [selectedRoomId, applyViews, ensureReactionSubs, isCurrent]);
 
   /** Best-effort post to a specific joined room (release notes from the fund
@@ -928,26 +1043,29 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     }
   }, [selectedRoomId, applyViews, isCurrent]);
 
-  const replyToMessage = React.useCallback(async (replyTo: string, text: string) => {
+  const replyToMessage = React.useCallback(async (replyTo: string, text: string): Promise<boolean> => {
     const trimmed = text.trim();
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0) return false;
     if (trimmed.length > MAX_MESSAGE_CHARS) {
       setError(`Message too long - max ${MAX_MESSAGE_CHARS} characters.`);
-      return;
+      return false;
     }
-    if (!selectedRoomId) return;
+    if (!selectedRoomId) return false;
     const live = liveRef.current.get(selectedRoomId);
-    if (!live) { setError('room not joined'); return; }
+    if (!live) { setError('room not joined'); return false; }
     setIsSending(true);
     setError(null);
+    let accepted = false;
     try {
       await live.session.reply(replyTo, trimmed);
+      accepted = true;
       await refreshScroll(live);
     } catch (err) {
       if (isCurrent(live)) setError(errorMessage(err));
     } finally {
       if (isCurrent(live)) setIsSending(false);
     }
+    return accepted;
   }, [selectedRoomId, refreshScroll, isCurrent]);
 
   const importLink = React.useCallback(async (link: string, name?: string) => {
@@ -971,20 +1089,34 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     }
     try {
       const meta = roomMetaFromLink(link.trim(), name);
-      await activateRoom(meta);
-      persist(addFundRoom(meta));
+      // Fail closed on ADMISSION (bug-hunt 2026-09-24): activateRoom swallows
+      // its error into `error` state, so the old code persisted the room even
+      // when the join was refused - a permanent dead row contradicting the
+      // documented "nothing is stored unless ... the join activates" rule.
+      if (!(await activateRoom(meta))) return;
+      // Durable extras already stored for THIS roomId survive a re-import of
+      // the bare link: `addFundRoom` replaces by roomId, and the agent-lane
+      // link / campaign ref have no other durable home (owner rules). A
+      // different roomId cannot collide - it is link-derived.
+      const existing = loadRooms().find((r) => r.roomId === meta.roomId);
+      const merged: FundRoomMeta = {
+        ...meta,
+        ...(existing?.agentLink ? { agentLink: existing.agentLink } : {}),
+        ...(existing?.fundraiserId ? { fundraiserId: existing.fundraiserId } : {}),
+      };
+      persist(addRoom(merged));
       // Campaign links carry the machine label `fund:<frId>` so the room can
       // be grouped; a JOINER should see the campaign's name instead of the
       // raw ref (owner 2026-09-22). Best effort, after the join so naming can
       // never block entry.
-      const fundLabel = /^fund:(fr_[0-9a-z]+)$/i.exec(meta.name);
+      const fundLabel = /^fund:(fr_[0-9a-z]+)$/i.exec(merged.name);
       if (fundLabel) {
         void (async () => {
           try {
             const { fundraiser } = await fetchFundraiser(fundLabel[1]);
             const title = typeof fundraiser.title === 'string' ? fundraiser.title.trim() : '';
             if (!title) return;
-            persist(addFundRoom({ ...meta, name: `${title} Room` }));
+            persist(addRoom({ ...merged, name: `${title} Room` }));
           } catch {
             /* keep the raw label - the room still works */
           }
@@ -993,7 +1125,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     } catch (err) {
       setError(errorMessage(err));
     }
-  }, [persist, activateRoom]);
+  }, [addRoom, persist, activateRoom, loadRooms]);
 
   const importCampaign = React.useCallback(async (fundraiserId: string, title: string, signer: SignerLike) => {
     setError(null);
@@ -1032,10 +1164,13 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       }
     }
     const meta: FundRoomMeta = { ...roomMetaFromLink(status.link, `${title} Room`), fundraiserId };
-    persist(addFundRoom(meta));
-    await activateRoom(meta, { proofs });
+    // Persist only after admission (same fail-closed rule as importLink): a
+    // refused/expired join must not add a dead room nor report success to the
+    // caller (App selects the returned roomId).
+    if (!(await activateRoom(meta, { proofs }))) return null;
+    persist(addRoom(meta));
     return meta;
-  }, [persist, activateRoom]);
+  }, [addRoom, persist, activateRoom]);
 
   const createRoom = React.useCallback(async (
     name: string,
@@ -1056,12 +1191,12 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // Persist the SEPARATE agent link when the room has one (humans-only
       // rooms never do) - the room row is the only durable place for it.
       const full = result.agentLink ? { ...meta, agentLink: result.agentLink } : meta;
-      persist(addFundRoom(full));
+      persist(addRoom(full));
       await importLink(result.link, name);
     } catch (err) {
       setError(errorMessage(err));
     }
-  }, [importLink, persist]);
+  }, [addRoom, importLink, persist]);
 
   const removeRoom = React.useCallback((roomId: string) => {
     // Invalidate any in-flight storage probe for the removed room: a verdict
@@ -1091,8 +1226,8 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     closeRoom(roomId);
     // A removed room's badge must not survive to a re-import.
     setMentionUnread((prev) => (prev.has(roomId) ? new Map([...prev].filter(([id]) => id !== roomId)) : prev));
-    persist(removeFundRoom(roomId));
-  }, [closeRoom, persist]);
+    persist(removeRoomFromStore(roomId));
+  }, [closeRoom, persist, removeRoomFromStore]);
 
   // ─── vsk:4 banlist affordances (deny-only; the fold is the gate) ────────
   /** Founder-or-ban-perm check against the room's CURRENT role fold, plus
@@ -1141,9 +1276,10 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       ? buildBanLiftEvent(live.authorSecretKey, { roomId, epoch: meta.epoch, target })
       : buildBanEditionEvent(live.authorSecretKey, { roomId, epoch: meta.epoch, target, ...(reason ? { reason } : {}), ...(expiration !== undefined ? { expiration } : {}) });
     await live.conn.publish(event);
-    // Optimistic refold; the live subscription reconciles with the relay.
-    applyControlRef.current.get(roomId)?.([...(controlEventsRef.current.get(roomId) ?? []), event]);
-  }, [mayBan, mayKick]);
+    // Optimistic refold through the bounded cache; the live subscription
+    // reconciles with the relay.
+    applyControlRef.current.get(roomId)?.(mergeControlEvents(roomId, [event]));
+  }, [mayBan, mayKick, mergeControlEvents]);
 
   // ─── Room settings: role management (owner spec 2026-09-14) ─────────────
   /** Who may publish a vsk:1 role edition from THIS session: the founder
@@ -1211,9 +1347,10 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     };
     const event = buildRoleEditionEvent(live.authorSecretKey, mutate(base));
     await live.conn.publish(event);
-    // Optimistic refold; the live subscription reconciles with the relay.
-    applyControlRef.current.get(roomId)?.([...(controlEventsRef.current.get(roomId) ?? []), event]);
-  }, []);
+    // Optimistic refold through the bounded cache; the live subscription
+    // reconciles with the relay.
+    applyControlRef.current.get(roomId)?.(mergeControlEvents(roomId, [event]));
+  }, [mergeControlEvents]);
 
   /** The room's founder (governance) key from the control-fold metadata. */
   const roomFounder = React.useCallback((roomId: string): string | null => {
@@ -1338,63 +1475,75 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // the canonical one forever, because the import skips known roomIds -
       // which is why signed-in browsers kept showing the old name while
       // signed-out guests saw the new one.
-      const stored = new Map(loadFundRooms().map((r) => [r.roomId, r]));
+      const stored = new Map(loadRooms().map((r) => [r.roomId, r]));
       let changed = false;
       for (const room of pub) {
         const meta = roomMetaFromLink(room.link, room.name);
         const existing = stored.get(room.roomId);
         if (existing) {
           if (existing.name !== meta.name || existing.link !== meta.link) {
-            persist(addFundRoom({ ...meta, joinedAt: existing.joinedAt }));
+            persist(addRoom({ ...meta, joinedAt: existing.joinedAt }));
             changed = true;
           }
           continue;
         }
-        persist(addFundRoom(meta));
+        persist(addRoom(meta));
         changed = true;
       }
       void changed;
       if (!skipLanding && landing) {
-        const fresh = loadFundRooms().find((r) => r.roomId === landing);
+        const fresh = loadRooms().find((r) => r.roomId === landing);
         // activateRoom takes the meta directly: selectRoom's closure would
         // still hold the pre-import rooms state on a fresh browser, so the
         // landing silently no-opped for first-time guests.
         if (fresh) void activateRoom(fresh);
       }
     } catch { /* defaults are best-effort */ }
-  }, [activateRoom, persist]);
+  }, [activateRoom, addRoom, loadRooms, persist]);
 
   /** Cross-app room parity: the same identity sees its MARKET rooms on
-   *  bao.fund / app.bao.network / bao.network. The markets API is another
-   *  origin, so the call rides Authorization (its CORS allowlist does not
-   *  expose X-Nostr-Auth) and each link imports exactly like an invite:
+   *  bao.fund / app.bao.network / bao.network. Each source goes through
+   *  `nip98AuthHeaders`, which picks the transport PER URL: the markets API
+   *  is another origin (Authorization; its CORS allowlist does not expose
+   *  X-Nostr-Auth), while the fund API source is a `/fund-api` call that is
+   *  same-origin on the gated hosts and must ride X-Nostr-Auth or the nginx
+   *  Basic gate strips it. Each link imports exactly like an invite:
    *  roomMetaFromLink + saveFundRooms. Best-effort by design. */
   const syncExternalRooms = React.useCallback(async (signer: SignerLike) => {
     try {
-      const url = 'https://relay.bao.network/bao-api/v1/chat/my-rooms';
-      const header = await nip98Header(signer, url, 'GET');
-      const res = await fetch(url, { headers: { Authorization: header } });
-      if (!res.ok) return;
-      const payload = (await res.json()) as { data?: { rooms?: { marketId?: string; title?: string; link?: string }[] } };
-      const list = payload?.data?.rooms ?? [];
-      const existing = loadFundRooms();
+      // Two sources, one import path: the markets API lists the caller's
+      // market rooms (bao_flash), and the FUND API lists their campaign rooms
+      // PLUS the milestone-market rooms the fund provisioned (those live in
+      // bao_fund, which the markets API cannot see).
+      const sources = [
+        'https://relay.bao.network/bao-api/v1/chat/my-rooms',
+        `${fundApiOrigin()}/v1/chat/fund-rooms`,
+      ];
+      const existing = loadRooms();
       const known = new Set(existing.map((r) => r.roomId));
       const next = [...existing];
-      for (const row of list) {
-        if (!row?.link || !row?.title) continue;
+      for (const url of sources) {
         try {
-          const meta = roomMetaFromLink(String(row.link), String(row.title));
-          if (known.has(meta.roomId)) continue;
-          known.add(meta.roomId);
-          next.push(meta);
-        } catch { /* malformed link: skip */ }
+          const res = await fetch(url, { headers: await nip98AuthHeaders(signer, url, 'GET') });
+          if (!res.ok) continue;
+          const payload = (await res.json()) as { data?: { rooms?: { marketId?: string; title?: string; link?: string }[] } };
+          for (const row of payload?.data?.rooms ?? []) {
+            if (!row?.link || !row?.title) continue;
+            try {
+              const meta = roomMetaFromLink(String(row.link), String(row.title));
+              if (known.has(meta.roomId)) continue;
+              known.add(meta.roomId);
+              next.push(meta);
+            } catch { /* malformed link: skip */ }
+          }
+        } catch { /* one source failing never blocks the other */ }
       }
       if (next.length !== existing.length) {
-        saveFundRooms(next);
+        saveFundRooms(next, localStorage, roomsScope);
         setRooms(next);
       }
     } catch { /* external rooms are a convenience, never a blocker */ }
-  }, []);
+  }, [loadRooms, roomsScope]);
 
   const resetSessions = React.useCallback(() => {
     selectionRef.current.generation += 1;
@@ -1426,9 +1575,24 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     probeGenerationRef.current = new Map();
     probeInFlightRef.current.clear();
     setCapabilityProbeInFlight(false);
+    // Raw control caches are account-scoped: no edition survives a sign-out.
+    controlEventsRef.current = new Map();
+    controlEventIdsRef.current = new Map();
     setRoles(new Map());
     setBans(new Map());
   }, [closeRoom]);
+
+  // Identity change: the room list is identity-scoped, so switch to the new
+  // scope's list and drop every session/account-scoped fold. Without this a
+  // later identity would keep seeing (and could re-join) the previous
+  // identity's private room links (audit run-2 rooms-storage-global).
+  const lastRoomsScopeRef = React.useRef(roomsScope);
+  React.useEffect(() => {
+    if (lastRoomsScopeRef.current === roomsScope) return;
+    lastRoomsScopeRef.current = roomsScope;
+    resetSessions();
+    setRooms(loadFundRooms(localStorage, roomsScope));
+  }, [roomsScope, resetSessions]);
 
   return {
     rooms, messages, typing, roster, mentions, selectedRoomId,

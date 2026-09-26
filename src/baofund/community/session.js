@@ -406,9 +406,33 @@ export class RoomSession {
      */
     subscribeReactions(msgId, onReaction) {
         const target = msgId.toLowerCase();
+        return this.subscribeReactionsAll((r) => {
+            if (r.target !== target)
+                return;
+            onReaction(r);
+        });
+    }
+    /**
+     * Live-subscribe to EVERY reaction in this room from ONE subscription.
+     * Each delivered `ReactionEvent` carries its `target` msg_id, so a host
+     * rendering a whole timeline needs ONE unsubscribe per room instead of a
+     * per-msg_id subscription map (which consumers had to cap, dropping
+     * reaction delivery for the oldest visible messages).
+     *
+     * Additive: `subscribeReactions` keeps its exact per-target API and now
+     * delegates here. Both ride the same ref-counted `subscribeLive` REQ, so
+     * the verification/decoding guarantees are identical — outer signature
+     * verification, routing-tag + envelope room binding, inner-vs-outer author
+     * equality, current/previous-epoch grace, and per-handler error isolation.
+     * Payload parsing is the same `parseReaction` (non-reaction payloads,
+     * malformed/oversized emoji and non-msg_id targets are dropped silently).
+     * Removals (`remove: true`) are delivered like adds — folding is the
+     * consumer's job, exactly as in the per-message path.
+     */
+    subscribeReactionsAll(onReaction) {
         return this.subscribeLive((envelope, event) => {
             const reaction = parseReaction(envelope.payload);
-            if (!reaction || reaction.target !== target)
+            if (!reaction)
                 return;
             onReaction({ ...reaction, envelope, event, roomId: this.joined.roomId, from: envelope.author });
         });

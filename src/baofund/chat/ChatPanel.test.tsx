@@ -11,6 +11,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const ROOM = { roomId: 'r1', name: 'Troll₿ox', link: 'https://app.bao.network/chat/join#x', shielded: false, joinedAt: 0 };
 
+const h = vi.hoisted(() => ({ mentionUnread: new Map<string, number>() }));
+
 vi.mock('@/baofund/community/agents.js', () => ({
   roomLinkPrivacy: () => ({ shielded: false }),
 }));
@@ -36,7 +38,7 @@ vi.mock('./ChatContext', () => ({
     selfAuthor: null,
     isSending: false,
     error: null,
-      mentionUnread: new Map(),
+    mentionUnread: h.mentionUnread,
     importLink: vi.fn(async () => undefined),
     createRoom: vi.fn(async () => undefined),
     removeRoom: vi.fn(),
@@ -69,6 +71,7 @@ beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   // jsdom has no Element.scrollTo - the panel auto-scrolls on fullscreen.
   Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
+  h.mentionUnread = new Map();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -107,4 +110,26 @@ it('embedded chat offers the fullscreen toggle and expands to the overlay', asyn
 it('standalone chat keeps the same toggle', async () => {
   await render({});
   expect(container.querySelector('[aria-label="Toggle fullscreen chat"]')).toBeTruthy();
+});
+
+it('keeps the host surface title (fund app) and restores it on unmount; mentions only', async () => {
+  // The fund host ships "₿AO Fund" as its title. The chat must not relabel
+  // the page to a hardcoded "₿AO" on mount, must prefix MENTION counts, and
+  // must restore the host title when it unmounts (tab switch).
+  document.title = '₿AO Fund';
+  h.mentionUnread = new Map([['r1', 2]]);
+  const localContainer = document.createElement('div');
+  document.body.append(localContainer);
+  const localRoot = createRoot(localContainer);
+  await act(async () => localRoot.render(<ChatPanel />));
+  expect(document.title).toBe('(2) ₿AO Fund');
+  await act(async () => localRoot.unmount());
+  expect(document.title).toBe('₿AO Fund');
+  localContainer.remove();
+});
+
+it('does not relabel the host surface when there are no mentions', async () => {
+  document.title = '₿AO Fund';
+  await render({});
+  expect(document.title).toBe('₿AO Fund');
 });

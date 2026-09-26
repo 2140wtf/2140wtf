@@ -6,7 +6,7 @@
 // mutations-never-auto-retry rule.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fundApiOrigin, fundFetch, nip98Header, FundHttpError } from './fundHttp';
+import { fundApiOrigin, fundFetch, nip98AuthHeaders, FundHttpError } from './fundHttp';
 
 const signer = {
   signEvent: vi.fn(async (e: unknown) => e),
@@ -24,6 +24,10 @@ function bareJson(status: number, body: unknown) {
 }
 
 beforeEach(() => {
+  // This suite asserts the default (no canonical override) transport. 2140.wtf
+  // sets VITE_BAO_FUND_API_SIGN_ORIGIN in .env.local for the dev /fund-api
+  // proxy; the transport's canonical-u behavior has its own coverage below.
+  vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', '');
   vi.stubEnv('VITE_BAO_FUND_API_URL', PROXY);
 });
 afterEach(() => {
@@ -43,10 +47,20 @@ describe('fundApiOrigin / base resolution', () => {
   });
 });
 
+/** Whichever auth header the boundary chose. */
+function authValue(headers: Record<string, string>): string {
+  return headers['X-Nostr-Auth'] ?? headers.Authorization ?? '';
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 describe('nip98Header', () => {
   it('signs kind 27235 with u/method/nonce and NO payload tag for bodyless calls', async () => {
-    const header = await nip98Header(signer, 'https://x/v1/y', 'get');
-    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
+    const headers = await nip98AuthHeaders(signer, 'https://x/v1/y', 'get');
+    const ev = JSON.parse(atob(authValue(headers).slice('Nostr '.length)));
     expect(ev.kind).toBe(27235);
     expect(ev.tags).toContainEqual(['u', 'https://x/v1/y']);
     expect(ev.tags).toContainEqual(['method', 'GET']);
@@ -55,14 +69,35 @@ describe('nip98Header', () => {
   });
 
   it('adds the sha256 payload tag for body requests', async () => {
-    const header = await nip98Header(signer, 'https://x/v1/y', 'POST', '{"a":1}');
-    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
+    const headers = await nip98AuthHeaders(signer, 'https://x/v1/y', 'POST', '{"a":1}');
+    const ev = JSON.parse(atob(authValue(headers).slice('Nostr '.length)));
     const payload = ev.tags.find(([k]: string[]) => k === 'payload')?.[1] as string;
     expect(payload).toMatch(/^[0-9a-f]{64}$/);
-    // Independent digest of the exact body string.
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('{"a":1}'));
-    const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-    expect(payload).toBe(hex);
+    expect(payload).toBe(await sha256Hex('{"a":1}'));
+  });
+});
+
+describe('nip98AuthHeaders — the transport decision raw call sites inherit', () => {
+  it('a same-origin URL sends ONLY X-Nostr-Auth (Basic Authorization survives the gate)', async () => {
+    const url = `${location.origin}/fund-api/v1/chat/rooms/room-a/agent-link`;
+    const headers = await nip98AuthHeaders(signer, url, 'GET');
+    expect(headers['X-Nostr-Auth']).toMatch(/^Nostr /);
+    expect(headers.Authorization).toBeUndefined();
+    const ev = JSON.parse(atob(headers['X-Nostr-Auth'].slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', url]);
+    expect(ev.tags).toContainEqual(['method', 'GET']);
+  });
+
+  it('a cross-origin URL sends ONLY Authorization, with the exact u/method/payload signature', async () => {
+    const url = 'https://app.bao.network/fund-api/v1/fundraisers';
+    const body = '{"title":"x"}';
+    const headers = await nip98AuthHeaders(signer, url, 'post', body);
+    expect(headers.Authorization).toMatch(/^Nostr /);
+    expect(headers['X-Nostr-Auth']).toBeUndefined();
+    const ev = JSON.parse(atob(headers.Authorization.slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', url]);
+    expect(ev.tags).toContainEqual(['method', 'POST']);
+    expect(ev.tags).toContainEqual(['payload', await sha256Hex(body)]);
   });
 });
 
@@ -75,10 +110,15 @@ describe('NIP-98 header transport follows the CORS allowlist', () => {
     const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => jsonResponse(200, {}));
     vi.stubGlobal('fetch', fetchMock);
     await fundFetch('/v1/chat/public-rooms', { signer });
-    const headers = authHeaders(fetchMock.mock.calls[0] as [string | URL, RequestInit | undefined]);
+    const call = fetchMock.mock.calls[0] as [string | URL, RequestInit | undefined];
+    const headers = authHeaders(call);
     // The API's CORS allowlist exposes Authorization, not X-Nostr-Auth.
     expect(headers.Authorization).toMatch(/^Nostr /);
     expect(headers['X-Nostr-Auth']).toBeUndefined();
+    // The audience is the FULL cross-origin URL, not the same-origin path.
+    const ev = JSON.parse(atob(headers.Authorization.slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', `${PROXY}/v1/chat/public-rooms`]);
+    expect(ev.tags).toContainEqual(['method', 'GET']);
   });
 
   it('same-origin Fund API bases keep X-Nostr-Auth for the access gate', async () => {
@@ -86,9 +126,25 @@ describe('NIP-98 header transport follows the CORS allowlist', () => {
     const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => jsonResponse(200, {}));
     vi.stubGlobal('fetch', fetchMock);
     await fundFetch('/v1/chat/public-rooms', { signer });
-    const headers = authHeaders(fetchMock.mock.calls[0] as [string | URL, RequestInit | undefined]);
+    const call = fetchMock.mock.calls[0] as [string | URL, RequestInit | undefined];
+    const headers = authHeaders(call);
     expect(headers['X-Nostr-Auth']).toMatch(/^Nostr /);
     expect(headers.Authorization).toBeUndefined();
+    const ev = JSON.parse(atob(headers['X-Nostr-Auth'].slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['u', `${location.origin}/fund-api/v1/chat/public-rooms`]);
+    expect(ev.tags).toContainEqual(['method', 'GET']);
+  });
+
+  it('a signed POST on the same-origin boundary carries the payload hash of the exact body', async () => {
+    delete (import.meta.env as Record<string, unknown>).VITE_BAO_FUND_API_URL;
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) => jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+    await fundFetch('/v1/chat/provision', { method: 'post', body: { name: 'room' }, signer });
+    const headers = authHeaders(fetchMock.mock.calls[0] as [string | URL, RequestInit | undefined]);
+    expect(headers.Authorization).toBeUndefined();
+    const ev = JSON.parse(atob(headers['X-Nostr-Auth'].slice('Nostr '.length)));
+    expect(ev.tags).toContainEqual(['method', 'POST']);
+    expect(ev.tags).toContainEqual(['payload', await sha256Hex('{"name":"room"}')]);
   });
 });
 
@@ -209,40 +265,4 @@ it('blocks resource traversal before signing and disables HTTP redirects', async
   expect(localSigner.signEvent).not.toHaveBeenCalled(); expect(fetchMock).not.toHaveBeenCalled();
   await fundFetch('/v1/fundraisers');
   expect(fetchMock.mock.calls[0]).toEqual(expect.arrayContaining([expect.objectContaining({ redirect: 'error' })]));
-});
-
-describe('NIP-98 signing origin (same-origin proxy)', () => {
-  it('signs the canonical origin while fetching the proxied URL', async () => {
-    // Same-origin proxy: request goes to <origin>/fund-api, but the API only
-    // trusts app.bao.network/bao.fund, so the `u` tag must name the canonical
-    // origin or the API returns 401.
-    vi.stubEnv('VITE_BAO_FUND_API_URL', '');
-    vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', 'https://app.bao.network');
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(200, { ok: true }));
-    vi.stubGlobal('fetch', fetchMock);
-    const s = { signEvent: vi.fn(async (e: unknown) => e) };
-
-    await fundFetch('/v1/chat/public-rooms', { signer: s });
-
-    const call = fetchMock.mock.calls[0];
-    expect(call[0]).toBe(`${location.origin}/fund-api/v1/chat/public-rooms`);
-    const header = ((call[1] as RequestInit).headers as Record<string, string>)['X-Nostr-Auth'];
-    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
-    expect(ev.tags).toContainEqual(['u', 'https://app.bao.network/fund-api/v1/chat/public-rooms']);
-  });
-
-  it('signs the request URL when no signing origin is configured', async () => {
-    vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', '');
-    vi.stubEnv('VITE_BAO_FUND_API_URL', PROXY);
-    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(200, { ok: true }));
-    vi.stubGlobal('fetch', fetchMock);
-    const s = { signEvent: vi.fn(async (e: unknown) => e) };
-
-    await fundFetch('/v1/x', { signer: s });
-
-    const init = fetchMock.mock.calls[0][1] as RequestInit;
-    const header = (init.headers as Record<string, string>)['Authorization'];
-    const ev = JSON.parse(atob(header.slice('Nostr '.length)));
-    expect(ev.tags).toContainEqual(['u', 'https://proxy.test/v1/x']);
-  });
 });

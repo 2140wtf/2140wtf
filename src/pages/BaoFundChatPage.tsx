@@ -18,6 +18,7 @@
  */
 import React, { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useSeoMeta } from "@unhead/react";
 
 import { ChatProvider, useChatContext } from "@/baofund/chat/ChatContext";
 import { ChatPanel } from "@/baofund/chat/ChatPanel";
@@ -64,6 +65,13 @@ export function BaoFundChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const navState = (location.state ?? null) as ChatNavState | null;
+
+  // The shared ₿AO community chat (relay.bao.fund). The title is read by
+  // ChatPanel's unread-mention badge, which prepends "(n) " to it.
+  useSeoMeta({
+    title: "₿AO",
+    description: "The shared ₿AO community chat — one room set across bao.fund, app.bao.network and 2140.wtf.",
+  });
 
   // Full-width chat: collapse both side panels and lift the center column's
   // max-width so the room timeline uses the whole viewport.

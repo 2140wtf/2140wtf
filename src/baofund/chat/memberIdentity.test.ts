@@ -49,6 +49,32 @@ describe('resolveMemberIdentity', () => {
     expect(room2.pubkey).not.toBe(a1.pubkey); // per-room
     expect(loginB.pubkey).not.toBe(a1.pubkey); // per-account namespace
   });
+
+  it('keeps ONE durable member key per login pubkey across sign-in methods (audit: extension bypass)', async () => {
+    // Seed login first (persists the derived key + secret)…
+    const derived = await resolveMemberIdentity({ roomId: ROOM_1, loginPubkey: LOGIN_A, seedHex: SEED });
+    expect(derived.source).toBe('derived');
+    // …then the SAME login pubkey signs in via extension (no seed material):
+    // it must restore the derived member, not mint a fresh key that would
+    // silently defeat a ban on the durable member.
+    const viaExtension = await resolveMemberIdentity({ roomId: ROOM_1, loginPubkey: LOGIN_A, seedHex: null });
+    expect(viaExtension.pubkey).toBe(derived.pubkey);
+    expect(viaExtension.secretKey).toEqual(derived.secretKey);
+    expect(viaExtension.source).toBe('derived');
+    // And back to the seed: still the same member (no flip-flop).
+    const backToSeed = await resolveMemberIdentity({ roomId: ROOM_1, loginPubkey: LOGIN_A, seedHex: SEED });
+    expect(backToSeed.pubkey).toBe(derived.pubkey);
+    // Another room still gets its own member for the extension login.
+    const otherRoom = await resolveMemberIdentity({ roomId: ROOM_2, loginPubkey: LOGIN_A, seedHex: null });
+    expect(otherRoom.pubkey).not.toBe(derived.pubkey);
+  });
+
+  it('does not let an extension login mint a key over a derived record for another account', async () => {
+    const a = await resolveMemberIdentity({ roomId: ROOM_1, loginPubkey: LOGIN_A, seedHex: SEED });
+    const b = await resolveMemberIdentity({ roomId: ROOM_1, loginPubkey: LOGIN_B, seedHex: null });
+    expect(b.pubkey).not.toBe(a.pubkey);
+    expect(b.source).toBe('stored');
+  });
 });
 
 describe('member claims bind burner ↔ durable key (key control only)', () => {

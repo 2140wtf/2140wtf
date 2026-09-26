@@ -39,11 +39,67 @@ import {
   verifyEvent,
   type NostrEvent,
 } from '@/baofund/community/crypto.js';
+import { parseBanEdition } from './banEditions';
 
 // ─── Catalog (spec §8 D1) ─────────────────────────────────────────────────
 
 export const ROLE_KIND = 3308;
 export const ROLE_CATALOG_VERSION = 1;
+
+/**
+ * Bound on a per-room raw control-edition cache (vsk:1 roles + vsk:4 bans
+ * share kind 3308). Any relay writer can publish a 3308 addressed to a known
+ * room id, so an unbounded re-fold input is a memory/CPU DoS; caches keep
+ * only the newest `MAX_CONTROL_EVENTS`, and the folds remain the authority
+ * gate (a dropped old edition can only be re-read from the relay).
+ */
+export const MAX_CONTROL_EVENTS = 200;
+
+/**
+ * Cheap pre-cache filter: true when `event` is a structurally valid, SIGNED
+ * control edition (vsk:1 role or vsk:4 ban) addressed to `roomId` at `epoch`.
+ * The fold still applies every authority rule; this keeps foreign, malformed
+ * or unsigned 3308 junk out of the per-room cache and the O(n) re-fold.
+ */
+export function isControlEditionForRoom(event: NostrEvent, roomId: string, epoch: number): boolean {
+  const parsed = parseRoleEdition(event) ?? parseBanEdition(event);
+  if (!parsed || parsed.roomId !== roomId || parsed.epoch !== epoch) return false;
+  try {
+    return verifyEvent({ ...event });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Bounded, id-deduped merge for a per-room control-edition cache. Pure so the
+ * bound/dedupe rules are testable once and shared by the browser hook and the
+ * daemon fold input:
+ *   - incoming order is preserved (fold input stays chronological);
+ *   - empty/duplicate ids are skipped;
+ *   - only the newest `max` entries are retained, and the id set is rebuilt
+ *     from the retained window - neither structure can grow without bound
+ *     (a flood of unique ids must not grow the SET either).
+ */
+export function mergeControlEventCache(
+  current: readonly NostrEvent[],
+  ids: ReadonlySet<string>,
+  incoming: readonly NostrEvent[],
+  max = MAX_CONTROL_EVENTS,
+): { events: NostrEvent[]; ids: Set<string> } {
+  let events = [...current];
+  const nextIds = new Set(ids);
+  for (const event of incoming) {
+    if (typeof event?.id !== 'string' || event.id.length === 0 || nextIds.has(event.id)) continue;
+    nextIds.add(event.id);
+    events.push(event);
+  }
+  if (events.length > max) {
+    events = events.slice(events.length - max);
+    return { events, ids: new Set(events.map((e) => e.id)) };
+  }
+  return { events, ids: nextIds };
+}
 
 /** Closed perm vocabulary (spec §2). `pin-role` = who may publish vsk:1
  *  editions; `role-grant` is reserved for v1 chat-level role requests - v0

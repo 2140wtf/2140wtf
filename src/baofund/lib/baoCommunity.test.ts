@@ -11,6 +11,7 @@ import {
   encodeTextPayload,
   decodeTextPayload,
   ROOMS_STORAGE_KEY,
+  GUEST_ROOM_SCOPE,
 } from './baoCommunity';
 import { createJoinLink } from '@/baofund/community/client.js';
 
@@ -87,6 +88,35 @@ describe('rooms persistence', () => {
     raw[0]!.link = 'not-a-join-link';
     storage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(raw));
     expect(loadFundRooms(storage)).toEqual([]);
+  });
+});
+
+describe('per-identity room storage (audit run-2 rooms-storage-global)', () => {
+  const IDENTITY_A = 'aa'.repeat(32);
+  const IDENTITY_B = 'bb'.repeat(32);
+
+  it("identity B and guests never see identity A's persisted rooms", () => {
+    addFundRoom(roomMetaFromLink(link('room-a'), 'Secret Campaign Room'), storage, IDENTITY_A);
+    expect(loadFundRooms(storage, IDENTITY_A)).toHaveLength(1);
+    expect(loadFundRooms(storage, IDENTITY_B)).toEqual([]);
+    expect(loadFundRooms(storage, GUEST_ROOM_SCOPE)).toEqual([]);
+    // B's own room lands in B's slot; A's list is untouched.
+    addFundRoom(roomMetaFromLink(link('room-b'), 'B Room'), storage, IDENTITY_B);
+    expect(loadFundRooms(storage, IDENTITY_A).map((r) => r.roomId)).toEqual(['room-a']);
+    expect(loadFundRooms(storage, IDENTITY_B).map((r) => r.roomId)).toEqual(['room-b']);
+    expect(removeFundRoom('room-a', storage, IDENTITY_B)).toHaveLength(1);
+    expect(loadFundRooms(storage, IDENTITY_A)).toHaveLength(1);
+  });
+
+  it('adopts the legacy global list once, for the ACTIVE identity only', () => {
+    addFundRoom(roomMetaFromLink(link('legacy-room'), 'Legacy'), storage); // legacy global key
+    // A guest read must never consume (or see) the legacy list...
+    expect(loadFundRooms(storage, GUEST_ROOM_SCOPE)).toEqual([]);
+    expect(storage.getItem(ROOMS_STORAGE_KEY)).not.toBeNull();
+    // ...the first signed-in identity adopts it.
+    expect(loadFundRooms(storage, IDENTITY_A).map((r) => r.roomId)).toEqual(['legacy-room']);
+    expect(storage.getItem(ROOMS_STORAGE_KEY)).toBeNull();
+    expect(loadFundRooms(storage, IDENTITY_B)).toEqual([]);
   });
 });
 
