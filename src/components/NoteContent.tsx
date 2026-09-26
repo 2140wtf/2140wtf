@@ -26,8 +26,7 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { HASHTAG_PATTERN } from '@/lib/hashtag';
 import { highlightSourceAttrs } from '@/lib/highlightSource';
 import { cn } from '@/lib/utils';
-import { parseJoinLink } from '@/lib/baosocial/browser.js';
-import { assertBaoHostedRelay, BAO_HOSTED_ORIGIN } from '@/lib/baosocial/relayPolicy';
+import { parseJoinLink } from '@/baofund/community/client.js';
 import { openUrl } from '@/lib/downloadFile';
 import type { AddrCoords } from '@/hooks/useEvent';
 
@@ -893,6 +892,12 @@ function PlainLinkFallback({ url }: { url: string }) {
   );
 }
 
+/** Origins that host ₿AO chat join links, and the Fund relay they must name.
+ *  A room invite is only shown as verified when BOTH match — a link on any
+ *  other relay cannot share the fund scroll. */
+const BAO_ROOM_ORIGINS = new Set(['https://app.bao.network', 'https://bao.fund', 'https://relay.bao.network']);
+const BAO_ROOM_RELAY_RE = /^wss:\/\/relay\.bao\.fund\/?$/i;
+
 /**
  * Compact chip for ₿AO room invite links found in rendered notes.
  *
@@ -906,8 +911,9 @@ function JoinLinkChip({ url }: { url: string }) {
   let verified = false;
   try {
     const parts = parseJoinLink(url);
-    assertBaoHostedRelay(parts.relay);
-    verified = new URL(url).origin === BAO_HOSTED_ORIGIN;
+    verified = BAO_ROOM_ORIGINS.has(new URL(url).origin)
+      && typeof parts.relay === 'string'
+      && BAO_ROOM_RELAY_RE.test(parts.relay);
     if (parts.label) label = parts.label;
     else if (parts.roomId) label = `room-${parts.roomId.slice(0, 6)}`;
   } catch {

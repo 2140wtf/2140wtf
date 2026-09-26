@@ -1,0 +1,2172 @@
+/**
+ * Newspaper view design tokens.
+ *
+ * Scoped under .newspaper so tokens do not leak into the rest of the app.
+ * Agent 8 will wire these to the global theme classes; local components fall
+ * back to these values when no global newspaper theme is active.
+ */
+
+.newspaper {
+  /* Classic broadsheet / The Times-inspired newsprint palette.
+     Background is aged cream paper, text is near-black ink, rules are
+     muted graphite, and the accent is a restrained print red. */
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-up: #2f5a3a;
+  --np-down: #c43a2f;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+  --np-font-serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+  --np-font-mono: 'JetBrains Mono', monospace;
+  --np-font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --np-radius: 0px;
+  --np-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  background: var(--np-bg);
+  color: var(--np-ink);
+  font-family: var(--np-font-sans);
+}
+
+/* Expose newspaper variables on the body flag so portaled UI (dropdowns,
+   drawers, command palette, etc.) inherits the palette even when rendered
+   outside the .newspaper root. */
+.bao-newspaper-mode {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-up: #2f5a3a;
+  --np-down: #c43a2f;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+  --np-font-serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+  --np-font-mono: 'JetBrains Mono', monospace;
+  --np-font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --np-radius: 0px;
+  --np-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  background: var(--np-bg);
+}
+.bao-login-newspaper {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-up: #2f5a3a;
+  --np-down: #c43a2f;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+  --np-font-serif: 'Newsreader', 'Times New Roman', Georgia, serif;
+  --np-font-mono: 'JetBrains Mono', monospace;
+  --np-font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --np-radius: 0px;
+  --np-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+
+/* ─── Layout scroll safety ───
+ * NewspaperLayout renders <main class="newspaper-layout-main"> as the scroll
+ * container. Tailwind utilities normally supply these values, but the explicit
+ * rule below guarantees vertical scrolling works even if utilities are purged,
+ * overridden, or if an older cached build is served.
+ */
+.newspaper-layout-main {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── Global theme overrides ───
+ * These are scoped to .newspaper descendants so switching the global theme
+ * class on <body> or <html> updates the newspaper palette without touching
+ * component code. Base values above remain the orange fallback.
+ */
+
+.theme-orange .newspaper {
+  /* ₿ITCOIN: pure black + orange scalpel (user direction: no more light) */
+  --np-bg: #050505;
+  --np-paper: #0a0a0a;
+  --np-ink: #e8e6e1;
+  --np-muted: #9a9790;
+  --np-rule: #26241f;
+  --np-accent: #f7931a;
+  --np-accent-2: #ff9f43;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(247, 147, 26, 0.18);
+  --np-danger: #ef4444;
+  --np-success: #f7931a;
+  --np-up: #f7931a;
+  --np-down: #cc5500;
+  --np-yes: #f7931a;
+  --np-no: #9a9790;
+  --np-shadow: 0 8px 24px rgba(247, 147, 26, 0.12);
+}
+
+.theme-purple .newspaper {
+  --np-bg: #f2eff6;
+  --np-paper: #f8f6fb;
+  --np-ink: #1a1425;
+  --np-muted: #7a6b8a;
+  --np-rule: #d8d2e3;
+  --np-accent: #6b21a8;
+  --np-accent-2: #8b5cf6;
+  --np-on-accent: #ffffff;
+  --np-accent-dim: rgba(107, 33, 168, 0.18);
+  --np-danger: #be123c;
+  --np-success: #14532d;
+  --np-up: #14532d;
+  --np-down: #be123c;
+  --np-yes: #6b21a8;
+  --np-no: #7a6b8a;
+  --np-shadow: 0 8px 24px rgba(88, 28, 135, 0.12);
+}
+
+.theme-hacker .newspaper {
+  --np-bg: #0a0a09;
+  --np-paper: #0f0f0d;
+  --np-ink: #e8e6e1;
+  --np-muted: #9a9790;
+  --np-rule: #2a2925;
+  --np-accent: #22c55e;
+  --np-accent-2: #4ade80;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(34, 197, 94, 0.18);
+  --np-danger: #ef4444;
+  --np-success: #22c55e;
+  --np-up: #22c55e;
+  --np-down: #ef4444;
+  --np-yes: #22c55e;
+  --np-no: #ffffff;
+  --np-shadow: 0 8px 24px rgba(21, 128, 61, 0.12);
+}
+
+.theme-light .newspaper {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-up: #2f5a3a;
+  --np-down: #c43a2f;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+  --np-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* Portaled UI (wallet drawer, toasts) inherits the same theme tokens via the
+   body flag. We mirror the palette overrides above so dropdowns and drawers
+   stay in sync with the selected newspaper theme. */
+.theme-orange .bao-newspaper-mode {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #f7931a;
+  --np-accent-2: #ff9f43;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(247, 147, 26, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-yes: #f7931a;
+  --np-no: #6b6b6b;
+}
+
+.theme-purple .bao-newspaper-mode {
+  --np-bg: #f2eff6;
+  --np-paper: #f8f6fb;
+  --np-ink: #1a1425;
+  --np-muted: #7a6b8a;
+  --np-rule: #d8d2e3;
+  --np-accent: #6b21a8;
+  --np-accent-2: #8b5cf6;
+  --np-on-accent: #ffffff;
+  --np-accent-dim: rgba(107, 33, 168, 0.18);
+  --np-danger: #be123c;
+  --np-success: #14532d;
+  --np-yes: #6b21a8;
+  --np-no: #7a6b8a;
+}
+
+.theme-hacker .bao-newspaper-mode {
+  --np-bg: #0a0a09;
+  --np-paper: #0f0f0d;
+  --np-ink: #e8e6e1;
+  --np-muted: #9a9790;
+  --np-rule: #2a2925;
+  --np-accent: #22c55e;
+  --np-accent-2: #4ade80;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(34, 197, 94, 0.18);
+  --np-danger: #ef4444;
+  --np-success: #22c55e;
+  --np-yes: #22c55e;
+  --np-no: #ffffff;
+}
+
+.theme-light .bao-newspaper-mode {
+  --np-bg: #f4f1ea;
+  --np-paper: #fffdf5;
+  --np-ink: #1a1a1a;
+  --np-muted: #6b6b6b;
+  --np-rule: #c7c4bb;
+  --np-accent: #c43a2f;
+  --np-accent-2: #8b5a2b;
+  --np-on-accent: #fffdf5;
+  --np-accent-dim: rgba(196, 58, 47, 0.18);
+  --np-danger: #c43a2f;
+  --np-success: #2f5a3a;
+  --np-yes: #1a1a1a;
+  --np-no: #6b6b6b;
+}
+
+/* Light-mode newspaper buttons: keep primary CTAs on the light newsprint surface
+   with dark ink text/borders so they match the broadsheet palette. */
+.theme-light .newspaper button[style*="background: var(--np-accent)"],
+.theme-light .newspaper button[style*="background: var(--np-accent-2)"],
+.theme-light .bao-newspaper-mode button[style*="background: var(--np-accent)"],
+.theme-light .bao-newspaper-mode button[style*="background: var(--np-accent-2)"] {
+  background: var(--np-paper) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-ink) !important;
+}
+
+.theme-light .newspaper button[style*="background: var(--np-accent)"]:hover,
+.theme-light .newspaper button[style*="background: var(--np-accent-2)"]:hover,
+.theme-light .bao-newspaper-mode button[style*="background: var(--np-accent)"]:hover,
+.theme-light .bao-newspaper-mode button[style*="background: var(--np-accent-2)"]:hover {
+  background: var(--np-bg) !important;
+}
+
+/* ─── Chromeless newspaper layout ───
+ * When the newspaper view is active we hide the legacy global header,
+ * left sidebar and mobile bottom navigation so the page feels like a
+ * standalone editorial shell.
+ */
+.layout-root[data-newspaper="true"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.layout-root[data-newspaper="true"] > header,
+.layout-root[data-newspaper="true"] > div > aside,
+.layout-root[data-newspaper="true"] > nav[aria-label="Mobile navigation"] {
+  display: none !important;
+}
+
+.layout-root[data-newspaper="true"] > div > main {
+  padding: 0 !important;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.layout-root[data-newspaper="true"] > div > main > div {
+  max-width: none !important;
+}
+
+/* ─── Login modal newspaper theme ───
+ * The UnifiedLoginModal is rendered at the root (outside the newspaper shell),
+ * so we theme it by wrapping it in .newspaper when ?view=newspaper is active
+ * and overriding the legacy dark Tailwind classes with newspaper tokens.
+ */
+
+.newspaper [data-testid="login-modal"] > div {
+  background: var(--np-paper) !important;
+  border-color: var(--np-rule) !important;
+  box-shadow: var(--np-shadow) !important;
+  border-radius: var(--np-radius) !important;
+  border-top: 2px solid var(--np-accent) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-white,
+.newspaper [data-testid="login-modal"] .text-gray-200 {
+  color: var(--np-ink) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-gray-300,
+.newspaper [data-testid="login-modal"] .text-gray-400,
+.newspaper [data-testid="login-modal"] .text-gray-500,
+.newspaper [data-testid="login-modal"] .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-orange-400,
+.newspaper [data-testid="login-modal"] .text-orange-500 {
+  color: var(--np-accent) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-yellow-300,
+.newspaper [data-testid="login-modal"] .text-yellow-400,
+.newspaper [data-testid="login-modal"] .text-yellow-500,
+.newspaper [data-testid="login-modal"] .text-yellow-600 {
+  color: var(--np-accent-2) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-green-600,
+.newspaper [data-testid="login-modal"] .text-green-500 {
+  color: var(--np-success) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-red-400,
+.newspaper [data-testid="login-modal"] .text-red-500,
+.newspaper [data-testid="login-modal"] .text-red-300 {
+  color: var(--np-danger) !important;
+}
+
+.newspaper [data-testid="login-modal"] .text-purple-500,
+.newspaper [data-testid="login-modal"] .text-purple-400,
+.newspaper [data-testid="login-modal"] .text-indigo-500,
+.newspaper [data-testid="login-modal"] .text-indigo-400 {
+  color: var(--np-accent) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-orange-500,
+.newspaper [data-testid="login-modal"] .border-orange-500\/20,
+.newspaper [data-testid="login-modal"] .border-orange-500\/30 {
+  border-color: var(--np-accent) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-gray-700,
+.newspaper [data-testid="login-modal"] .border-gray-800,
+.newspaper [data-testid="login-modal"] .border-gray-600 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-yellow-600\/50,
+.newspaper [data-testid="login-modal"] .border-red-700\/50 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper [data-testid="login-modal"] .bg-gray-900,
+.newspaper [data-testid="login-modal"] .bg-gray-800,
+.newspaper [data-testid="login-modal"] .bg-gray-700,
+.newspaper [data-testid="login-modal"] .bg-gray-600,
+.newspaper [data-testid="login-modal"] .bg-gray-100,
+.newspaper [data-testid="login-modal"] .bg-black {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+}
+
+/* Hover states for gray surfaces */
+.newspaper [data-testid="login-modal"] .hover\:bg-gray-700:hover,
+.newspaper [data-testid="login-modal"] .hover\:bg-gray-600:hover {
+  background: var(--np-rule) !important;
+}
+
+.newspaper [data-testid="login-modal"] .hover\:text-gray-200:hover,
+.newspaper [data-testid="login-modal"] .hover\:text-gray-300:hover {
+  color: var(--np-ink) !important;
+}
+
+/* Primary/secondary action buttons become newspaper accent */
+.newspaper [data-testid="login-modal"] .bg-orange-500,
+.newspaper [data-testid="login-modal"] .bg-orange-400,
+.newspaper [data-testid="login-modal"] .bg-purple-600,
+.newspaper [data-testid="login-modal"] .bg-purple-500,
+.newspaper [data-testid="login-modal"] .bg-indigo-500,
+.newspaper [data-testid="login-modal"] .bg-green-600,
+.newspaper [data-testid="login-modal"] .bg-green-500,
+.newspaper [data-testid="login-modal"] .bg-blue-500,
+.newspaper [data-testid="login-modal"] .bg-yellow-500 {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper [data-testid="login-modal"] .bg-orange-500:hover,
+.newspaper [data-testid="login-modal"] .bg-orange-400:hover,
+.newspaper [data-testid="login-modal"] .bg-purple-600:hover,
+.newspaper [data-testid="login-modal"] .bg-purple-500:hover,
+.newspaper [data-testid="login-modal"] .bg-indigo-500:hover,
+.newspaper [data-testid="login-modal"] .bg-green-600:hover,
+.newspaper [data-testid="login-modal"] .bg-green-500:hover,
+.newspaper [data-testid="login-modal"] .bg-blue-500:hover,
+.newspaper [data-testid="login-modal"] .bg-yellow-500:hover {
+  background: var(--np-accent-2) !important;
+}
+
+/* Error/Quick Start error state */
+.newspaper [data-testid="login-modal"] .bg-red-500,
+.newspaper [data-testid="login-modal"] .bg-red-600 {
+  background: var(--np-danger) !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper [data-testid="login-modal"] .bg-red-500:hover,
+.newspaper [data-testid="login-modal"] .bg-red-600:hover {
+  background: #ff6666 !important;
+}
+
+/* Warning / error containers */
+.newspaper [data-testid="login-modal"] .bg-red-500\/20,
+.newspaper [data-testid="login-modal"] .bg-red-900\/30 {
+  background: rgba(255, 77, 77, 0.12) !important;
+  border-color: var(--np-danger) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper [data-testid="login-modal"] .bg-yellow-900\/30,
+.newspaper [data-testid="login-modal"] .bg-yellow-600\/30 {
+  background: var(--np-accent-dim) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+/* Progress bar */
+.newspaper [data-testid="login-modal"] .bg-white\/50 {
+  background: var(--np-accent) !important;
+}
+
+/* Inputs */
+.newspaper [data-testid="login-modal"] input,
+.newspaper [data-testid="login-modal"] textarea {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper [data-testid="login-modal"] input::placeholder,
+.newspaper [data-testid="login-modal"] textarea::placeholder {
+  color: var(--np-muted) !important;
+}
+
+.newspaper [data-testid="login-modal"] input:focus,
+.newspaper [data-testid="login-modal"] textarea:focus {
+  border-color: var(--np-accent) !important;
+  box-shadow: 0 0 0 2px var(--np-accent-dim) !important;
+  outline: none !important;
+}
+
+/* Force sharp corners throughout modal */
+.newspaper [data-testid="login-modal"] .rounded-lg,
+.newspaper [data-testid="login-modal"] .rounded-xl,
+.newspaper [data-testid="login-modal"] .rounded-2xl,
+.newspaper [data-testid="login-modal"] .rounded-full,
+.newspaper [data-testid="login-modal"] .rounded-t-2xl {
+  border-radius: var(--np-radius) !important;
+}
+
+/* Spinner accents */
+.newspaper [data-testid="login-modal"] .border-t-orange-500 {
+  border-top-color: var(--np-accent) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-white {
+  border-color: var(--np-ink) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-gray-600 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper [data-testid="login-modal"] .border-t-transparent {
+  border-top-color: transparent !important;
+}
+
+/* ─── Login modal newspaper theme ───
+ * The UnifiedLoginModal is rendered at the root (outside the newspaper shell),
+ * so we theme it by adding .bao-login-newspaper to the body by default for the UnifiedLoginModal
+ * and overriding the legacy dark Tailwind classes with newspaper tokens.
+ */
+
+.bao-login-newspaper [data-testid="login-modal"] > div {
+  background: var(--np-paper) !important;
+  border-color: var(--np-rule) !important;
+  box-shadow: var(--np-shadow) !important;
+  border-radius: var(--np-radius) !important;
+  border-top: 2px solid var(--np-accent) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-white,
+.bao-login-newspaper [data-testid="login-modal"] .text-gray-200 {
+  color: var(--np-ink) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-gray-300,
+.bao-login-newspaper [data-testid="login-modal"] .text-gray-400,
+.bao-login-newspaper [data-testid="login-modal"] .text-gray-500,
+.bao-login-newspaper [data-testid="login-modal"] .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-orange-400,
+.bao-login-newspaper [data-testid="login-modal"] .text-orange-500 {
+  color: var(--np-accent) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-yellow-300,
+.bao-login-newspaper [data-testid="login-modal"] .text-yellow-400,
+.bao-login-newspaper [data-testid="login-modal"] .text-yellow-500,
+.bao-login-newspaper [data-testid="login-modal"] .text-yellow-600 {
+  color: var(--np-accent-2) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-green-600,
+.bao-login-newspaper [data-testid="login-modal"] .text-green-500 {
+  color: var(--np-success) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-red-400,
+.bao-login-newspaper [data-testid="login-modal"] .text-red-500,
+.bao-login-newspaper [data-testid="login-modal"] .text-red-300 {
+  color: var(--np-danger) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .text-purple-500,
+.bao-login-newspaper [data-testid="login-modal"] .text-purple-400,
+.bao-login-newspaper [data-testid="login-modal"] .text-indigo-500,
+.bao-login-newspaper [data-testid="login-modal"] .text-indigo-400 {
+  color: var(--np-accent) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-orange-500,
+.bao-login-newspaper [data-testid="login-modal"] .border-orange-500\/20,
+.bao-login-newspaper [data-testid="login-modal"] .border-orange-500\/30 {
+  border-color: var(--np-accent) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-gray-700,
+.bao-login-newspaper [data-testid="login-modal"] .border-gray-800,
+.bao-login-newspaper [data-testid="login-modal"] .border-gray-600 {
+  border-color: var(--np-rule) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-yellow-600\/50,
+.bao-login-newspaper [data-testid="login-modal"] .border-red-700\/50 {
+  border-color: var(--np-rule) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .bg-gray-900,
+.bao-login-newspaper [data-testid="login-modal"] .bg-gray-800,
+.bao-login-newspaper [data-testid="login-modal"] .bg-gray-700,
+.bao-login-newspaper [data-testid="login-modal"] .bg-gray-600,
+.bao-login-newspaper [data-testid="login-modal"] .bg-gray-100,
+.bao-login-newspaper [data-testid="login-modal"] .bg-black {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+}
+
+/* Hover states for gray surfaces */
+.bao-login-newspaper [data-testid="login-modal"] .hover\:bg-gray-700:hover,
+.bao-login-newspaper [data-testid="login-modal"] .hover\:bg-gray-600:hover {
+  background: var(--np-rule) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .hover\:text-gray-200:hover,
+.bao-login-newspaper [data-testid="login-modal"] .hover\:text-gray-300:hover {
+  color: var(--np-ink) !important;
+}
+
+/* Primary/secondary action buttons become newspaper accent */
+.bao-login-newspaper [data-testid="login-modal"] .bg-orange-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-orange-400,
+.bao-login-newspaper [data-testid="login-modal"] .bg-purple-600,
+.bao-login-newspaper [data-testid="login-modal"] .bg-purple-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-indigo-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-green-600,
+.bao-login-newspaper [data-testid="login-modal"] .bg-green-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-blue-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-yellow-500 {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .bg-orange-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-orange-400:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-purple-600:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-purple-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-indigo-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-green-600:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-green-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-blue-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-yellow-500:hover {
+  background: var(--np-accent-2) !important;
+}
+
+/* Error/Quick Start error state */
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-500,
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-600 {
+  background: var(--np-danger) !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-500:hover,
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-600:hover {
+  background: #ff6666 !important;
+}
+
+/* Warning / error containers */
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-500\/20,
+.bao-login-newspaper [data-testid="login-modal"] .bg-red-900\/30 {
+  background: rgba(255, 77, 77, 0.12) !important;
+  border-color: var(--np-danger) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .bg-yellow-900\/30,
+.bao-login-newspaper [data-testid="login-modal"] .bg-yellow-600\/30 {
+  background: var(--np-accent-dim) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+/* Progress bar */
+.bao-login-newspaper [data-testid="login-modal"] .bg-white\/50 {
+  background: var(--np-accent) !important;
+}
+
+/* Inputs */
+.bao-login-newspaper [data-testid="login-modal"] input,
+.bao-login-newspaper [data-testid="login-modal"] textarea {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] input::placeholder,
+.bao-login-newspaper [data-testid="login-modal"] textarea::placeholder {
+  color: var(--np-muted) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] input:focus,
+.bao-login-newspaper [data-testid="login-modal"] textarea:focus {
+  border-color: var(--np-accent) !important;
+  box-shadow: 0 0 0 2px var(--np-accent-dim) !important;
+  outline: none !important;
+}
+
+/* Force sharp corners throughout modal */
+.bao-login-newspaper [data-testid="login-modal"] .rounded-lg,
+.bao-login-newspaper [data-testid="login-modal"] .rounded-xl,
+.bao-login-newspaper [data-testid="login-modal"] .rounded-2xl,
+.bao-login-newspaper [data-testid="login-modal"] .rounded-full,
+.bao-login-newspaper [data-testid="login-modal"] .rounded-t-2xl {
+  border-radius: var(--np-radius) !important;
+}
+
+/* Spinner accents */
+.bao-login-newspaper [data-testid="login-modal"] .border-t-orange-500 {
+  border-top-color: var(--np-accent) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-white {
+  border-color: var(--np-ink) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-gray-600 {
+  border-color: var(--np-rule) !important;
+}
+
+.bao-login-newspaper [data-testid="login-modal"] .border-t-transparent {
+  border-top-color: transparent !important;
+}
+
+/* ─── Inline Terminal single view inside newspaper shell ───
+ * TerminalCubeView's single-mode page is designed for a full black
+ * viewport. When rendered inside the newspaper layout we override
+ * the surrounding chrome to use newspaper tokens while leaving the
+ * 3-D cube faces in their terminal aesthetic.
+ */
+
+.newspaper-terminal-single > div {
+  background: var(--np-paper) !important;
+  color: var(--np-ink) !important;
+}
+
+.newspaper-terminal-single .text-white,
+.newspaper-terminal-single .text-gray-100,
+.newspaper-terminal-single .text-gray-200,
+.newspaper-terminal-single .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.newspaper-terminal-single .text-gray-400,
+.newspaper-terminal-single .text-gray-500,
+.newspaper-terminal-single .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.newspaper-terminal-single .bg-black,
+.newspaper-terminal-single .bg-\[\#0a0a0a\],
+.newspaper-terminal-single .bg-black\/40,
+.newspaper-terminal-single .bg-white\/5,
+.newspaper-terminal-single .bg-white\/10,
+.newspaper-terminal-single .bg-white\/\[0\.02\],
+.newspaper-terminal-single .bg-white\/\[0\.03\] {
+  background: var(--np-bg) !important;
+}
+
+.newspaper-terminal-single .border-white\/5,
+.newspaper-terminal-single .border-white\/10,
+.newspaper-terminal-single .border-black\/5,
+.newspaper-terminal-single .border-black\/10 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper-terminal-single .rounded-2xl,
+.newspaper-terminal-single .rounded-3xl,
+.newspaper-terminal-single .rounded-\[2\.5rem\],
+.newspaper-terminal-single .rounded-xl,
+.newspaper-terminal-single .rounded-lg,
+.newspaper-terminal-single .rounded-full {
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper-terminal-single input,
+.newspaper-terminal-single textarea {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper-terminal-single input::placeholder,
+.newspaper-terminal-single textarea::placeholder {
+  color: var(--np-muted) !important;
+}
+
+.newspaper-terminal-single input:focus,
+.newspaper-terminal-single textarea:focus {
+  border-color: var(--np-accent) !important;
+  box-shadow: 0 0 0 2px var(--np-accent-dim) !important;
+  outline: none !important;
+}
+
+/* TerminalCubeChat overrides */
+.newspaper-terminal-single [class*="Cube Chat"],
+.newspaper-terminal-single .bg-white\/80,
+.newspaper-terminal-single .bg-black\/50 {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+}
+
+.newspaper-terminal-single .border-black\/10,
+.newspaper-terminal-single .border-white\/10 {
+  border-color: var(--np-rule) !important;
+}
+
+/* ZapBoard overrides */
+.newspaper-terminal-single .divide-white\/5 > div {
+  border-color: var(--np-rule) !important;
+}
+
+/* Keep the 3-D cube faces dark/terminal; only tweak surrounding page text */
+.newspaper-terminal-single .cube-face {
+  color: #fff !important;
+}
+
+/* ─── Inline Terminal layout overrides ─── */
+
+/* Force the single terminal layout to stack vertically and fit the paper width */
+.newspaper-terminal-single > div {
+  height: auto !important;
+  min-height: auto !important;
+}
+
+.newspaper-terminal-single > div > div:first-of-type > div:first-of-type {
+  flex-direction: column !important;
+  gap: 1.5rem !important;
+}
+
+.newspaper-terminal-single .single-terminal-wrapper {
+  width: min(80vw, 378px) !important;
+  height: min(80vw, 378px) !important;
+  min-width: auto !important;
+  min-height: auto !important;
+}
+
+.newspaper-terminal-single .terminal-cell-single {
+  width: min(80vw, 420px) !important;
+  height: min(80vw, 420px) !important;
+  min-width: auto !important;
+  min-height: auto !important;
+}
+
+/* Sidebar below the cube should be full width */
+.newspaper-terminal-single > div > div:first-of-type > div:first-of-type > div:last-child {
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Bottom community section */
+.newspaper-terminal-single > div > div:nth-of-type(2) {
+  background: var(--np-paper) !important;
+  border-top: 1px solid var(--np-rule) !important;
+}
+
+/* Improve contrast on terminal UI text that was designed for a dark cube
+   but now sits on the light newspaper paper background. */
+.newspaper-terminal-single .opacity-40,
+.newspaper-terminal-single .opacity-60 {
+  opacity: 1 !important;
+}
+
+.newspaper-terminal-single .opacity-40,
+.newspaper-terminal-single .text-white\/60,
+.newspaper-terminal-single .text-orange-500\/80,
+.newspaper-terminal-single .text-yellow-500\/80 {
+  color: var(--np-ink) !important;
+}
+
+/* Pause / Play control buttons use faint theme-accent or white-30 inline colours */
+.newspaper-terminal-single .bg-white\/\[0\.02\] > div > button:first-of-type,
+.newspaper-terminal-single .bg-white\/\[0\.02\] > div > button:last-of-type {
+  color: var(--np-ink) !important;
+}
+
+/* Light mode: turn the remaining bright terminal-coloured buttons (login, zap tags)
+   into black ink buttons with white paper text so they don't look red/purple on paper. */
+.theme-light .newspaper-terminal-single .bg-purple-600,
+.theme-light .newspaper-terminal-single .bg-purple-500,
+.theme-light .newspaper-terminal-single .bg-orange-500 {
+  background: var(--np-ink) !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-ink) !important;
+}
+
+/* Make sidebar accent-coloured labels (e.g. TOTAL 0 SATS) readable on paper */
+.theme-light .newspaper-terminal-single .text-yellow-500,
+.theme-light .newspaper-terminal-single .text-orange-500 {
+  color: var(--np-ink) !important;
+}
+
+/* ─── Global newspaper surface overrides ───
+ * When the layout-root carries .newspaper, every page and modal inside it
+ * gets converted from the legacy dark crypto chrome to newsprint surfaces.
+ */
+
+/* ─── Purple theme: newspaper surfaces stay bright ───
+ * index.css `.theme-purple .bg-gray-*` remaps darken gray surfaces app-wide,
+ * and the compiled index.css sheet lands AFTER this file in the document, so
+ * at equal specificity the dark remap used to win inside .newspaper. Modals,
+ * cards and dropdowns then rendered dark purple while the text flip below
+ * turned white text into dark ink - dark-on-dark, unreadable (e.g. the Create
+ * Zap Poll modal on /nostrpolls). The extra .theme-purple class lifts these
+ * above the index.css remaps so the newsprint conversion always wins inside
+ * .newspaper, matching the orange/light newspaper behaviour.
+ */
+.theme-purple .newspaper .bg-gray-900,
+.theme-purple .newspaper .bg-gray-800,
+.theme-purple .newspaper .bg-gray-950,
+.theme-purple .newspaper .bg-black,
+.theme-purple .newspaper .bg-slate-900,
+.theme-purple .newspaper .bg-slate-950,
+.theme-purple .newspaper .bg-zinc-900,
+.theme-purple .newspaper .bg-zinc-950,
+.theme-purple .newspaper .bg-neutral-900,
+.theme-purple .newspaper .bg-neutral-950,
+.theme-purple .newspaper .bg-stone-900,
+.theme-purple .newspaper .bg-stone-950,
+.theme-purple .newspaper [class*="bg-gray-900"],
+.theme-purple .newspaper [class*="bg-gray-800"],
+.theme-purple .newspaper [class*="bg-gray-950"] {
+  background: var(--np-paper) !important;
+}
+
+.theme-purple .newspaper .bg-gray-700,
+.theme-purple .newspaper .bg-gray-750,
+.theme-purple .newspaper .bg-gray-600,
+.theme-purple .newspaper .bg-gray-500,
+.theme-purple .newspaper [class*="bg-gray-700"] {
+  background: var(--np-bg) !important;
+}
+
+/* Hover states on those surfaces stay on paper too */
+.theme-purple .newspaper .hover\:bg-gray-900:hover,
+.theme-purple .newspaper .hover\:bg-gray-800:hover,
+.theme-purple .newspaper .hover\:bg-gray-700:hover {
+  background: var(--np-bg) !important;
+}
+
+/* Colored CTA buttons keep white text on their accent backgrounds.
+ * The `.newspaper .text-white → np-ink` flip below is only correct on bright
+ * paper; on a saturated button background white is the readable choice. */
+.newspaper .bg-purple-600.text-white,
+.newspaper .bg-purple-600 .text-white,
+.newspaper .bg-purple-700.text-white,
+.newspaper .bg-purple-700 .text-white,
+.newspaper .bg-indigo-600.text-white,
+.newspaper .bg-indigo-600 .text-white,
+.newspaper .bg-blue-600.text-white,
+.newspaper .bg-blue-600 .text-white,
+.newspaper .bg-green-600.text-white,
+.newspaper .bg-green-600 .text-white,
+.newspaper .bg-emerald-600.text-white,
+.newspaper .bg-emerald-600 .text-white,
+.newspaper .bg-red-600.text-white,
+.newspaper .bg-red-600 .text-white,
+.newspaper [class*="bg-gradient"].text-white,
+.newspaper [class*="bg-gradient"] .text-white {
+  color: #ffffff !important;
+}
+
+/* Paper backgrounds replace dark gray / arbitrary dark surfaces */
+.newspaper .bg-gray-900,
+.newspaper .bg-gray-800,
+.newspaper .bg-gray-950,
+.newspaper .bg-black,
+.newspaper .bg-\[\#0a0a0a\],
+.newspaper .bg-\[\#0c0c0c\],
+.newspaper .bg-\[\#111\],
+.newspaper .bg-\[\#121212\],
+.newspaper .bg-slate-900,
+.newspaper .bg-slate-950,
+.newspaper .bg-zinc-900,
+.newspaper .bg-zinc-950,
+.newspaper .bg-neutral-900,
+.newspaper .bg-neutral-950,
+.newspaper .bg-stone-900,
+.newspaper .bg-stone-950,
+.newspaper [class*="bg-gray-900"],
+.newspaper [class*="bg-gray-800"],
+.newspaper [class*="bg-gray-950"],
+.newspaper [class*="bg-gray-900/"],
+.newspaper [class*="bg-gray-950/"],
+.newspaper [class*="bg-gray-800/"] {
+  background: var(--np-paper) !important;
+}
+
+/* Slightly different hover/secondary surfaces map to newsprint */
+.newspaper .bg-gray-700,
+.newspaper .bg-gray-750,
+.newspaper .bg-gray-600,
+.newspaper .bg-gray-500,
+.newspaper [class*="bg-gray-700"] {
+  background: var(--np-bg) !important;
+}
+
+/* Light gray surfaces stay subtle */
+.newspaper .bg-gray-100,
+.newspaper .bg-gray-50,
+.newspaper .bg-white,
+.newspaper .bg-slate-50,
+.newspaper .bg-slate-100,
+.newspaper .bg-zinc-50,
+.newspaper .bg-zinc-100,
+.newspaper .bg-neutral-50,
+.newspaper .bg-neutral-100,
+.newspaper .bg-stone-50,
+.newspaper .bg-stone-100 {
+  background: var(--np-paper) !important;
+}
+
+.newspaper .bg-gray-200,
+.newspaper .bg-gray-300,
+.newspaper .bg-slate-200,
+.newspaper .bg-slate-300,
+.newspaper .bg-zinc-200,
+.newspaper .bg-zinc-300,
+.newspaper .bg-neutral-200,
+.newspaper .bg-neutral-300,
+.newspaper .bg-stone-200,
+.newspaper .bg-stone-300 {
+  background: var(--np-bg) !important;
+}
+
+/* Text: white/bright text becomes ink; muted grays become graphite */
+.newspaper .text-white,
+.newspaper .text-gray-100,
+.newspaper .text-gray-200,
+.newspaper .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.newspaper .text-gray-400,
+.newspaper .text-gray-500,
+.newspaper .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+/* Links and interactive text */
+.newspaper .text-orange-400,
+.newspaper .text-orange-500,
+.newspaper .text-purple-400,
+.newspaper .text-purple-500,
+.newspaper .text-amber-400,
+.newspaper .text-amber-500,
+.newspaper .text-indigo-400,
+.newspaper .text-indigo-500,
+.newspaper .text-green-400,
+.newspaper .text-green-500 {
+  color: var(--np-accent) !important;
+}
+
+.newspaper .text-green-400,
+.newspaper .text-green-500 {
+  color: var(--np-success) !important;
+}
+
+/* Borders: dark crypto borders become graphite rules */
+.newspaper .border-gray-700,
+.newspaper .border-gray-800,
+.newspaper .border-gray-900,
+.newspaper .border-gray-600,
+.newspaper .border-white\/10,
+.newspaper .border-white\/5,
+.newspaper .border-black\/10,
+.newspaper .border-black\/5,
+.newspaper [class*="border-gray-800"],
+.newspaper [class*="border-gray-700"] {
+  border-color: var(--np-rule) !important;
+}
+
+/* Sharpen rounded corners */
+.newspaper .rounded-xl,
+.newspaper .rounded-2xl,
+.newspaper .rounded-3xl,
+.newspaper .rounded-lg,
+.newspaper .rounded-full,
+.newspaper .rounded-t-2xl,
+.newspaper .rounded-b-2xl {
+  border-radius: var(--np-radius) !important;
+}
+
+/* Backdrops and tinted dark panels become translucent paper */
+.newspaper .bg-black\/90,
+.newspaper .bg-black\/85,
+.newspaper .bg-black\/75,
+.newspaper .bg-black\/70,
+.newspaper .bg-black\/80,
+.newspaper .bg-black\/60,
+.newspaper .bg-black\/50,
+.newspaper .bg-black\/40,
+.newspaper .bg-black\/30,
+.newspaper .bg-black\/25,
+.newspaper .bg-black\/20 {
+  background: rgba(255, 253, 245, 0.78) !important;
+  border-color: var(--np-rule) !important;
+  backdrop-filter: blur(2px) !important;
+}
+
+/* Private Cube Chat call-to-action (MarketPublicChat unauthenticated state) */
+.newspaper .bg-black\/90 button,
+.newspaper .bg-black\/85 button,
+.newspaper .bg-black\/75 button {
+  color: var(--np-accent) !important;
+}
+
+/* Dark crypto gradients (e.g. court hero) flatten to paper */
+.newspaper [class*="bg-gradient-to-"][class*="from-gray-900"],
+.newspaper [class*="bg-gradient-to-"][class*="from-gray-950"],
+.newspaper [class*="bg-gradient-to-"][class*="from-black"],
+.newspaper [class*="bg-gradient-to-"][class*="to-gray-900"],
+.newspaper [class*="bg-gradient-to-"][class*="to-gray-950"],
+.newspaper [class*="bg-gradient-to-"][class*="to-black"] {
+  background: var(--np-paper) !important;
+  background-image: none !important;
+}
+
+/* Crypto gradient accents (amber/orange/yellow/purple/blue/cyan) become print-red */
+.newspaper [class*="bg-gradient-to-"][class*="from-amber-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-orange-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-yellow-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-purple-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-indigo-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-blue-"],
+.newspaper [class*="bg-gradient-to-"][class*="from-cyan-"] {
+  background: var(--np-accent) !important;
+  background-image: none !important;
+  color: var(--np-paper) !important;
+}
+
+/* Glassmorphism panels: replace smoky dark glass with frosted newsprint */
+.newspaper .glass {
+  background: rgba(255, 253, 245, 0.82) !important;
+  border-color: var(--np-rule) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+  color: var(--np-ink) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* ─── DARK THEME PANEL OVERRIDES (orange = black+orange, hacker = dark) ───
+ * The newsprint glass + cream bg-black/* panels above assume a light shell.
+ * On dark themes they produce alien cream panels - remap to dark glass. */
+.theme-orange .newspaper .glass,
+.theme-hacker .newspaper .glass {
+  background: rgba(10, 10, 10, 0.85) !important;
+  border-color: var(--np-rule) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+  color: var(--np-ink) !important;
+}
+.theme-orange .newspaper .bg-black\/85,
+.theme-orange .newspaper .bg-black\/75,
+.theme-orange .newspaper .bg-black\/70,
+.theme-orange .newspaper .bg-black\/80,
+.theme-orange .newspaper .bg-black\/60,
+.theme-orange .newspaper .bg-black\/50,
+.theme-orange .newspaper .bg-black\/40,
+.theme-orange .newspaper .bg-black\/30,
+.theme-orange .newspaper .bg-black\/25,
+.theme-orange .newspaper .bg-black\/20,
+.theme-hacker .newspaper .bg-black\/85,
+.theme-hacker .newspaper .bg-black\/75,
+.theme-hacker .newspaper .bg-black\/70,
+.theme-hacker .newspaper .bg-black\/80,
+.theme-hacker .newspaper .bg-black\/60,
+.theme-hacker .newspaper .bg-black\/50,
+.theme-hacker .newspaper .bg-black\/40,
+.theme-hacker .newspaper .bg-black\/30,
+.theme-hacker .newspaper .bg-black\/25,
+.theme-hacker .newspaper .bg-black\/20 {
+  background: rgba(10, 10, 10, 0.82) !important;
+  border-color: var(--np-rule) !important;
+  color: var(--np-ink) !important;
+}
+
+/* Primary action buttons and crypto accent solids: print-red, cream text */
+.newspaper .bg-orange-500,
+.newspaper .bg-orange-600,
+.newspaper .bg-purple-600,
+.newspaper .bg-purple-500,
+.newspaper .bg-indigo-600,
+.newspaper .bg-indigo-500,
+.newspaper .bg-amber-500,
+.newspaper .bg-amber-600,
+.newspaper .bg-yellow-500,
+.newspaper .bg-yellow-400,
+.newspaper .bg-yellow-600,
+.newspaper .bg-blue-400,
+.newspaper .bg-blue-500,
+.newspaper .bg-cyan-400,
+.newspaper .bg-cyan-500,
+.newspaper .orange-grad,
+.newspaper button.orange-grad,
+.newspaper .bg-gradient-to-r {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+  box-shadow: none !important;
+}
+
+.newspaper .bg-green-600,
+.newspaper .bg-green-500,
+.newspaper .bg-emerald-600,
+.newspaper .bg-emerald-500 {
+  background: var(--np-success) !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper .bg-red-500,
+.newspaper .bg-red-600,
+.newspaper .bg-rose-600,
+.newspaper .bg-rose-500 {
+  background: var(--np-danger) !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+/* Light theme: primary solid CTAs should sit on newsprint paper with ink
+   text/borders instead of bright red/purple/blue crypto accents. */
+.theme-light .newspaper .bg-orange-500,
+.theme-light .newspaper .bg-orange-600,
+.theme-light .newspaper .bg-purple-600,
+.theme-light .newspaper .bg-purple-500,
+.theme-light .newspaper .bg-indigo-600,
+.theme-light .newspaper .bg-indigo-500,
+.theme-light .newspaper .bg-amber-500,
+.theme-light .newspaper .bg-amber-600,
+.theme-light .newspaper .bg-yellow-500,
+.theme-light .newspaper .bg-yellow-400,
+.theme-light .newspaper .bg-yellow-600,
+.theme-light .newspaper .bg-blue-400,
+.theme-light .newspaper .bg-blue-500,
+.theme-light .newspaper .bg-cyan-400,
+.theme-light .newspaper .bg-cyan-500,
+.theme-light .newspaper .bg-red-500,
+.theme-light .newspaper .bg-red-600,
+.theme-light .newspaper .bg-rose-600,
+.theme-light .newspaper .bg-rose-500,
+.theme-light .newspaper .bg-green-600,
+.theme-light .newspaper .bg-green-500,
+.theme-light .newspaper .bg-emerald-600,
+.theme-light .newspaper .bg-emerald-500,
+.theme-light .newspaper .orange-grad,
+.theme-light .newspaper button.orange-grad,
+.theme-light .newspaper .bg-gradient-to-r {
+  background: var(--np-paper) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-ink) !important;
+  box-shadow: none !important;
+}
+
+.theme-light .newspaper .bg-orange-500:hover,
+.theme-light .newspaper .bg-orange-600:hover,
+.theme-light .newspaper .bg-purple-600:hover,
+.theme-light .newspaper .bg-purple-500:hover,
+.theme-light .newspaper .bg-indigo-600:hover,
+.theme-light .newspaper .bg-indigo-500:hover,
+.theme-light .newspaper .bg-amber-500:hover,
+.theme-light .newspaper .bg-amber-600:hover,
+.theme-light .newspaper .bg-yellow-500:hover,
+.theme-light .newspaper .bg-yellow-400:hover,
+.theme-light .newspaper .bg-yellow-600:hover,
+.theme-light .newspaper .bg-blue-400:hover,
+.theme-light .newspaper .bg-blue-500:hover,
+.theme-light .newspaper .bg-cyan-400:hover,
+.theme-light .newspaper .bg-cyan-500:hover,
+.theme-light .newspaper .bg-red-500:hover,
+.theme-light .newspaper .bg-red-600:hover,
+.theme-light .newspaper .bg-rose-600:hover,
+.theme-light .newspaper .bg-rose-500:hover,
+.theme-light .newspaper .bg-green-600:hover,
+.theme-light .newspaper .bg-green-500:hover,
+.theme-light .newspaper .bg-emerald-600:hover,
+.theme-light .newspaper .bg-emerald-500:hover,
+.theme-light .newspaper .orange-grad:hover,
+.theme-light .newspaper button.orange-grad:hover,
+.theme-light .newspaper .bg-gradient-to-r:hover {
+  background: var(--np-bg) !important;
+}
+
+/* Secondary / ghost buttons */
+.newspaper .bg-gray-800\/50,
+.newspaper .bg-gray-900\/50,
+.newspaper .bg-white\/5,
+.newspaper .bg-white\/10,
+.newspaper .bg-black\/5,
+.newspaper .bg-black\/5 {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+}
+
+/* Inputs and textareas */
+.newspaper input,
+.newspaper textarea,
+.newspaper select,
+.newspaper [class*="input"],
+.newspaper .bg-gray-800 input {
+  background: var(--np-bg) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper input::placeholder,
+.newspaper textarea::placeholder {
+  color: var(--np-muted) !important;
+}
+
+.newspaper input:focus,
+.newspaper textarea:focus,
+.newspaper select:focus {
+  border-color: var(--np-accent) !important;
+  box-shadow: 0 0 0 2px var(--np-accent-dim) !important;
+  outline: none !important;
+}
+
+/* Serif headlines inside newspaper pages/modals */
+.newspaper h1,
+.newspaper h2,
+.newspaper h3,
+.newspaper h4,
+.newspaper h5,
+.newspaper h6 {
+  font-family: var(--np-font-serif);
+  color: var(--np-ink);
+}
+
+/* Monospace labels / folios */
+.newspaper code,
+.newspaper pre,
+.newspaper .font-mono {
+  font-family: var(--np-font-mono);
+}
+
+/* Status pills / badges on newsprint */
+.newspaper .bg-green-500\/5,
+.newspaper .bg-green-500\/10,
+.newspaper .bg-green-500\/15,
+.newspaper .bg-green-500\/20,
+.newspaper .bg-green-500\/30 {
+  background: rgba(47, 90, 58, 0.12) !important;
+  color: var(--np-ink) !important;
+  border-color: rgba(47, 90, 58, 0.3) !important;
+}
+
+.newspaper .bg-red-500\/20 {
+  background: rgba(196, 58, 47, 0.12) !important;
+  color: var(--np-ink) !important;
+  border-color: rgba(196, 58, 47, 0.3) !important;
+}
+
+.newspaper .bg-yellow-500\/20,
+.newspaper .bg-yellow-500\/20,
+.newspaper .bg-orange-500\/20,
+.newspaper .bg-orange-500\/20 {
+  background: var(--np-accent-dim) !important;
+  color: var(--np-accent) !important;
+  border-color: rgba(196, 58, 47, 0.3) !important;
+}
+
+/* Dividers and rule lines */
+.newspaper .divide-gray-800 > * + *,
+.newspaper .divide-gray-700 > * + *,
+.newspaper .divide-white\/5 > * + *,
+.newspaper .divide-white\/10 > * + * {
+  border-color: var(--np-rule) !important;
+}
+
+/* Scrollbars on paper */
+.newspaper ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.newspaper ::-webkit-scrollbar-track {
+  background: var(--np-bg);
+}
+.newspaper ::-webkit-scrollbar-thumb {
+  background: var(--np-rule);
+  border-radius: 0;
+}
+.newspaper ::-webkit-scrollbar-thumb:hover {
+  background: var(--np-muted);
+}
+
+/* ─── High-specificity overrides for Tailwind utilities that use !important ───
+ * These selectors deliberately use :is() to beat Tailwind's single-class
+ * utilities in specificity without resorting to endless !important chains.
+ */
+
+.newspaper :is(.bg-gradient-to-r),
+.newspaper :is(.bg-orange-500),
+.newspaper :is(.bg-orange-600),
+.newspaper :is(.bg-amber-500),
+.newspaper :is(.bg-amber-600),
+.newspaper :is(.bg-purple-500),
+.newspaper :is(.bg-purple-600),
+.newspaper :is(.bg-indigo-500),
+.newspaper :is(.bg-indigo-600) {
+  background: var(--np-accent) !important;
+  background-image: none !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+  box-shadow: none !important;
+}
+
+.newspaper :is(.bg-green-500),
+.newspaper :is(.bg-green-600),
+.newspaper :is(.bg-emerald-500),
+.newspaper :is(.bg-emerald-600) {
+  background: var(--np-success) !important;
+  background-image: none !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+.newspaper :is(.bg-red-500),
+.newspaper :is(.bg-red-600) {
+  background: var(--np-danger) !important;
+  background-image: none !important;
+  color: var(--np-paper) !important;
+  border-radius: var(--np-radius) !important;
+}
+
+/* Theme-specific gradient buttons (e.g. .theme-orange .bg-gradient-to-r.from-purple-600)
+   carry extra classes that raise specificity; beat them with attribute selectors. */
+.newspaper :is(.bg-gradient-to-r)[class*="from-"][class*="to-"],
+.newspaper :is(.bg-gradient-to-r)[class*="from-purple-"],
+.newspaper :is(.bg-gradient-to-r)[class*="from-indigo-"],
+.newspaper :is(.bg-gradient-to-r)[class*="from-orange-"],
+.newspaper .from-purple-600.to-orange-600,
+.newspaper .from-purple-600.to-orange-600.text-white,
+.newspaper .bg-gradient-to-r.from-purple-600,
+.newspaper .bg-gradient-to-r.from-purple-600.text-white,
+.newspaper .bg-gradient-to-r.from-indigo-600,
+.newspaper .bg-gradient-to-r.from-orange-600 {
+  background: var(--np-accent) !important;
+  background-image: none !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+  border-radius: var(--np-radius) !important;
+  box-shadow: none !important;
+}
+
+.newspaper :is(.bg-gradient-to-r)[class*="from-"][class*="to-"]:hover,
+.newspaper .bg-gradient-to-r.from-purple-600:hover,
+.newspaper .bg-gradient-to-r.from-indigo-600:hover,
+.newspaper .bg-gradient-to-r.from-orange-600:hover {
+  background: var(--np-accent-2) !important;
+  border-color: var(--np-accent-2) !important;
+}
+
+/* Light theme: high-specificity gradient overrides.
+ * The base newspaper rules above use attribute selectors to beat themed
+ * gradients (e.g. .bg-gradient-to-r.from-purple-600.to-orange-600). In light
+ * mode those must flip to paper/ink instead of the print-red accent. */
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-"][class*="to-"],
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-purple-"],
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-indigo-"],
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-orange-"],
+.theme-light .newspaper .from-purple-600.to-orange-600,
+.theme-light .newspaper .from-purple-600.to-orange-600.text-white,
+.theme-light .newspaper .bg-gradient-to-r.from-purple-600,
+.theme-light .newspaper .bg-gradient-to-r.from-purple-600.text-white,
+.theme-light .newspaper .bg-gradient-to-r.from-indigo-600,
+.theme-light .newspaper .bg-gradient-to-r.from-orange-600,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-amber-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-orange-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-yellow-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-purple-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-indigo-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-blue-"],
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-cyan-"] {
+  background: var(--np-paper) !important;
+  background-image: none !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-ink) !important;
+  box-shadow: none !important;
+}
+
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-"][class*="to-"]:hover,
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-purple-"]:hover,
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-indigo-"]:hover,
+.theme-light .newspaper :is(.bg-gradient-to-r)[class*="from-orange-"]:hover,
+.theme-light .newspaper .from-purple-600.to-orange-600:hover,
+.theme-light .newspaper .bg-gradient-to-r.from-purple-600:hover,
+.theme-light .newspaper .bg-gradient-to-r.from-indigo-600:hover,
+.theme-light .newspaper .bg-gradient-to-r.from-orange-600:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-amber-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-orange-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-yellow-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-purple-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-indigo-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-blue-"]:hover,
+.theme-light .newspaper [class*="bg-gradient-to-"][class*="from-cyan-"]:hover {
+  background: var(--np-bg) !important;
+  border-color: var(--np-ink) !important;
+}
+
+/* Low-opacity gradient containers (e.g. fund/prize-pool boxes) become a
+   subtle newspaper accent tint instead of solid red. */
+.newspaper :is(.bg-gradient-to-r)[class*="/"][class*="from-"],
+.newspaper :is(.bg-gradient-to-br)[class*="/"][class*="from-"],
+.newspaper .bg-gradient-to-r[class*="/"][class*="from-"],
+.newspaper .bg-gradient-to-br[class*="/"][class*="from-"] {
+  background: var(--np-accent-dim) !important;
+  background-image: none !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-accent-dim) !important;
+  border-radius: var(--np-radius) !important;
+  box-shadow: none !important;
+}
+
+/* Hover states for the above */
+.newspaper :is(.bg-gradient-to-r):hover,
+.newspaper :is(.bg-orange-500):hover,
+.newspaper :is(.bg-orange-600):hover,
+.newspaper :is(.bg-amber-500):hover,
+.newspaper :is(.bg-amber-600):hover,
+.newspaper :is(.bg-purple-500):hover,
+.newspaper :is(.bg-purple-600):hover,
+.newspaper :is(.bg-indigo-500):hover,
+.newspaper :is(.bg-indigo-600):hover,
+.newspaper button.orange-grad:hover {
+  background: var(--np-accent-2) !important;
+  border-color: var(--np-accent-2) !important;
+}
+
+/* Accent text / border utilities */
+.newspaper :is(.text-orange-400),
+.newspaper :is(.text-orange-500),
+.newspaper :is(.text-amber-400),
+.newspaper :is(.text-amber-500),
+.newspaper :is(.text-purple-400),
+.newspaper :is(.text-purple-500),
+.newspaper :is(.text-indigo-400),
+.newspaper :is(.text-indigo-500) {
+  color: var(--np-accent) !important;
+}
+
+.newspaper :is(.border-orange-500),
+.newspaper :is(.border-orange-500\/20),
+.newspaper :is(.border-orange-500\/30),
+.newspaper :is(.border-purple-500),
+.newspaper :is(.border-purple-500\/20),
+.newspaper :is(.border-purple-500\/30) {
+  border-color: var(--np-accent) !important;
+}
+
+/* ─── Broad theme-remap safety net ───
+ * The legacy theme system (e.g. .theme-orange) remaps purple/violet/indigo/orange
+ * text and tinted surfaces to orange. Inside newspaper mode we want print-red.
+ */
+.newspaper [class*="text-purple-"],
+.newspaper [class*="text-violet-"],
+.newspaper [class*="text-indigo-"],
+.newspaper [class*="text-blue-"],
+.newspaper [class*="text-cyan-"],
+.newspaper [class*="text-teal-"],
+.newspaper [class*="text-orange-"],
+.newspaper [class*="text-amber-"],
+.newspaper [class*="text-yellow-"] {
+  color: var(--np-accent) !important;
+}
+
+.newspaper [class*="bg-purple-"][class*="/"],
+.newspaper [class*="bg-violet-"][class*="/"],
+.newspaper [class*="bg-indigo-"][class*="/"],
+.newspaper [class*="bg-blue-"][class*="/"],
+.newspaper [class*="bg-cyan-"][class*="/"],
+.newspaper [class*="bg-teal-"][class*="/"],
+.newspaper [class*="bg-orange-"][class*="/"],
+.newspaper [class*="bg-amber-"][class*="/"],
+.newspaper [class*="bg-yellow-"][class*="/"] {
+  background: var(--np-accent-dim) !important;
+  color: var(--np-accent) !important;
+}
+
+.newspaper [class*="border-purple-"][class*="/"],
+.newspaper [class*="border-violet-"][class*="/"],
+.newspaper [class*="border-indigo-"][class*="/"],
+.newspaper [class*="border-blue-"][class*="/"],
+.newspaper [class*="border-cyan-"][class*="/"],
+.newspaper [class*="border-teal-"][class*="/"],
+.newspaper [class*="border-orange-"][class*="/"],
+.newspaper [class*="border-amber-"][class*="/"],
+.newspaper [class*="border-yellow-"][class*="/"] {
+  border-color: var(--np-accent-dim) !important;
+}
+
+/* Solid CTA reinforcement - the tinted-chip wildcards above match ANY element
+   that has a colour class plus ANY slashed utility (e.g. shadow-purple-600/25
+   or border-white/10 on a solid bg-purple-600 button), which washed solid CTAs
+   out to accent-dim chips (e.g. the Zap Poll "Publish Poll" button). The
+   doubled class lifts these above the wildcard so solid buttons stay solid. */
+.newspaper .bg-orange-500.bg-orange-500,
+.newspaper .bg-orange-600.bg-orange-600,
+.newspaper .bg-purple-600.bg-purple-600,
+.newspaper .bg-purple-500.bg-purple-500,
+.newspaper .bg-indigo-600.bg-indigo-600,
+.newspaper .bg-indigo-500.bg-indigo-500,
+.newspaper .bg-amber-500.bg-amber-500,
+.newspaper .bg-amber-600.bg-amber-600,
+.newspaper .bg-yellow-500.bg-yellow-500,
+.newspaper .bg-yellow-400.bg-yellow-400,
+.newspaper .bg-yellow-600.bg-yellow-600,
+.newspaper .bg-blue-400.bg-blue-400,
+.newspaper .bg-blue-500.bg-blue-500,
+.newspaper .bg-cyan-400.bg-cyan-400,
+.newspaper .bg-cyan-500.bg-cyan-500,
+.newspaper .orange-grad.orange-grad,
+.newspaper .bg-gradient-to-r.bg-gradient-to-r {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+  border-color: var(--np-accent) !important;
+}
+
+.newspaper .bg-green-600.bg-green-600,
+.newspaper .bg-green-500.bg-green-500,
+.newspaper .bg-emerald-600.bg-emerald-600,
+.newspaper .bg-emerald-500.bg-emerald-500 {
+  background: var(--np-success) !important;
+  color: var(--np-paper) !important;
+}
+
+.newspaper .bg-red-500.bg-red-500,
+.newspaper .bg-red-600.bg-red-600,
+.newspaper .bg-rose-600.bg-rose-600,
+.newspaper .bg-rose-500.bg-rose-500 {
+  background: var(--np-danger) !important;
+  color: var(--np-paper) !important;
+}
+
+/* ─── Portaled overlays (wallet drawer, toasts) ───
+ * WalletDrawer and toast containers live outside .layout-root; they are
+ * styled via the body flag once newspaper mode is active.
+ */
+.bao-newspaper-mode .fixed.z-\[10010\] {
+  background: var(--np-paper) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-gray-950,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-gray-900,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-gray-800,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-black {
+  background: var(--np-paper) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .text-white,
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-100,
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-200,
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-400,
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-500,
+.bao-newspaper-mode .fixed.z-\[10010\] .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] button.orange-grad,
+.bao-newspaper-mode .fixed.z-\[10010\] .orange-grad {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .border-gray-800,
+.bao-newspaper-mode .fixed.z-\[10010\] .border-gray-700,
+.bao-newspaper-mode .fixed.z-\[10010\] .border-gray-900 {
+  border-color: var(--np-rule) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-orange-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-amber-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-yellow-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-purple-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-indigo-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-blue-"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="text-cyan-"] {
+  color: var(--np-accent) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="border-orange-"][class*="/"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="border-amber-"][class*="/"],
+.bao-newspaper-mode .fixed.z-\[10010\] [class*="border-purple-"][class*="/"] {
+  border-color: var(--np-accent-dim) !important;
+}
+
+/* ─── Additional corner overrides ───
+ * Catch the smaller/default rounded utilities and arbitrary rounded values.
+ */
+.newspaper :is(.rounded),
+.newspaper :is(.rounded-sm),
+.newspaper :is(.rounded-md),
+.newspaper [class*="rounded-["] {
+  border-radius: var(--np-radius) !important;
+}
+
+/* ─── Backdrop blur overrides ───
+ * Heavy glassmorphism blur values are reduced for the flatter newspaper look.
+ */
+.newspaper :is(.backdrop-blur-3xl),
+.newspaper :is(.backdrop-blur-2xl) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.newspaper :is(.backdrop-blur-xl) {
+  -webkit-backdrop-filter: blur(2px) !important;
+  backdrop-filter: blur(2px) !important;
+}
+
+/* ─── Gradient color remaps ───
+ * Green/emerald/teal and red/pink/rose gradient starts become newsprint
+ * success / danger accents instead of crypto colors.
+ */
+.newspaper :is(.from-green-500),
+.newspaper :is(.from-emerald-500),
+.newspaper :is(.from-teal-500) {
+  --tw-gradient-from: var(--np-success) var(--tw-gradient-from-position, 0%) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+.newspaper :is(.from-red-400),
+.newspaper :is(.from-red-500),
+.newspaper :is(.from-pink-400),
+.newspaper :is(.from-pink-500),
+.newspaper :is(.from-rose-400),
+.newspaper :is(.from-rose-500) {
+  --tw-gradient-from: var(--np-danger) var(--tw-gradient-from-position, 0%) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+/* ─── Wallet drawer portal overrides ───
+ * The wallet drawer is rendered outside .newspaper, so we scope to the body
+ * flag and its z-[10010] fixed panel.
+ */
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-orange-500\/20,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-orange-500\/10 {
+  background: var(--np-accent-dim) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-green-500\/20,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-green-500\/10 {
+  background: rgba(47, 90, 58, 0.12) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-red-500\/20,
+.bao-newspaper-mode .fixed.z-\[10010\] .bg-red-500\/10 {
+  background: rgba(196, 58, 47, 0.12) !important;
+}
+
+.bao-newspaper-mode .fixed.z-\[10010\] :is(.rounded-lg),
+.bao-newspaper-mode .fixed.z-\[10010\] :is(.rounded-xl),
+.bao-newspaper-mode .fixed.z-\[10010\] :is(.rounded-2xl),
+.bao-newspaper-mode .fixed.z-\[10010\] :is(.rounded-full) {
+  border-radius: var(--np-radius) !important;
+}
+
+/* ─── Global command prompt in light newspaper mode ───
+ * GlobalCommandPrompt renders outside .newspaper at z-[100]. In light mode
+ * convert its terminal-dark chrome to the newsprint palette.
+ */
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .bg-gray-950.max-w-3xl,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .bg-gray-900\/50,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .bg-gray-900,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .bg-gray-800 {
+  background: var(--np-paper) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .hover\:bg-gray-800:hover,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] [class*="bg-gray-800"] {
+  background: var(--np-bg) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-white,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-100,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-200,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-400,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-500,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-orange-400,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .text-green-400,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .group-hover\:text-green-400:hover {
+  color: var(--np-accent) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .hover\:text-white:hover {
+  color: var(--np-ink) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .border-gray-800,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .border-gray-800\/50,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .border-gray-800\/30,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .border-gray-900 {
+  border-color: var(--np-rule) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .border-l-green-500 {
+  border-color: var(--np-accent) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .bg-green-500\/10 {
+  background: var(--np-accent-dim) !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] input,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] input:focus {
+  color: var(--np-ink) !important;
+  outline: none !important;
+}
+
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] input::placeholder,
+.theme-light .bao-newspaper-mode .fixed.z-\[100\] .placeholder-gray-600::placeholder {
+  color: var(--np-muted) !important;
+}
+
+/* ─── Newspaper ticker strip ────────────────────────────────────────────────
+ * Rolling market ticker below the top bar. Overrides the dark crypto styling
+ * of the shared TickerTape component with the current newsprint palette.
+ */
+.newspaper-ticker {
+  --accent-text: var(--np-accent);
+  --text-secondary: var(--np-muted);
+  --card-border: var(--np-rule);
+  background: var(--np-paper);
+}
+
+.newspaper-ticker .ticker-track {
+  animation-duration: 55s;
+}
+
+.newspaper-ticker [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.newspaper-ticker .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.newspaper-ticker .text-green-400 {
+  color: var(--np-yes) !important;
+}
+
+.newspaper-ticker .text-red-400 {
+  color: var(--np-no) !important;
+}
+
+.newspaper-ticker .text-yellow-400,
+.newspaper-ticker [style*="color: var(--accent-text"],
+.newspaper-ticker [style*="color: var(--text-secondary"] {
+  color: var(--np-accent) !important;
+}
+
+.newspaper-ticker .font-mono {
+  font-family: var(--np-font-mono) !important;
+}
+
+/* ─── Chat / Feed page theming in newspaper mode ─────────────────────────────
+ * Both BAO Chat and Global Chat (FeedPage) are dark trading UI pages. When
+ * ?view=newspaper is active they sit inside .newspaper, so we remap their
+ * surface, text, border and accent classes to the newsprint palette.
+ */
+
+.newspaper .chat-page,
+.newspaper .feed-page {
+  background: var(--np-paper) !important;
+  color: var(--np-ink) !important;
+  border-color: var(--np-rule) !important;
+  /* Re-route the global theme * text color so it uses the newsprint ink token
+   * instead of the theme's raw accent color. */
+  --text-color: var(--np-ink);
+}
+
+/* Hacker newspaper: keep translucent black surfaces dark rather than frosted cream. */
+.theme-hacker .newspaper .chat-page [class*="bg-black/"],
+.theme-hacker .newspaper .feed-page [class*="bg-black/"] {
+  background: color-mix(in srgb, var(--np-bg) 80%, transparent) !important;
+}
+
+.theme-hacker .newspaper .chat-page [class*="bg-white/"],
+.theme-hacker .newspaper .feed-page [class*="bg-white/"] {
+  background: color-mix(in srgb, var(--np-bg) 60%, transparent) !important;
+}
+
+.newspaper .chat-page .bg-gray-950,
+.newspaper .chat-page .bg-gray-900,
+.newspaper .chat-page .bg-gray-800,
+.newspaper .chat-page .bg-gray-700,
+.newspaper .chat-page .bg-black,
+.newspaper .feed-page .bg-gray-950,
+.newspaper .feed-page .bg-gray-900,
+.newspaper .feed-page .bg-gray-800,
+.newspaper .feed-page .bg-gray-700,
+.newspaper .feed-page .bg-black {
+  background: var(--np-paper) !important;
+}
+
+.newspaper .chat-page .bg-white,
+.newspaper .chat-page .bg-gray-50,
+.newspaper .feed-page .bg-white,
+.newspaper .feed-page .bg-gray-50 {
+  background: var(--np-paper) !important;
+}
+
+.newspaper .chat-page .bg-white\/5,
+.newspaper .chat-page .bg-white\/10,
+.newspaper .feed-page .bg-white\/5,
+.newspaper .feed-page .bg-white\/10 {
+  background: var(--np-bg) !important;
+}
+
+.newspaper .chat-page .text-white,
+.newspaper .chat-page .text-gray-100,
+.newspaper .chat-page .text-gray-200,
+.newspaper .chat-page .text-gray-300,
+.newspaper .feed-page .text-white,
+.newspaper .feed-page .text-gray-100,
+.newspaper .feed-page .text-gray-200,
+.newspaper .feed-page .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+
+.newspaper .chat-page .text-gray-400,
+.newspaper .chat-page .text-gray-500,
+.newspaper .chat-page .text-gray-600,
+.newspaper .feed-page .text-gray-400,
+.newspaper .feed-page .text-gray-500,
+.newspaper .feed-page .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.newspaper .chat-page .text-orange-300,
+.newspaper .chat-page .text-orange-400,
+.newspaper .chat-page .text-orange-500,
+.newspaper .feed-page .text-orange-300,
+.newspaper .feed-page .text-orange-400,
+.newspaper .feed-page .text-orange-500 {
+  color: var(--np-accent) !important;
+}
+
+.newspaper .chat-page .border-gray-800\/60,
+.newspaper .chat-page .border-gray-800\/40,
+.newspaper .chat-page .border-gray-700\/60,
+.newspaper .chat-page .border-gray-700\/50,
+.newspaper .chat-page .border-gray-700,
+.newspaper .chat-page .border-gray-800,
+.newspaper .feed-page .border-gray-800\/60,
+.newspaper .feed-page .border-gray-800\/40,
+.newspaper .feed-page .border-gray-700\/60,
+.newspaper .feed-page .border-gray-700\/50,
+.newspaper .feed-page .border-gray-700,
+.newspaper .feed-page .border-gray-800 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper .chat-page .border-white\/10,
+.newspaper .chat-page .border-white\/20,
+.newspaper .feed-page .border-white\/10,
+.newspaper .feed-page .border-white\/20 {
+  border-color: var(--np-rule) !important;
+}
+
+.newspaper .chat-page [class*="bg-orange-500"][class*="/"],
+.newspaper .feed-page [class*="bg-orange-500"][class*="/"] {
+  background: var(--np-accent-dim) !important;
+}
+
+.newspaper .chat-page .bg-orange-500,
+.newspaper .feed-page .bg-orange-500 {
+  background: var(--np-accent) !important;
+  color: var(--np-paper) !important;
+}
+
+.newspaper .chat-page .hover\:text-white:hover,
+.newspaper .chat-page .hover\:text-gray-200:hover,
+.newspaper .feed-page .hover\:text-white:hover,
+.newspaper .feed-page .hover\:text-gray-200:hover {
+  color: var(--np-ink) !important;
+}
+
+.newspaper .chat-page .hover\:bg-white\/10:hover,
+.newspaper .chat-page .hover\:bg-gray-800\/50:hover,
+.newspaper .feed-page .hover\:bg-white\/10:hover,
+.newspaper .feed-page .hover\:bg-gray-800\/50:hover {
+  background: var(--np-accent-dim) !important;
+}
+
+.newspaper .chat-page .rounded-full,
+.newspaper .chat-page .rounded-xl,
+.newspaper .chat-page .rounded-2xl,
+.newspaper .feed-page .rounded-full,
+.newspaper .feed-page .rounded-xl,
+.newspaper .feed-page .rounded-2xl {
+  border-radius: var(--np-radius) !important;
+}
+
+/* ─── Legacy terminal route overrides (.np-terminal) ───
+ * Preserved from the pre-newspaper-refactor branch so the terminal routes
+ * still inherit the newsprint palette when rendered inside NewspaperLayout.
+ */
+.np-terminal {
+  background: var(--np-bg);
+  color: var(--np-ink);
+}
+
+.np-terminal .ticker-track span,
+.np-terminal .ticker-track .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+.np-terminal .ticker-track .text-green-400 {
+  color: var(--np-success) !important;
+}
+.np-terminal .ticker-track .text-red-400 {
+  color: var(--np-danger) !important;
+}
+
+.np-terminal a.text-gray-500,
+.np-terminal button.text-gray-500 {
+  color: var(--np-muted) !important;
+}
+.np-terminal a.text-gray-500:hover,
+.np-terminal button.text-gray-500:hover {
+  color: var(--np-ink) !important;
+}
+
+.np-terminal button[aria-pressed="false"] {
+  color: var(--np-muted) !important;
+  border-color: var(--np-rule) !important;
+  background: transparent !important;
+}
+.np-terminal button[aria-pressed="true"] {
+  color: var(--np-accent) !important;
+  border-color: var(--np-accent-dim) !important;
+  background: rgba(247, 147, 26, 0.08) !important;
+  box-shadow: 0 0 12px -3px var(--np-accent) !important;
+}
+
+.np-terminal .terminal-cell-single {
+  width: min(80vw, 620px) !important;
+  height: min(80vw, 620px) !important;
+  min-width: min(80vw, 620px) !important;
+  min-height: min(80vw, 620px) !important;
+  --cube-size: min(80vw, 620px) !important;
+}
+
+.np-terminal .single-terminal-wrapper {
+  width: min(80vw, 558px) !important;
+  height: min(80vw, 558px) !important;
+}
+
+.np-terminal .terminal-cell-single,
+.np-terminal .single-terminal-wrapper {
+  background: radial-gradient(ellipse at center, rgba(247, 147, 26, 0.04) 0%, transparent 60%),
+              var(--np-paper) !important;
+}
+
+.np-terminal .rounded-3xl {
+  background: var(--np-paper) !important;
+  border-color: var(--np-rule) !important;
+  color: var(--np-ink) !important;
+}
+.np-terminal .rounded-3xl .text-gray-900,
+.np-terminal .rounded-3xl .text-gray-500,
+.np-terminal .rounded-3xl .text-gray-600,
+.np-terminal .rounded-3xl .dark\:text-white\/90 {
+  color: var(--np-ink) !important;
+}
+
+.np-terminal .cube-face {
+  background: linear-gradient(135deg, rgba(24, 24, 28, 0.9) 0%, rgba(10, 10, 14, 0.97) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.8),
+    inset 0 2px 10px rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.8) !important;
+}
+.np-terminal .cube-face-top,
+.np-terminal .cube-face-bottom {
+  background: linear-gradient(135deg, rgba(12, 10, 8, 0.97), rgba(6, 5, 4, 0.99)) !important;
+}
+.np-terminal .cube-face-title {
+  color: #fff !important;
+}
+.np-terminal .cube-face-count {
+  color: var(--np-muted) !important;
+}
+.np-terminal .cube-face-cat {
+  color: var(--np-accent) !important;
+}
+.np-terminal .cube-face-market {
+  color: #d4d4d4 !important;
+}
+
+.np-terminal .WidgetPrismView,
+.np-terminal .prism-view,
+.np-terminal .cluster-view,
+.np-terminal .MarketHeatmap {
+  background: var(--np-bg) !important;
+}
+
+/* ─── Purple terminal: brighten rotator cube + widget surfaces ───
+ * The purple newspaper palette is a bright lavender paper, but the prism
+ * cube chrome (.cube-*) and the monitor widgets (var(--card-bg) & friends)
+ * come from the dark NOSTR NIGHT theme vars - leaving dark blocks on the
+ * paper. Re-map those surfaces to the np palette and keep the frames in the
+ * subtle purple tone of --np-rule / --np-accent. */
+.theme-purple .np-terminal {
+  --cube-face-bg: var(--np-paper);
+  --cube-header-bg: var(--np-paper);
+  --card-bg: var(--np-paper);
+  --card-bg-hover: #ffffff;
+  --bg-secondary: var(--np-bg);
+  --card-border: var(--np-rule);
+  --card-border-hover: var(--np-accent-dim);
+  --text-primary: var(--np-ink);
+  --text-secondary: var(--np-muted);
+  --text-tertiary: var(--np-muted);
+  --skeleton-bg: rgba(107, 33, 168, 0.08);
+  --cube-frame-border: var(--np-accent-2);
+  --accent-text: var(--np-accent);
+  --accent-text-hover: var(--np-accent-2);
+}
+
+.theme-purple .np-terminal .cube-header-bg,
+.theme-purple .np-terminal .cube-face-bg,
+.theme-purple .np-terminal .cube-footer-bg {
+  background: var(--np-paper);
+}
+.theme-purple .np-terminal .cube-strip-bg {
+  background: var(--np-bg);
+}
+.theme-purple .np-terminal .cube-text-muted {
+  color: var(--np-muted);
+}
+.theme-purple .np-terminal .cube-border-subtle {
+  border-color: var(--np-rule);
+}
+.theme-purple .np-terminal .monitor-widget-header-bg {
+  background: rgba(107, 33, 168, 0.05);
+}
+/* Light-on-dark utility text inside terminal widgets would vanish on the
+   bright paper - remap the common grays to the np ink/muted tones. */
+.theme-purple .np-terminal .text-gray-200,
+.theme-purple .np-terminal .text-gray-300 {
+  color: var(--np-ink) !important;
+}
+.theme-purple .np-terminal .text-gray-400,
+.theme-purple .np-terminal .text-gray-500,
+.theme-purple .np-terminal .text-gray-600 {
+  color: var(--np-muted) !important;
+}
+
+.np-terminal [class*="PanelHeader"] {
+  color: var(--np-accent) !important;
+  border-color: var(--np-rule) !important;
+}
+
+/* ─── Mobile optimisation helpers for the newspaper shell ─── */
+
+/* Horizontal tab/filter rows: hide scrollbars and keep momentum scrolling. */
+.np-tabs-scroll,
+.np-filter-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+}
+.np-tabs-scroll::-webkit-scrollbar,
+.np-filter-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Main content area should feel native on iOS. */
+.newspaper-layout-main {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure fixed / absolute dropdowns in the newspaper shell never sit flush
+   against the viewport edge on small screens. */
+.newspaper [class*="fixed z-[100]"],
+.newspaper [class*="absolute right-0 top-full z-50"] {
+  max-width: min(calc(100vw - 1rem), 18rem);
+}

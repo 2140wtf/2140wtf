@@ -13,6 +13,7 @@ import './index.css';
 import 'leaflet/dist/leaflet.css';
 
 import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 
 // ─── Native status bar theming (Android APK / iOS) ───────────────────────────
 // Keeps the OS top chrome in sync with the active app theme.

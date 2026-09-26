@@ -66,10 +66,10 @@ test.describe('smoke', () => {
     // from the desktop sidebar and mobile bottom nav). The legacy ₿AOs
     // collapsible group was split by the 2140 Trollbox migration: 2140 Trollbox is
     // now a standalone destination and the three ₿AO links render flat, so each
-    // is a link rather than a group trigger. The chat was rebranded to
-    // "2140 Trollbox" (separate app from BAO Markets).
+    // is a link rather than a group trigger. The chat is now the ported
+    // ₿AO chat (sidebar "₿AO", the fund relay's rooms).
     await expect(drawer.getByRole('link', { name: 'Feed' })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: '2140 Trollbox' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: '₿AO', exact: true })).toBeVisible();
     await expect(drawer.getByRole('link', { name: '₿AO MARKETS' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Fund my ₿AO' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();
