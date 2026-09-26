@@ -294,8 +294,7 @@ function saveStoredWallet(state: StoredWallet, notify = true): void {
   // persist across reloads; this is a client-only wallet with no server and no
   // alternative store on web. Same documented, user-visible fallback as
   // src/lib/secureStorage.ts. CodeQL flags the deliberate local persistence.
-  // codeql[js/clear-text-storage-of-sensitive-data]
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ // lgtm[js/clear-text-storage-of-sensitive-data]
     mintUrl: state.mintUrl,
     proofs: state.proofs,
     ...(state.seed !== undefined ? { seed: state.seed } : {}),
@@ -999,8 +998,7 @@ export async function createLightningTopUp(amountSats: number, mintUrl?: string)
   try {
     // The pending Lightning top-up quote is the user's own deposit, persisted
     // locally so it survives a reload (same client-only fallback as above).
-    // codeql[js/clear-text-storage-of-sensitive-data]
-    localStorage.setItem(TOPUP_QUOTE_KEY, JSON.stringify(topUp));
+    localStorage.setItem(TOPUP_QUOTE_KEY, JSON.stringify(topUp)); // lgtm[js/clear-text-storage-of-sensitive-data]
   } catch {
     /* storage unavailable: the in-memory quote still works this session */
   }
