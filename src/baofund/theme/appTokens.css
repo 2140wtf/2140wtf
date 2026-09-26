@@ -1,0 +1,46 @@
+/*
+ * Map the ported BAO Fund "newspaper" tokens onto 2140.wtf's OWN theme tokens.
+ *
+ * The ported chat/fund components were written against a paper theme
+ * (--np-bg cream, --np-ink near-black, …). This app has its own theme system
+ * (shadcn HSL channel tokens: --background, --foreground, --primary, …), so we
+ * retint every --np-* token from the active theme instead of shipping the
+ * original paper palette. Import AFTER the ported newspaperTheme.css.
+ *
+ * Scoped to the two BAO surfaces so nothing else in the app is touched.
+ */
+.bao-fund-chat,
+.newspaper {
+  --np-bg: hsl(var(--background));
+  --np-paper: hsl(var(--card, var(--background)));
+  --np-ink: hsl(var(--foreground));
+  --np-muted: hsl(var(--muted-foreground));
+  --np-rule: hsl(var(--border));
+  --np-accent: hsl(var(--primary));
+  --np-accent-2: hsl(var(--accent-foreground, var(--primary)));
+  --np-on-accent: hsl(var(--primary-foreground));
+  --np-accent-dim: hsl(var(--primary) / 0.18);
+  --np-danger: hsl(var(--destructive));
+  --np-error: hsl(var(--destructive));
+  --np-success: hsl(var(--success, 142 72% 29%));
+  --np-up: hsl(var(--success, 142 72% 29%));
+  --np-down: hsl(var(--destructive));
+  --np-yes: hsl(var(--foreground));
+  --np-no: hsl(var(--muted-foreground));
+  --np-shadow: 0 8px 24px hsl(var(--foreground) / 0.12);
+
+  /* Typography follows the app, not the paper theme. */
+  --np-font-sans: inherit;
+  --np-font-serif: inherit;
+  --np-font-mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+
+  background: var(--np-bg);
+  color: var(--np-ink);
+}
+
+/* The ported stylesheet paints some paper chrome with literal colors; strip
+   those so our tokens win (paper rules stay for structure only). */
+.newspaper {
+  background: var(--np-bg);
+  color: var(--np-ink);
+}

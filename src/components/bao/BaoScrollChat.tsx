@@ -594,12 +594,18 @@ export function BaoScrollChat({ lockedRoom, embedded, onStatus }: BaoScrollChatP
       lockedRoom ??
       infos.find((info) => info.name.toLowerCase() === "general") ??
       infos.find((info) => !info.externalUrl);
+    let connectTimer: number | undefined;
     if (first && !currentId.current && !cancelled) {
       // Load app framework first (paint layout), then connect content.
-      window.setTimeout(() => void selectRoom(first.roomId), 50);
+      connectTimer = window.setTimeout(() => {
+        if (!cancelled) void selectRoom(first.roomId);
+      }, 50);
     }
     return () => {
       cancelled = true;
+      // Clear the deferred connect: a timer that fires after unmount calls
+      // setState on a dead tree (and `window` may already be gone in tests).
+      if (connectTimer !== undefined) window.clearTimeout(connectTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

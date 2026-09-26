@@ -6,6 +6,7 @@ import path from "node:path";
 
 import react from "@vitejs/plugin-react";
 import { visualizer } from "rollup-plugin-visualizer";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 
 import { AppConfigSchema } from "./src/lib/schemas";
@@ -204,6 +205,14 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/fal-api/, ''),
         },
+        // BAO Fund API. The API's CORS allowlist only trusts app.bao.network /
+        // bao.fund, so the browser reaches it same-origin here; fundHttp signs
+        // the NIP-98 `u` with the canonical origin (VITE_BAO_FUND_API_SIGN_ORIGIN).
+        '/fund-api': {
+          target: 'https://app.bao.network',
+          changeOrigin: true,
+          secure: true,
+        },
       },
       watch: {
         ignored: [
@@ -251,10 +260,37 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/fal-api/, ''),
         },
+        // BAO Fund API. The API's CORS allowlist only trusts app.bao.network /
+        // bao.fund, so the browser reaches it same-origin here; fundHttp signs
+        // the NIP-98 `u` with the canonical origin (VITE_BAO_FUND_API_SIGN_ORIGIN).
+        '/fund-api': {
+          target: 'https://app.bao.network',
+          changeOrigin: true,
+          secure: true,
+        },
       },
     },
   plugins: [
     react(),
+    // The ported BAO Fund wallet rails (Liquid via liquidjs-lib, testnet4 via
+    // @scure/btc-signer) reach for Node globals (Buffer/process) in browser
+    // code. Scope the polyfills to those globals only, and keep them OUT of the
+    // vitest run: several policy tests read files via node:fs and the browser
+    // fs shim would break them.
+    ...(process.env.VITEST
+      ? []
+      : [
+          nodePolyfills({
+            // The plugin merges these over its own defaults (Buffer/global/
+            // process all true). Injecting `globalThis.process` throws
+            // "read only property 'process'" on this app's runtime and blanked
+            // the page, so process/global globals are OFF; only Buffer is
+            // injected. `global` is handled by the define below, and `process`
+            // module imports are still shimmed by protocolImports.
+            globals: { Buffer: true, global: false, process: false },
+            protocolImports: true,
+          }),
+        ]),
     ...(process.env.ANALYZE
       ? [
           visualizer({
@@ -272,10 +308,17 @@ export default defineConfig(({ mode }) => {
     'import.meta.env.BUILD_DATE': JSON.stringify(new Date().toISOString()),
     'import.meta.env.COMMIT_SHA': JSON.stringify(getCommitSha()),
     'import.meta.env.COMMIT_TAG': JSON.stringify(getCommitTag()),
+    // Node global shim for the ported wallet rails without injecting a global
+    // (the nodePolyfills `global`/`process` globals are off — see plugins).
+    global: 'globalThis',
   },
   test: {
     globals: true,
     environment: 'jsdom',
+    // The property suites (fast-check) and heavy wallet/court flows can exceed
+    // vitest's 5s default when the box is loaded; 20s keeps the gate reliable
+    // without hiding real hangs.
+    testTimeout: 20000,
     setupFiles: './src/test/setup.ts',
     exclude: ['**/node_modules/**', '**/dist/**', '.idea', '.git', '.cache', 'e2e', '.tmp', 'services', '.claude', 'vendor'],
     onConsoleLog(log) {
@@ -314,6 +357,11 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // blake3-bao: the ESM entry uses Node's createRequire (unbundleable) and
+      // its exports map shadows the browser field. Route the ported evidence
+      // stack through the browser-safe wrapper over the vendored UMD dist.
+      "blake3-bao/dist/blake3-bao.min.js": path.resolve(__dirname, "./node_modules/blake3-bao/dist/blake3-bao.min.js"),
+      "blake3-bao": path.resolve(__dirname, "./src/baofund/lib/evidence/blake3BaoBrowser.ts"),
     },
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },

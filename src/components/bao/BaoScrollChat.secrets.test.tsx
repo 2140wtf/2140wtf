@@ -56,7 +56,7 @@ describe('BaoScrollChat secret hygiene', () => {
     // The scroll client mounts and opens its pinned-relay socket.
     await vi.waitFor(() => {
       expect(MockWebSocket.instances.length).toBeGreaterThan(0);
-    });
+    }, { timeout: 5000 });
     // Let pending renders settle.
     await new Promise((resolve) => setTimeout(resolve, 100));
 

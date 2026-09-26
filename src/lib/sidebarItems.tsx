@@ -137,10 +137,9 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "2140-social",
-    label: "2140 Trollbox",
+    label: "₿AO",
     path: "/community",
     icon: MessageSquareMore,
-    requiresAuth: true,
   },
   { id: "prediction-markets", label: "₿AO MARKETS", path: "/bao/markets", icon: BarChart3 },
   { id: "bao-fund", label: "Fund my ₿AO", path: "/bao/fund", icon: HandCoins },
@@ -177,7 +176,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     requiresAuth: true,
   },
   { id: "search", label: "Search", path: "/search", icon: Search },
-  { id: "court", label: "₿AO Court", path: "/court", icon: Gavel, requiresAuth: true },
+  { id: "court", label: "₿AO Court", path: "/bao/court", icon: Gavel, requiresAuth: true },
   {
     id: "btcmap",
     label: "BTC MAP",
@@ -367,7 +366,14 @@ export function isItemActive(
   }
 
   if (id === "2140-social") {
-    return pathname.startsWith("/bao/");
+    // The chat lives at /community (legacy /bao/community + /bao/chat
+    // redirect). Match only those — a bare /bao/ prefix wrongly highlighted
+    // the chat on the fund and court pages.
+    return (
+      pathname.startsWith("/community") ||
+      pathname.startsWith("/bao/community") ||
+      pathname.startsWith("/bao/chat")
+    );
   }
   if (id === "bao-fund") {
     return pathname.startsWith("/bao-fund");

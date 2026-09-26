@@ -1,0 +1,316 @@
+{
+  "meta": {
+    "generator": "scripts/vectors/gen_canonical_merkle_vectors.py (pure-Python blake3 + canonicalizer)",
+    "independence": "no TS/JS in generation; blake3 verified against official BLAKE3 team vectors before use",
+    "blake3_self_check": "official BLAKE3 test vectors (input_len 0..102400) PASSED",
+    "spec": "bao-normative-spec-v0 §1.5 (B2/B3) + §5.6; TS: src/lib/baoLedger.ts, src/lib/baoMerkle.ts",
+    "node_hash_note": "node hash = blake3(0x01 || asciiBytes(leftHex) || asciiBytes(rightHex)) - hex STRINGS, not decoded bytes",
+    "generated": "2026-09-16"
+  },
+  "canonical_json": [
+    {
+      "purpose": "recursive byte-order key sort + NFC keys",
+      "input": {
+        "zeta": 1,
+        "Alpha": 2,
+        "é": 3,
+        "e": 4
+      },
+      "canonical": "{\"Alpha\":2,\"e\":4,\"zeta\":1,\"é\":3}",
+      "hash": "cb92f21f44452c4b3be0b69eb51a84b5ea3546ad6150bf600821036461f3b941"
+    },
+    {
+      "purpose": "nested arrays/objects, booleans, null, unicode strings",
+      "input": {
+        "a": [
+          1,
+          {
+            "c": 1,
+            "b": [
+              true,
+              null
+            ]
+          },
+          "x"
+        ],
+        "b": "qé"
+      },
+      "canonical": "{\"a\":[1,{\"b\":[true,null],\"c\":1},\"x\"],\"b\":\"qé\"}",
+      "hash": "e2b2f96f37e86b2abe6ec0ad57702bdec3d078fda18a0eed4794fa750c150c7a"
+    },
+    {
+      "purpose": "NFC normalization: NFD input folds to NFC bytes",
+      "input": "été",
+      "input_nfd_codepoints": [
+        "0x65",
+        "0x301",
+        "0x74",
+        "0x65",
+        "0x301"
+      ],
+      "canonical": "\"été\"",
+      "hash": "0650d46e08d544e1e7ced200be841d0e461fba27533803ea54cf6df02867ac1b"
+    },
+    {
+      "purpose": "deep nesting, empty array, zero and negative ints",
+      "input": {
+        "d": {
+          "b": 1,
+          "a": {
+            "d": [
+              null,
+              false,
+              true
+            ],
+            "c": -5
+          }
+        },
+        "arr": [],
+        "z": 0
+      },
+      "canonical": "{\"arr\":[],\"d\":{\"a\":{\"c\":-5,\"d\":[null,false,true]},\"b\":1},\"z\":0}",
+      "hash": "a39a0ea2957b2416fe4447ab2fb89c3b6428f50467f5aa2e5404423e02018192"
+    },
+    {
+      "purpose": "byte-order vs codepoint-order key sort (U+FF21 sorts before \"a\" by UTF-8 bytes)",
+      "input": {
+        "Ａ": 1,
+        "a": 2
+      },
+      "canonical": "{\"a\":2,\"Ａ\":1}",
+      "hash": "25bf1b17428c214737b9bb0acf9f41900f9e2e38b0ec1893064027e89b2a7846"
+    },
+    {
+      "purpose": "safe-integer extremes (no exponent notation)",
+      "input": {
+        "neg": -9007199254740991,
+        "pos": 9007199254740991,
+        "zero": 0
+      },
+      "canonical": "{\"neg\":-9007199254740991,\"pos\":9007199254740991,\"zero\":0}",
+      "hash": "bcd6c27a73de75b987ce98268ba53301d06e46468e039e26cd350f5d66b84969"
+    }
+  ],
+  "ledger_prevhash": [
+    {
+      "entry": {
+        "seq": 7,
+        "created_at": 1726000000,
+        "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "content": {
+          "kind": "deposit",
+          "sats": 21000,
+          "mint": "https://mint.example"
+        }
+      },
+      "canonical_bytes_hex": "7b22636f6e74656e74223a7b226b696e64223a226465706f736974222c226d696e74223a2268747470733a2f2f6d696e742e6578616d706c65222c2273617473223a32313030307d2c22637265617465645f6174223a313732363030303030302c226576656e745f6964223a2261616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161222c22736571223a377d",
+      "prevHash": "3f8a5a427e815fb34307219043f18870c9735f831b7104f5525f8e5b14b64af5"
+    },
+    {
+      "entry": {
+        "seq": 1,
+        "created_at": 0,
+        "event_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "content": null
+      },
+      "canonical_bytes_hex": "7b22636f6e74656e74223a6e756c6c2c22637265617465645f6174223a302c226576656e745f6964223a2262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262626262222c22736571223a317d",
+      "prevHash": "33d11c431ce36b1ad347622a73d3efbdb445f73ff9c40afb98d08a959df74bec"
+    }
+  ],
+  "genesis_prevhash": [
+    {
+      "aCoordinate": "39801:d1d21d9f2930a5f6c526a5f5a2f0de6e6f4a1f0c2b3a4d5e6f708192a3b4c5d6:e2e-stage-9",
+      "prevHash": "06e04a9ebd2f950114284e7ac46c7e1afa8c48fcdb1b07e27423cd883b6308eb"
+    },
+    {
+      "aCoordinate": "39801:0000000000000000000000000000000000000000000000000000000000000000:x",
+      "prevHash": "3efa06dda78aeaaceb21de24d5346f1ffae0ec08192bcdb61a4a11a5d72b3c22"
+    }
+  ],
+  "proof_set_hash": [
+    {
+      "proofs": [
+        {
+          "secretCommit": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "mint": "https://mint-a.example",
+          "tier": null,
+          "deadlineMs": null
+        },
+        {
+          "secretCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "mint": "https://mint-b.example",
+          "tier": "age-locked",
+          "deadlineMs": 1726000000000
+        },
+        {
+          "secretCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "mint": "https://mint-a.example",
+          "tier": null,
+          "deadlineMs": 1726000000001
+        }
+      ],
+      "per_proof_hashes": [
+        "a20ce127d1b87b870d2c538376314cfa726c09f6a4fcd5bcc81f629ee3880f7d",
+        "2ce53fececd3eba273bd8deeb465a1e3872e26e554136b6db07323408b55d45e",
+        "a6a6580edae37898830bf49c21c69e45403bffb45443bf2857f9f591575c136a"
+      ],
+      "proofSetHash": "db9e637eac44ee01b9d3c84f5751d28a35b26f9db00ee9735952cc8149e1ffb4"
+    }
+  ],
+  "merkle": [
+    {
+      "name": "leaf_preimage",
+      "preimage_hex": "007b226e223a2231313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131313131222c2273617473223a313030307d",
+      "leaf_hash": "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11"
+    },
+    {
+      "name": "empty",
+      "leaves": [],
+      "leaf_hashes_sorted": [],
+      "root": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"
+    },
+    {
+      "name": "single",
+      "leaves": [
+        {
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "sats": 1000
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11"
+      ],
+      "root": "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11"
+    },
+    {
+      "name": "two",
+      "leaves": [
+        {
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "sats": 1000
+        },
+        {
+          "n": "2222222222222222222222222222222222222222222222222222222222222222",
+          "sats": 2000
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11",
+        "9783e050f9e561ed44155cf0278fd8ffbbf1e7f95d7e867374e702affd1efb82"
+      ],
+      "root": "07319fbf36b322d7b6b763b8804f921d1fea2b4e80ce50406a382c1b4fbf1efe"
+    },
+    {
+      "name": "three_odd_promotion",
+      "leaves": [
+        {
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "sats": 1000
+        },
+        {
+          "n": "2222222222222222222222222222222222222222222222222222222222222222",
+          "sats": 2000
+        },
+        {
+          "n": "3333333333333333333333333333333333333333333333333333333333333333",
+          "sats": 3000
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11",
+        "9783e050f9e561ed44155cf0278fd8ffbbf1e7f95d7e867374e702affd1efb82",
+        "fe86ed9bb6234687265b8020cb7e7ebbbd31df7c48ccc7efdaf57fee9b29a7be"
+      ],
+      "root": "3da0db367571a2b89657c9eabe748d9e5624892a0e4e809e5d36bd3967a03161"
+    },
+    {
+      "name": "five_two_levels",
+      "leaves": [
+        {
+          "n": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sats": 100
+        },
+        {
+          "n": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "sats": 200
+        },
+        {
+          "n": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "sats": 300
+        },
+        {
+          "n": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sats": 400
+        },
+        {
+          "n": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "sats": 500
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "210d12194edc2e1a946fa91429cdfe7a463ecc8c86a7956c9305944301dc7148",
+        "32eb84faec026abc1290447938e50e73b23f57eb1eb9a9ab792a6aa1299cbef1",
+        "9e16112801f82b30bd5ac99719c293a1dc4b724c75330a2c3497bb935b16883b",
+        "b0f22e384a7084720996086bf9081673837a6857abe34c3b8266a0dab18de758",
+        "d618840b59558c4a3840be68f815a5d15e2f54d58a71baed975b425de8c8a9e6"
+      ],
+      "root": "3d9f3ed40ef586aa0a15ecbf59b228a05c5b6a60c4f106eed46d06be3e794039"
+    },
+    {
+      "name": "six_full",
+      "leaves": [
+        {
+          "n": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sats": 100
+        },
+        {
+          "n": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "sats": 200
+        },
+        {
+          "n": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "sats": 300
+        },
+        {
+          "n": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sats": 400
+        },
+        {
+          "n": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "sats": 500
+        },
+        {
+          "n": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "sats": 600
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "210d12194edc2e1a946fa91429cdfe7a463ecc8c86a7956c9305944301dc7148",
+        "32eb84faec026abc1290447938e50e73b23f57eb1eb9a9ab792a6aa1299cbef1",
+        "9b04442fdf36fba51cd4ebf42796efc647b4c96be24f7666a3b4ac7a3cb9bd65",
+        "9e16112801f82b30bd5ac99719c293a1dc4b724c75330a2c3497bb935b16883b",
+        "b0f22e384a7084720996086bf9081673837a6857abe34c3b8266a0dab18de758",
+        "d618840b59558c4a3840be68f815a5d15e2f54d58a71baed975b425de8c8a9e6"
+      ],
+      "root": "8e72365cc3662f33ed4cd6d6b002ae2e5eaa171dc8581a7157665cd657068d05"
+    },
+    {
+      "name": "dup_nullifier",
+      "leaves": [
+        {
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "sats": 1000
+        },
+        {
+          "n": "1111111111111111111111111111111111111111111111111111111111111111",
+          "sats": 1000
+        }
+      ],
+      "leaf_hashes_sorted": [
+        "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11",
+        "642fb757174dbcb86981867d4c9971ad5d2f95dc00a30bfe9a18559591918f11"
+      ],
+      "root": "04c0c2c313ce40f755cfc0fdf2318b0e948f22993df5c1dab97fee5241e76f6a"
+    }
+  ]
+}

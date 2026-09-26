@@ -188,3 +188,31 @@ npm run build                       # succeeds
 ```
 
 If any step fails, the branch is not ready — fix it before asking to merge.
+
+## 12. BAO chat + fund port (2026-09-24)
+
+The BAO chat and fund surfaces are ported from `baocommunity/bao_fund_it`
+(origin/main) into the isolated `src/baofund/` namespace. Read
+`docs/BAO-CHAT-FUND-PORT.md` before touching them. Invariants:
+
+- **The chat is the FUND relay's chat.** Rooms come from the Fund API's public
+  rooms (relay `wss://relay.bao.fund`), never another relay's room. Guests see
+  and post in the public landing room (Trollbox).
+- **Fund API boundary.** The API's CORS + NIP-98 allowlist trusts only
+  `app.bao.network` / `bao.fund`, so the browser reaches it same-origin via
+  `/fund-api` (dev proxy in `vite.config.ts`) and `fundHttp` signs the NIP-98
+  `u` with `VITE_BAO_FUND_API_SIGN_ORIGIN`. Do not bypass the proxy or sign a
+  localhost `u`.
+- **Theme.** `src/baofund/theme/appTokens.css` remaps the ported `--np-*`
+  paper tokens to this app's theme tokens. Never ship the paper palette.
+- **Rails.** Cashu mainnet + testnet4 + Liquid testnet only; no signet. The
+  FROST court (`src/baofund/court-core` + `src/baofund/court`, route `/bao/court`)
+  settles on those rails too; its explainer links the testnet4 faucet
+  (coinfaucet.eu) + mempool.space/testnet4 and the Liquid faucet.
+- **Vendored protocol.** `src/baofund/community/` is the pinned
+  `@bao/community` build. Do not point it at `src/lib/baosocial` (older build).
+- **Polyfills.** `vite-plugin-node-polyfills` is build-only (skipped under
+  `VITEST`) and injects **Buffer** only. Injecting `process` blanks the app
+  ("read only property 'process'"); `global` is a `define`, not a global.
+- **cashu-ts.** The ported wallet uses the `cashu-ts3` npm alias
+  (`@cashu/cashu-ts@3.x`); the app's own wallet stays on 2.x.
