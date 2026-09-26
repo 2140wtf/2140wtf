@@ -67,9 +67,9 @@ test.describe('smoke', () => {
     // collapsible group was split by the 2140 Trollbox migration: 2140 Trollbox is
     // now a standalone destination and the three ₿AO links render flat, so each
     // is a link rather than a group trigger. The chat is now the ported
-    // ₿AO chat ("₿AO Chat", the fund relay's rooms).
+    // ₿AO chat (sidebar "₿AO", the fund relay's rooms).
     await expect(drawer.getByRole('link', { name: 'Feed' })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: '₿AO Chat' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: '₿AO', exact: true })).toBeVisible();
     await expect(drawer.getByRole('link', { name: '₿AO MARKETS' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Fund my ₿AO' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();

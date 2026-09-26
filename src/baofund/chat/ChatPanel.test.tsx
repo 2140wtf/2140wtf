@@ -9,7 +9,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-const ROOM = { roomId: 'r1', name: 'Trollbox', link: 'https://app.bao.network/chat/join#x', shielded: false, joinedAt: 0 };
+const ROOM = { roomId: 'r1', name: 'Troll₿ox', link: 'https://app.bao.network/chat/join#x', shielded: false, joinedAt: 0 };
 
 vi.mock('@/baofund/community/agents.js', () => ({
   roomLinkPrivacy: () => ({ shielded: false }),

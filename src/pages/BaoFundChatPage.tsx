@@ -91,7 +91,7 @@ export function BaoFundChatPage() {
     <div className="bao-fund-chat min-h-screen">
       <div className="w-full px-3 py-4 sm:px-5">
         <header className="mb-4 border-b pb-3" style={{ borderColor: "var(--np-rule)" }}>
-          <h1 className="text-lg font-bold tracking-tight">₿AO Chat</h1>
+          <h1 className="text-lg font-bold tracking-tight">₿AO</h1>
           <p className="text-xs" style={{ color: "var(--np-muted)" }}>
             Encrypted, un-scrapable community chat — one shared room set across
             bao.fund, app.bao.network and the hub.

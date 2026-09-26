@@ -292,10 +292,11 @@ export interface PublicRoom {
   link: string;
 }
 
-/** The API's default public doors (owner spec 2026-09-14, landing name
- *  restored 2026-09-19: Trollbox is the landing room - humans + agents -
- *  plus Public Chat). Authenticated call; returns [] on any failure so the
- *  UI degrades to no defaults, never an error modal. */
+/** The API's default public doors (owner spec 2026-09-14; landing name
+ *  Troll₿ox since 2026-09-24 - the Bitcoin B, after the short-lived Trollbox
+ *  and the intermediate BAO). Landing room first, then Public Chat.
+ *  Authenticated call; returns [] on any failure so the UI degrades to no
+ *  defaults, never an error modal. */
 export async function fetchPublicRooms(signer: FundHttpSigner): Promise<PublicRoom[]> {
   try {
     const json = await fundFetch<{ data?: { rooms?: PublicRoom[] } }>('/v1/chat/public-rooms', { signer });
@@ -308,10 +309,11 @@ export async function fetchPublicRooms(signer: FundHttpSigner): Promise<PublicRo
 
 /** The default rooms by name, with the landing room first. Matching is
  *  exact-name; unknown names from the API are passed through unchanged.
- *  Owner restored the historical landing name Trollbox on 2026-09-19 (the
- *  intermediate 'BAO' rename is migrated in place by the API at boot). */
-export const DEFAULT_LANDING_ROOM = 'Trollbox';
-export const DEFAULT_ROOM_NAMES = ['Trollbox', 'Public Chat'] as const;
+ *  The API renames a registry that still carries a legacy landing name
+ *  ('BAO', 'Trollbox') IN PLACE at boot, keeping the roomId and its history,
+ *  and every client constant must match the API's names exactly. */
+export const DEFAULT_LANDING_ROOM = 'Troll₿ox';
+export const DEFAULT_ROOM_NAMES = ['Troll₿ox', 'Public Chat'] as const;
 
 /** The two public doors every authenticated user may enter - campaign rooms
  *  stay donor-gated, these never do. Consumed by the campaign-chat gate. */

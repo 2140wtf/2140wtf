@@ -33,15 +33,15 @@ it('explains the contribution requirement and names the campaign', async () => {
 it('offers exactly the two public doors', async () => {
   await renderGate();
   const buttons = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim());
-  expect(buttons).toContain('Trollbox');
+  expect(buttons).toContain('Troll₿ox');
   expect(buttons).toContain('Public Chat');
 });
 
-it('opens Trollbox by name when its button is clicked', async () => {
+it('opens the landing room by name when its button is clicked', async () => {
   const { onOpenRoom } = await renderGate();
-  const btn = container.querySelector('[data-testid=gate-open-room-Trollbox]') as HTMLButtonElement;
+  const btn = container.querySelector('[data-testid=gate-open-room-Troll₿ox]') as HTMLButtonElement;
   await act(async () => btn.click());
-  expect(onOpenRoom).toHaveBeenCalledWith('Trollbox');
+  expect(onOpenRoom).toHaveBeenCalledWith('Troll₿ox');
 });
 
 it('opens Public Chat by name when its button is clicked', async () => {

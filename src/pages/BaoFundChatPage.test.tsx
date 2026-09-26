@@ -58,7 +58,7 @@ describe('BaoFundChatPage', () => {
   it('renders the ₿AO chat shell and passes the fund-from-room callback', async () => {
     renderPage();
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/AO Chat/);
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/^₿AO$/);
     expect(screen.getByTestId('bao-chat-panel')).toBeInTheDocument();
     expect(panelSpy).toHaveBeenCalledWith(
       expect.objectContaining({ onFundCampaign: expect.any(Function) }),

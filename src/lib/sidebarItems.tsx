@@ -137,7 +137,7 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
   },
   {
     id: "2140-social",
-    label: "₿AO Chat",
+    label: "₿AO",
     path: "/community",
     icon: MessageSquareMore,
   },

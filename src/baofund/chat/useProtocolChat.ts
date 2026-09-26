@@ -134,8 +134,8 @@ export interface UseProtocolChatReturn {
   importCampaign(fundraiserId: string, title: string, signer: SignerLike): Promise<FundRoomMeta | null>;
   createRoom(name: string, opts: { policy?: 'open' | 'cap-pow' | 'invite'; audience?: 'human' | 'agent'; audienceMode?: 'humans' | 'agents' | 'both'; label?: string }, signer: SignerLike): Promise<void>;
   removeRoom(roomId: string): void;
-  /** Ensure the default public rooms (Trollbox + Public Chat) exist and
-   *  optionally land in Trollbox (skipLanding=true after an invite join).
+  /** Ensure the default public rooms (Troll₿ox + Public Chat) exist and
+   *  optionally land in Troll₿ox (skipLanding=true after an invite join).
    *  `onlyRoomName` restricts the import to one room (signed-out guests get
    *  the public landing room only - never Public Chat or stored rooms). */
   ensureDefaultRooms(signer: SignerLike, skipLanding: boolean, opts?: { onlyRoomName?: string }): Promise<void>;
@@ -1331,12 +1331,25 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       for (const room of pub) {
         if (room.name === DEFAULT_LANDING_ROOM) landing = room.roomId;
       }
-      // Import any missing defaults, then re-read the freshest list for landing.
-      const known = new Set(loadFundRooms().map((r) => r.roomId));
+      // Refresh a stored default IN PLACE when the API's canonical name or
+      // link changed (the landing room was renamed twice: BAO -> Trollbox ->
+      // Troll₿ox). The roomId is the identity; the name and the fresh link
+      // are the API's to define. Without this, a stored legacy name shadows
+      // the canonical one forever, because the import skips known roomIds -
+      // which is why signed-in browsers kept showing the old name while
+      // signed-out guests saw the new one.
+      const stored = new Map(loadFundRooms().map((r) => [r.roomId, r]));
       let changed = false;
       for (const room of pub) {
-        if (known.has(room.roomId)) continue;
         const meta = roomMetaFromLink(room.link, room.name);
+        const existing = stored.get(room.roomId);
+        if (existing) {
+          if (existing.name !== meta.name || existing.link !== meta.link) {
+            persist(addFundRoom({ ...meta, joinedAt: existing.joinedAt }));
+            changed = true;
+          }
+          continue;
+        }
         persist(addFundRoom(meta));
         changed = true;
       }
