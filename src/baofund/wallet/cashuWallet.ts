@@ -11,6 +11,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 const STORAGE_KEY = 'bao-fund-wallet';
 import { isBlockedMintUrl, PRIMARY_MINT_URL } from './mintConfig';
+import { decryptWalletState, encryptWalletState, isEncryptedWalletState } from './walletCrypto';
 import { recordTransaction } from './walletHistory';
 export const DEFAULT_MINT_URL = PRIMARY_MINT_URL;
 
@@ -129,8 +130,10 @@ function emptyWallet(mintUrl: string): StoredWallet {
  */
 export function loadStoredWallet(): StoredWallet {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyWallet(DEFAULT_MINT_URL);
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return emptyWallet(DEFAULT_MINT_URL);
+    const raw = decryptWalletState(stored);
+    if (raw === null) return emptyWallet(DEFAULT_MINT_URL);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const rawMintUrl = typeof parsed.mintUrl === 'string' && parsed.mintUrl ? parsed.mintUrl : DEFAULT_MINT_URL;
     // Canonicalize every key on read: operations always look buckets up by
@@ -290,20 +293,17 @@ function saveStoredWallet(state: StoredWallet, notify = true): void {
       ...(state.pending !== undefined ? { pending: state.pending } : {}),
     },
   };
-  // The browser wallet's proofs (the user's own funds) and mint seed must
-  // persist across reloads; this is a client-only wallet with no server.
-  // CodeQL flags the plaintext local persistence (js/clear-text-storage-of-
-  // sensitive-data). The app's own wallet encrypts at rest; this ported wallet
-  // does not yet — tracked as a money-path follow-up.
-  // codeql[js/clear-text-storage-of-sensitive-data]
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+  // The browser wallet's proofs (the user's own funds) and mint seed are
+  // sealed with XChaCha20-Poly1305 before they touch localStorage; only the
+  // ciphertext is stored (see walletCrypto.ts).
+  localStorage.setItem(STORAGE_KEY, encryptWalletState(JSON.stringify({
     mintUrl: state.mintUrl,
     proofs: state.proofs,
     ...(state.seed !== undefined ? { seed: state.seed } : {}),
     ...(state.counter !== undefined ? { counter: state.counter } : {}),
     ...(state.pending !== undefined ? { pending: state.pending } : {}),
     mints,
-  }));
+  })));
   // Single choke point for user-visible commits. The pre-mint intent journal
   // writes with notify=false: it changes no proof/mint state the UI renders,
   // and notifying would double-fire every receive/spend.
@@ -436,8 +436,13 @@ function withCrossTabLock<T>(op: () => Promise<T>): Promise<T> {
  * through `enqueueOp`, so this one check covers them all.
  */
 function assertStoredWalletReadable(): void {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) return; // fresh wallet: nothing to protect
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored === null) return; // fresh wallet: nothing to protect
+  const raw = decryptWalletState(stored);
+  if (raw === null) {
+    // Sealed bytes that fail authentication: fail closed, never overwrite.
+    throw new Error('Wallet data cannot be read. Recover or back it up before using the wallet.');
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -497,8 +502,33 @@ function enqueueOp<T>(op: () => Promise<T>): Promise<T> {
  * Idempotent: no marker → no-op; a second run after a successful recovery
  * finds no marker and does nothing.
  */
-export async function hydrateStoredWallet(): Promise<{ recovered: number }> {
-  return enqueueOp(async () => {
+/**
+ * Re-seal legacy clear-text wallet (and top-up) bytes in place. Idempotent:
+ * already-sealed values are left untouched; a malformed value is sealed too
+ * (its bytes are preserved as ciphertext).
+ */
+function migrateWalletAtRest(): void {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null && !isEncryptedWalletState(stored)) {
+      localStorage.setItem(STORAGE_KEY, encryptWalletState(stored));
+    }
+  } catch {
+    /* storage unavailable: nothing to migrate */
+  }
+  try {
+    const stored = localStorage.getItem(TOPUP_QUOTE_KEY);
+    if (stored !== null && !isEncryptedWalletState(stored)) {
+      localStorage.setItem(TOPUP_QUOTE_KEY, encryptWalletState(stored));
+    }
+  } catch {
+    /* storage unavailable: nothing to migrate */
+  }
+}
+
+export async function hydrateStoredWallet(): Promise<{ recovered: number }> {  return enqueueOp(async () => {
+    // One-time upgrade: re-seal any legacy clear-text wallet bytes in place.
+    migrateWalletAtRest();
     const result = await hydrateCore();
     if (result.recovered > 0) notifyListeners();
     // Recoveries that succeeded are committed; unresolved markers still
@@ -927,8 +957,10 @@ const TOPUP_QUOTE_KEY = 'bao-fund-wallet-topup';
 
 export function loadPendingTopUp(): LightningTopUp | null {
   try {
-    const raw = localStorage.getItem(TOPUP_QUOTE_KEY);
-    if (!raw) return null;
+    const stored = localStorage.getItem(TOPUP_QUOTE_KEY);
+    if (!stored) return null;
+    const raw = decryptWalletState(stored);
+    if (raw === null) return null;
     const parsed = JSON.parse(raw) as Partial<LightningTopUp>;
     if (
       typeof parsed.quoteId !== 'string' || !parsed.quoteId ||
@@ -998,10 +1030,7 @@ export async function createLightningTopUp(amountSats: number, mintUrl?: string)
     mintUrl: target,
   };
   try {
-    // The pending Lightning top-up quote is the user's own deposit, persisted
-    // locally so it survives a reload (same plaintext-persistence follow-up).
-    // codeql[js/clear-text-storage-of-sensitive-data]
-    localStorage.setItem(TOPUP_QUOTE_KEY, JSON.stringify(topUp));
+    localStorage.setItem(TOPUP_QUOTE_KEY, encryptWalletState(JSON.stringify(topUp)));
   } catch {
     /* storage unavailable: the in-memory quote still works this session */
   }
