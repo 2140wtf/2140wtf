@@ -290,6 +290,11 @@ function saveStoredWallet(state: StoredWallet, notify = true): void {
       ...(state.pending !== undefined ? { pending: state.pending } : {}),
     },
   };
+  // The browser wallet's proofs (the user's own funds) and mint seed must
+  // persist across reloads; this is a client-only wallet with no server and no
+  // alternative store on web. Same documented, user-visible fallback as
+  // src/lib/secureStorage.ts. CodeQL flags the deliberate local persistence.
+  // codeql[js/clear-text-storage-of-sensitive-data]
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     mintUrl: state.mintUrl,
     proofs: state.proofs,
@@ -992,6 +997,9 @@ export async function createLightningTopUp(amountSats: number, mintUrl?: string)
     mintUrl: target,
   };
   try {
+    // The pending Lightning top-up quote is the user's own deposit, persisted
+    // locally so it survives a reload (same client-only fallback as above).
+    // codeql[js/clear-text-storage-of-sensitive-data]
     localStorage.setItem(TOPUP_QUOTE_KEY, JSON.stringify(topUp));
   } catch {
     /* storage unavailable: the in-memory quote still works this session */

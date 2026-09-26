@@ -330,6 +330,13 @@ export default defineConfig(({ mode }) => {
   },
   build: {
     target: 'esnext',
+    // Never inline web fonts. index.html's CSP is `font-src 'self' https:`,
+    // which blocks `data:` fonts; Vite inlines font files under its default
+    // 4 KB limit, so a small @fontsource subset became a data: font and every
+    // page logged a CSP font error (the whole smoke suite failed on it).
+    // Emit fonts as same-origin files instead.
+    assetsInlineLimit: (filePath: string) =>
+      /\.(?:woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
     rollupOptions: {
       output: isNsite
         ? {
