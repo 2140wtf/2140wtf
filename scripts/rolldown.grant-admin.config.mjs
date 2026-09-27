@@ -1,7 +1,7 @@
 import path from "node:path";
 
 // Bundles scripts/grant-admin.ts into a plain node ESM file under .tmp/,
-// resolving the app's "@" alias (mirrors rolldown.bao-agent.config.mjs).
+// resolving the app's "@" alias.
 export default {
   input: path.resolve(import.meta.dirname, "grant-admin.ts"),
   platform: "node",

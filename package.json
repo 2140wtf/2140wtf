@@ -7,8 +7,6 @@
   "scripts": {
     "dev": "vite",
     "dev:safe": "rm -rf node_modules/.vite && NODE_OPTIONS='--max-old-space-size=4096' vite",
-    "agent": "rolldown -c scripts/rolldown.bao-agent.config.mjs && node .tmp/bao-agent.mjs",
-    "agent:bundle": "rolldown -c scripts/rolldown.bao-agent.standalone.config.mjs",
     "paradise": "rolldown -c scripts/rolldown.paradise.config.mjs && node .tmp/paradise.mjs",
     "build": "vite build -l error && cp dist/index.html dist/404.html && echo 'Project built successfully!'",
     "preview": "vite preview --port 3500",
@@ -19,9 +17,7 @@
     "ci": "npm ci && npm run test",
     "cap:sync": "npx cap sync && node scripts/patch-cap-config.mjs",
     "keygen": "keytool -genkey -v -keystore android/app/my-upload-key.keystore -keyalg RSA -keysize 2048 -validity 10000 -alias upload",
-    "icons": "python3 scripts/generate-icons.py",
-    "mcp": "rolldown -c scripts/rolldown.bao-chat-mcp.config.mjs && node .tmp/bao-chat-mcp.mjs",
-    "mcp:bundle": "rolldown -c scripts/rolldown.bao-chat-mcp.standalone.config.mjs"
+    "icons": "python3 scripts/generate-icons.py"
   },
   "engines": {
     "node": ">=22"
