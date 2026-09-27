@@ -47,6 +47,13 @@ jobs:
           # block http:// API calls as mixed content.
           VITE_PETS_BATTLE_ESCROW_PUBKEY: ${{ vars.VITE_PETS_BATTLE_ESCROW_PUBKEY }}
           VITE_PETS_BATTLE_ESCROW_URL: ${{ vars.VITE_PETS_BATTLE_ESCROW_URL }}
+          # BAO Fund API. Pages is static and cannot proxy /fund-api, so the
+          # production build calls the Fund API cross-origin at its absolute
+          # URL (the API allowlist trusts https://2140.wtf / www). Do NOT set
+          # VITE_BAO_FUND_API_SIGN_ORIGIN here: the NIP-98 `u` is the API URL
+          # itself, which the API already trusts. Override via a repo Variable
+          # if the host ever changes.
+          VITE_BAO_FUND_API_URL: ${{ vars.VITE_BAO_FUND_API_URL || 'https://app.bao.network/fund-api' }}
           # GitHub git deps serialize as ssh:// in package-lock.json; rewrite
           # to anonymous HTTPS so keyless CI can clone them.
           GIT_CONFIG_COUNT: 2
