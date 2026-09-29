@@ -1,4 +1,5 @@
 import type { MilestoneEvidenceV1 } from './baoWorkContract';
+import { isDemoNetwork } from './fundNetwork';
 import { fundApiOrigin, fundFetch } from './fundHttp';
 /**
  * BAO Fund fundraising API client.
@@ -111,7 +112,7 @@ export interface BaoContribution {
   refunded_at?: string | null;
 }
 
-export const BAO_RAILS = ['l1', 'lightning', 'bolt12', 'cashu', 'spark', 'ark', 'liquid', 'nwc', 'fedimint', 'btc-testnet4', 'liquid-testnet'] as const;
+export const BAO_RAILS = ['l1', 'lightning', 'bolt12', 'cashu', 'spark', 'ark', 'liquid', 'nwc', 'fedimint', 'btc-testnet4', 'liquid-testnet', 'demo-signet'] as const;
 export type BaoRail = (typeof BAO_RAILS)[number];
 
 export const BAO_RAIL_LABELS: Record<BaoRail, string> = {
@@ -126,11 +127,13 @@ export const BAO_RAIL_LABELS: Record<BaoRail, string> = {
   fedimint: 'Fedimint',
   'btc-testnet4': 'Bitcoin testnet4',
   'liquid-testnet': 'Liquid testnet',
+  'demo-signet': 'Demo signet',
 };
 
 /** Display label for any settlement-rail id a card or API record can carry. */
 export function railLabel(rail?: string): string {
   if (!rail) return '';
+  if (rail === 'demo-signet') return 'Demo signet';
   if (rail === 'l1' || rail === 'btc-testnet4') return 'Bitcoin testnet4';
   if (rail === 'liquid' || rail === 'liquid-testnet') return 'Liquid testnet';
   return BAO_RAIL_LABELS[rail as BaoRail] ?? rail;
@@ -301,7 +304,11 @@ export const BAO_FUNDRAISER_CREATE_KIND = 38003;  /**
    * never on the markets relay. Override with VITE_BAO_RELAY_URL for local dev.
    */
   export function baoRelayUrl(): string {
-    return (import.meta.env.VITE_BAO_RELAY_URL as string | undefined) ?? 'wss://relay.bao.fund';
+    const fromEnv = import.meta.env.VITE_BAO_RELAY_URL as string | undefined;
+    if (fromEnv) return fromEnv;
+    // One relay per universe: demo events live on the demo relay, fund
+    // (testnet) events on the fund's own relay.
+    return isDemoNetwork() ? 'wss://relay.bao.network' : 'wss://relay.bao.fund';
   }
 
 /** Campaign creation uses createFundraiser through the dedicated Fund API.
@@ -389,6 +396,31 @@ export async function contributeToFundraiser(
     signer,
   });
   return res.data;
+}
+
+/**
+ * Demo universe: record a contribution from demo coins with the instant
+ * ledger transfer. The demo API's `/wallet/send` debits the sender and
+ * records the fundraiser contribution in one transaction (status
+ * 'confirmed'), so demo pledges settle immediately - no escrow artifact.
+ * Ledger rails only (cashu/ecash); the caller must already hold the balance.
+ */
+export async function sendFundraiserContribution(
+  signer: SignerLike,
+  id: string,
+  input: { rail: string; amountSats: number; idempotencyKey: string },
+): Promise<{ balanceSats?: number; replayed?: boolean }> {
+  const res = await fundFetch<{ data?: { balance_sats?: number; replayed?: boolean } }>('/v1/wallet/send', {
+    method: 'POST',
+    body: {
+      rail: input.rail,
+      amount_sats: Math.round(input.amountSats),
+      destination: `fundraiser:${id}`,
+      idempotency_key: input.idempotencyKey,
+    },
+    signer,
+  });
+  return { balanceSats: res?.data?.balance_sats, replayed: res?.data?.replayed };
 }
 
 /**

@@ -33,6 +33,7 @@ import { createGuestSigner, getGuestPubkeyHex } from '../../relay/guestIdentity'
 import { useAuth } from '../../auth/useAuth';
 import { sendNutzap } from '../../wallet/nip61';
 import { baoRelayUrl } from '../../lib/baoFundraising';
+import { isDemoNetwork } from '../../lib/fundNetwork';
 import { completeLightningTopUp, createLightningTopUp, loadPendingTopUp, loadStoredWallet, spendFromStoredWallet, sumProofs } from '../../wallet/cashuWallet';
 import { checkTokenProofsSpent, decodeCashuToken, normalizeProofWitnessForEncode } from '../../lib/cashu/tokenUtils';
 import { getEncodedToken } from 'cashu-ts3';
@@ -58,6 +59,9 @@ export function pledgeRailsFor(campaignRails?: readonly string[] | null): {
   rails: BaoRail[];
   unsupported: string[];
 } {
+  // Demo universe: campaigns settle instantly from demo coins through the
+  // ledger transfer, whatever rail the campaign row carries.
+  if (isDemoNetwork()) return { rails: ['demo-signet'], unsupported: [] };
   const configured = (campaignRails ?? []).filter((r): r is string => typeof r === 'string' && r.length > 0);
   if (configured.length === 0) return { rails: ['btc-testnet4', 'liquid-testnet'], unsupported: [] };
   const rails: BaoRail[] = [];
@@ -652,9 +656,11 @@ export function PledgeModal({
                       className="mt-1 w-full border px-2 py-1.5 text-sm outline-none disabled:opacity-50" style={{ borderColor: 'var(--np-rule)' }}>
                       {configuredRails.map((r) => (
                         <option key={r} value={r}>
-                          {r === 'liquid-testnet'
-                            ? 'Liquid testnet - NO VALUE (scripted escrow, zero platform keys)'
-                            : 'Bitcoin testnet4 - TESTNET4 · NO VALUE (scripted escrow, zero platform keys)'}
+                          {r === 'demo-signet'
+                            ? 'Demo signet - NO VALUE (demo coins, instant ledger transfer)'
+                            : r === 'liquid-testnet'
+                              ? 'Liquid testnet - NO VALUE (scripted escrow, zero platform keys)'
+                              : 'Bitcoin testnet4 - TESTNET4 · NO VALUE (scripted escrow, zero platform keys)'}
                         </option>
                       ))}
                     </select>
@@ -668,7 +674,21 @@ export function PledgeModal({
                       {TESTNET4_NO_VALUE_BADGE}
                     </span>
                   )}
-                  {configuredRails.length > 0 && (
+                  {configuredRails.length > 0 && rail === 'demo-signet' && (
+                    <span
+                      data-testid="demo-signet-badge"
+                      className="mt-1 inline-block border px-1.5 py-0.5 text-[10px] font-bold tracking-widest"
+                      style={{ borderColor: 'var(--np-rule)', color: 'var(--np-ink)', background: 'var(--np-bg)' }}
+                    >
+                      DEMO SIGNET
+                    </span>
+                  )}
+                  {configuredRails.length > 0 && rail === 'demo-signet' && (
+                    <span className="mt-1 block text-[10px]" style={{ color: 'var(--np-muted)' }}>
+                      Demo universe: pledges settle instantly from demo coins - the faucet is claimed automatically when your balance is short. No real value.
+                    </span>
+                  )}
+                  {configuredRails.length > 0 && rail !== 'demo-signet' && (
                     <span className="mt-1 block text-[10px]" style={{ color: 'var(--np-muted)' }}>
                       Every pledge locks into the milestone tapscript escrow - released when the milestone verifies,
                       refunded to YOUR key when it fails (CLTV). The platform never holds keys. Verify every

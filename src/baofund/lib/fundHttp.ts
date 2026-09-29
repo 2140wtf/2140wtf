@@ -1,6 +1,7 @@
-/** BAO Fund's HTTP boundary. No shared markets endpoint or cross-origin
- * fallback. All callers use a Fund-specific base; mutations are single-shot. */
-const FUND_PROXY_BASE = '/fund-api';
+/** BAO Fund's HTTP boundary. All callers use the base for the selected
+ *  universe (demo or testnet - see fundNetwork.ts); mutations are single-shot. */
+import { fundNetworkApiBase, isDemoNetwork } from './fundNetwork';
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /** Signs Nostr events (NIP-98); returns the raw signed event object. */
@@ -58,18 +59,7 @@ async function nip98Header(
  * with `/v1/...`; the request engine appends the suffix exactly once.
  */
 export function fundApiOrigin(): string {
-  return validateFundApiBase((import.meta.env.VITE_BAO_FUND_API_URL as string | undefined) || FUND_PROXY_BASE);
-}
-
-/**
- * Origin used in the NIP-98 `u` tag. Defaults to the request origin, but points
- * at the canonical Fund API origin when the app reaches the API through a
- * same-origin `/fund-api` proxy: the API validates `u` against its own origin
- * allowlist, so a proxied localhost URL would be rejected.
- */
-export function fundApiSigningOrigin(): string {
-  const explicit = (import.meta.env as Record<string, string | undefined>).VITE_BAO_FUND_API_SIGN_ORIGIN;
-  return explicit ? validateFundApiBase(explicit) : fundApiOrigin();
+  return validateFundApiBase(fundNetworkApiBase());
 }
 
 /** Reject legacy shared service paths, credentials and accidental /v1 bases.
@@ -79,9 +69,13 @@ function validateFundApiBase(base: string): string {
   try { url = new URL(base, typeof location === 'undefined' ? undefined : location.origin); }
   catch { throw new FundHttpError('Configure a BAO Fund API URL', 0, 'fund_api_configuration'); }
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  // The demo universe legitimately lives on the shared demo host (`/bao-api`).
+  // Testnet keeps rejecting shared/markets bases: its API is dedicated and
+  // non-custodial, and mixing universes is exactly what this guard prevents.
+  const demo = isDemoNetwork();
   if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password || url.search || url.hash ||
-      /(?:^|\/)bao-api(?:\/|$)/.test(url.pathname) || /\/v1\/?$/.test(url.pathname) ||
-      ['bao.markets', 'relay.bao.network'].includes(url.hostname)) {
+      (!demo && /(?:^|\/)bao-api(?:\/|$)/.test(url.pathname)) || /\/v1\/?$/.test(url.pathname) ||
+      (!demo && ['bao.markets', 'relay.bao.network'].includes(url.hostname))) {
     throw new FundHttpError('BAO Fund requires its own API base, without credentials or /v1 suffix', 0, 'fund_api_configuration');
   }
   return url.href.replace(/\/+$/, '');
@@ -121,10 +115,10 @@ function wireErrorCode(json: unknown): string | undefined {
  * NIP-98 transport header for one request. Same-origin calls ride
  * `X-Nostr-Auth` so the browser's Basic credentials for the access gate keep
  * the `Authorization` header. Cross-origin calls (the GitHub-Pages hub
- * calling `app.bao.network/fund-api`, or the markets API) MUST use the
- * standard `Authorization: Nostr …` form: the API's CORS preflight allowlist
- * exposes `Authorization` but not `X-Nostr-Auth`, so the custom header would
- * be blocked before the request leaves the browser.
+ * calling `app.bao.network/fund-api`) MUST use the standard
+ * `Authorization: Nostr …` form: the API's CORS preflight allowlist exposes
+ * `Authorization` but not `X-Nostr-Auth`, so the custom header would be
+ * blocked before the request leaves the browser.
  */
 function nip98AuthHeaderName(url: string): 'Authorization' | 'X-Nostr-Auth' {
   try {
@@ -132,29 +126,6 @@ function nip98AuthHeaderName(url: string): 'Authorization' | 'X-Nostr-Auth' {
   } catch {
     return 'Authorization';
   }
-}
-
-/**
- * The URL the NIP-98 `u` tag must name for a given request. Fund API requests
- * reached through the same-origin `/fund-api` proxy are signed against the
- * canonical Fund API origin (`VITE_BAO_FUND_API_SIGN_ORIGIN`), because the
- * API validates `u` against its own allowlist and would reject the proxied
- * localhost URL. Any other URL (e.g. the markets API) signs as itself.
- */
-function nip98SigningUrl(url: string): string {
-  // Cross-origin requests (e.g. the markets API, or a cross-origin Fund API
-  // base) sign as themselves; only the same-origin `/fund-api` proxy needs the
-  // canonical origin, because the API validates `u` against its allowlist.
-  try {
-    if (new URL(url).origin !== globalThis.location?.origin) return url;
-  } catch {
-    return url;
-  }
-  const origin = fundApiOrigin();
-  if (url === origin || url.startsWith(`${origin}/`)) {
-    return `${fundApiSigningOrigin()}${url.slice(origin.length)}`;
-  }
-  return url;
 }
 
 /**
@@ -170,7 +141,7 @@ export async function nip98AuthHeaders(
   method: string,
   body?: string,
 ): Promise<Record<string, string>> {
-  return { [nip98AuthHeaderName(url)]: await nip98Header(signer, nip98SigningUrl(url), method, body) };
+  return { [nip98AuthHeaderName(url)]: await nip98Header(signer, url, method, body) };
 }
 
 async function doFetch(url: string, opts: FundFetchOptions, method: string, bodyStr: string | undefined): Promise<Response> {
