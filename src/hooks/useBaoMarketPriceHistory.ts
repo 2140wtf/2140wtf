@@ -28,7 +28,9 @@ interface PriceHistoryApiResponse {
 }
 
 const API_BASE = '/v1';
-const PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
+import { baoApiBase } from '@/lib/baoFundraising';
+
+const PUBLIC_API_BASE = `${baoApiBase()}/v1`;
 
 function rangeToPeriod(range: PriceHistoryRange): string {
   switch (range) {

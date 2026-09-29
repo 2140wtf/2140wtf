@@ -37,7 +37,7 @@ describe('fetchBaoWalletBalances', () => {
     await fetchBaoWalletBalances(fakeSigner);
 
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/balance');
+    expect(url).toBe('https://app.bao.network/fund-api/v1/wallet/balance');
     const auth = String((init.headers as Record<string, string>).Authorization);
     expect(auth.startsWith('Nostr ')).toBe(true);
     const event = JSON.parse(atob(auth.slice(6)));
@@ -101,7 +101,7 @@ describe('BAO Cashu claim and collection API', () => {
     });
 
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/claim');
+    expect(url).toBe('https://app.bao.network/fund-api/v1/wallet/claim');
     expect(init.body).toBe(JSON.stringify({ rail: 'cashu', amount_sats: 2_140, idempotency_key: 'claim-key' }));
     const auth = String((init.headers as Record<string, string>).Authorization);
     const event = JSON.parse(atob(auth.slice(6))) as { tags: string[][] };
@@ -165,12 +165,12 @@ describe('BAO Cashu claim and collection API', () => {
       { id: idA, token: 'cashuA-token' },
       { id: idB, token: 'cashuB-token' },
     ]);
-    expect(fetchSpy.mock.calls[0]?.[0]).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-pending');
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('https://app.bao.network/fund-api/v1/wallet/cashu-pending');
 
     const clearSpy = mockFetchOnce(200, { data: { collected: true } });
     await expect(clearPendingBaoCashuTokens(fakeSigner, [idA, idB])).resolves.toBeUndefined();
     const [url, init] = clearSpy.mock.calls.at(-1) as [string, RequestInit];
-    expect(url).toBe('https://relay.bao.network/bao-api/v1/wallet/cashu-collect');
+    expect(url).toBe('https://app.bao.network/fund-api/v1/wallet/cashu-collect');
     expect(init.method).toBe('POST');
     expect(init.body).toBe(JSON.stringify({ token_ids: [idA, idB] }));
     const auth = String((init.headers as Record<string, string>).Authorization);

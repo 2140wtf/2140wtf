@@ -13,19 +13,17 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
 
-export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
+import { baoApiBase } from '@/lib/baoFundraising';
+
+export const BAO_PUBLIC_API_BASE = `${baoApiBase()}/v1`;
 
 /**
- * Primary API base. There is no local API: dev and deployed builds alike talk
- * to the public bao.markets API. Deployed builds try the same-origin proxy
- * first and fall back to the public host inside baoApiFetch; the env var
- * remains as an explicit override.
+ * Primary API base: the BAO Fund universe API (same rows as the fund app).
+ * There is no same-origin proxy on the 2140 host, so the public fund API is
+ * the primary; the env var remains an explicit override.
  */
 function baoPrimaryApiBase(): string {
-  const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
-  if (fromEnv) return `${fromEnv}/v1`;
-  if (import.meta.env.DEV) return BAO_PUBLIC_API_BASE;
-  return '/bao-api/v1';
+  return BAO_PUBLIC_API_BASE;
 }
 
 export interface ApiOutcome {

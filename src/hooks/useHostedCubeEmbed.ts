@@ -8,9 +8,9 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 const CUBE_DESIGN_KIND = 33889;
 
-const DEFAULT_CUBE_API_BASES = [
-  'https://relay.bao.network/bao-api/v1',
-];
+import { baoApiBase } from '@/lib/baoFundraising';
+
+const DEFAULT_CUBE_API_BASES = [`${baoApiBase()}/v1`];
 
 export interface CubeBranding {
   logoUrl?: string | null;

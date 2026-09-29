@@ -999,7 +999,8 @@ it('dedupes a replayed redaction event id (no refetch storm)', async () => {
   expect(a.session.read.mock.calls.length).toBe(readsAfterFirst);
 });
 
-it('syncExternalRooms picks the NIP-98 transport per source URL (same-origin fund API -> X-Nostr-Auth, markets -> Authorization)', async () => {
+it('syncExternalRooms fetches only the fund universe room list (same-origin /fund-api -> X-Nostr-Auth)', async () => {
+  vi.stubEnv('VITE_BAO_FUND_API_URL', '/fund-api');
   const seen: Array<{ url: string; headers: Record<string, string> }> = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string | URL, init?: RequestInit) => {
     seen.push({ url: String(url), headers: (init?.headers ?? {}) as Record<string, string> });
@@ -1008,16 +1009,17 @@ it('syncExternalRooms picks the NIP-98 transport per source URL (same-origin fun
   try {
     const signer = { signEvent: async (e: unknown) => e } as unknown as Parameters<UseProtocolChatReturn['syncExternalRooms']>[0];
     await act(async () => { await current.syncExternalRooms(signer); });
-    const markets = seen.find((s) => s.url.includes('relay.bao.network'));
-    const fundApi = seen.find((s) => s.url.endsWith('/fund-api/v1/chat/fund-rooms'));
-    // Markets API: cross-origin -> standard Authorization (CORS-exposed).
-    expect(markets?.headers.Authorization).toMatch(/^Nostr /);
-    expect(markets?.headers['X-Nostr-Auth']).toBeUndefined();
-    // Fund API: `/fund-api` is same-origin on the gated hosts -> X-Nostr-Auth,
-    // so the access gate's Basic Authorization header survives.
-    expect(fundApi?.headers['X-Nostr-Auth']).toMatch(/^Nostr /);
-    expect(fundApi?.headers.Authorization).toBeUndefined();
+    expect(seen).toHaveLength(1);
+    const [fundApi] = seen;
+    expect(fundApi.url).toContain('/fund-api/v1/chat/fund-rooms');
+    // The retired markets-API (signet) source must never be fetched again.
+    expect(seen.some((s) => s.url.includes('relay.bao.network'))).toBe(false);
+    // `/fund-api` is same-origin on the gated hosts -> X-Nostr-Auth, so the
+    // access gate's Basic Authorization header survives.
+    expect(fundApi.headers['X-Nostr-Auth']).toMatch(/^Nostr /);
+    expect(fundApi.headers.Authorization).toBeUndefined();
   } finally {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   }
 });

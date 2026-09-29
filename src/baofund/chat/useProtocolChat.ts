@@ -1511,12 +1511,11 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
    *  roomMetaFromLink + saveFundRooms. Best-effort by design. */
   const syncExternalRooms = React.useCallback(async (signer: SignerLike) => {
     try {
-      // Two sources, one import path: the markets API lists the caller's
-      // market rooms (bao_flash), and the FUND API lists their campaign rooms
-      // PLUS the milestone-market rooms the fund provisioned (those live in
-      // bao_fund, which the markets API cannot see).
+      // One source, one universe: the FUND API lists the caller's campaign
+      // rooms PLUS the milestone-market rooms the fund provisioned. The old
+      // markets-API room list (bao_flash, signet) is retired - 2140 is the
+      // same universe as bao.fund now.
       const sources = [
-        'https://relay.bao.network/bao-api/v1/chat/my-rooms',
         `${fundApiOrigin()}/v1/chat/fund-rooms`,
       ];
       const existing = loadRooms();

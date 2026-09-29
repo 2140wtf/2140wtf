@@ -114,13 +114,14 @@ export function isBaoRailLive(rail: BaoRail): boolean {
 /** Where users claim free demo sats (₿AO Demo Network faucet, 21,400 sats per rail per 24h). */
 export const BAO_MARKETS_URL = 'https://bao.markets';
 
-/** Base URL of the bao.markets API (no trailing slash). */
+/** Base URL of the BAO Fund API (no trailing slash). */
 export function baoApiBase(): string {
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
   if (fromEnv) return fromEnv;
-  // No local API: dev and deployed builds alike talk to the public bao.markets
-  // API. The env var remains as an explicit override.
-  return 'https://relay.bao.network/bao-api';
+  // The BAO Fund universe: the same API the bao.fund / app.bao.network app
+  // reads and writes, so campaigns, contributions and wallet balances are the
+  // SAME rows everywhere. The env var remains as an explicit override.
+  return 'https://app.bao.network/fund-api';
 }
 
 
@@ -270,17 +271,16 @@ export async function createFundraiser(
 /** Kind of the ₿AO Fund campaign-creation intent the bao.markets bridge ingests. */
 export const BAO_FUNDRAISER_CREATE_KIND = 38003;
 
-/** Relay the bao.markets bridge subscribes to for creation intents. */
+/** Relay the BAO Fund bridge subscribes to for creation intents (the fund
+ *  universe relay, same as the fund app's campaign rooms). */
 export function baoRelayUrl(): string {
-  return (import.meta.env.VITE_BAO_RELAY_URL as string | undefined) ?? 'wss://relay.bao.network';
+  return (import.meta.env.VITE_BAO_RELAY_URL as string | undefined) ?? 'wss://relay.bao.fund';
 }
 
-/**
- * Network tag the bridge filters intents on. The public bao.markets
- * deployment is the signet demo; override only when pointing at a local API.
- */
-function baoNetwork(): string {
-  return (import.meta.env.VITE_BAO_NETWORK as string | undefined) ?? 'demo';
+/** Network tag the bridge filters intents on: the BAO Fund universe is
+ *  testnet. Override only when pointing at a local API. */
+export function baoNetwork(): string {
+  return (import.meta.env.VITE_BAO_NETWORK as string | undefined) ?? 'testnet';
 }
 
 export interface RelayCreateOptions {

@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { PricePoint } from '@/hooks/useBaoMarketPriceHistory';
 
-const SMJ_API_BASE = 'https://relay.bao.network/bao-api/v1';
+import { baoApiBase } from '@/lib/baoFundraising';
+
+const SMJ_API_BASE = `${baoApiBase()}/v1`;
 
 interface SmjBet {
   outcome_id: string;

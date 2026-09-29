@@ -98,8 +98,8 @@ describe('createFundraiserRelayFirst', () => {
 
     const template = publish.mock.calls[0][0];
     expect(template.kind).toBe(BAO_FUNDRAISER_CREATE_KIND);
-    expect(template.relay).toBe('wss://relay.bao.network');
-    expect(template.tags.find((t: string[]) => t[0] === 'n')).toEqual(['n', 'demo']);
+    expect(template.relay).toBe('wss://relay.bao.fund');
+    expect(template.tags.find((t: string[]) => t[0] === 'n')).toEqual(['n', 'testnet']);
     // Random d tag per intent — addressable kinds replace on (pubkey, d),
     // so a stable d would let a second intent overwrite an un-ingested one.
     expect(template.tags.find((t: string[]) => t[0] === 'd')?.[1]).toMatch(/^frc-/);
