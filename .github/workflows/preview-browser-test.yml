@@ -45,6 +45,13 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build preview
+        env:
+          # Reach the Fund API same-origin through the /fund-api preview proxy
+          # (vite.config.ts) and sign the canonical URL (fundHttp's sign-origin),
+          # so the smoke tests do not depend on the API's production CORS
+          # allowlist for localhost origins.
+          VITE_BAO_FUND_API_URL: /fund-api
+          VITE_BAO_FUND_API_SIGN_ORIGIN: https://app.bao.network
         run: npm run build
 
       - name: Run browser smoke tests
