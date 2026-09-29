@@ -11,6 +11,14 @@
 import { baoNip98Header, type BaoApiSigner } from '@/lib/baoApiAuth';
 import { baoApiBase } from '@/lib/baoFundraising';
 
+/** Markets-product base: positions/orders live on the markets API, which is
+ *  a different deployment from the fund API (the fund API only serves the
+ *  fund surface). */
+function baoMarketsApiBase(): string {
+  const fromEnv = (import.meta.env.VITE_BAO_API_URL as string | undefined)?.replace(/\/+$/, '');
+  return fromEnv ?? 'https://relay.bao.network/bao-api';
+}
+
 export interface BaoRailBalance {
   sats: number;
 }
@@ -423,7 +431,7 @@ interface PositionsEnvelope {
 
 /** Fetch the caller's open positions from the bao.markets API (NIP-98 signed). */
 export async function fetchBaoPositions(signer: BaoApiSigner): Promise<BaoPosition[]> {
-  const url = `${baoApiBase()}/v1/positions`;
+  const url = `${baoMarketsApiBase()}/v1/positions`;
   const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
@@ -442,7 +450,7 @@ export interface BaoSmjPosition extends BaoPosition {
 
 /** Fetch the caller's SMJ bets from the bao.markets API (NIP-98 signed). Empty when the route isn't deployed yet. */
 export async function fetchBaoSmjPositions(signer: BaoApiSigner): Promise<BaoSmjPosition[]> {
-  const url = `${baoApiBase()}/v1/smj/positions`;
+  const url = `${baoMarketsApiBase()}/v1/smj/positions`;
   const res = await fetch(url, {
     method: 'GET',
     headers: { Authorization: await baoNip98Header(signer, url, 'GET') },
