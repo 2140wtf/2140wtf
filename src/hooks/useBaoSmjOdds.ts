@@ -1,8 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 
-import { baoApiBase } from '@/lib/baoFundraising';
-
-const SMJ_API_BASE = `${baoApiBase()}/v1`;
+const SMJ_API_BASE = 'https://relay.bao.network/bao-api/v1';
 
 interface SmjOption {
   id: string;
