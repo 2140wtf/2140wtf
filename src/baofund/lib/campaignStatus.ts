@@ -78,6 +78,9 @@ export interface CampaignStatusInputs {
     readonly seq: number;
     readonly runningSats: number;
     readonly closed: boolean;
+    /** Terminal VALUE disposition when the fold carries one: a closed ledger
+     *  with `refunded` reports the 'refunded' phase, not 'released'. */
+    readonly refunded?: boolean;
     readonly frozen: false | string;
   };
   /** The court fold's live dispute, if any. */
@@ -191,7 +194,7 @@ export function campaignStatus(input: CampaignStatusInputs): CampaignStatusView 
   if (input.fold.frozen) phase = 'frozen';
   else if (registrarDead) phase = 'registrar_dead';
   else if (blockedBy.length > 0) phase = input.fold.seq === 0 ? 'staking' : 'funded';
-  else if (input.fold.closed) phase = 'released';
+  else if (input.fold.closed) phase = input.fold.refunded ? 'refunded' : 'released';
   else phase = 'releasable';
 
   return {

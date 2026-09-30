@@ -20,8 +20,8 @@ vi.mock('@/lib/cashu/cashuFetch', () => ({
   createMintFetch: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@cashu/cashu-ts', async () => {
-  const actual = await vi.importActual<typeof import('@cashu/cashu-ts')>('@cashu/cashu-ts');
+vi.mock('cashu-ts2', async () => {
+  const actual = await vi.importActual<typeof import('cashu-ts2')>('cashu-ts2');
   return {
     ...actual,
     CashuMint: vi.fn(function () {

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import type { Proof } from 'cashu-ts3';
 import {
   API_ORACLE_MIN_LOCKTIME_SECONDS,
   ESCROW_DEPOSIT_LOCKTIME_SECONDS,
@@ -29,12 +28,12 @@ function escrowSecret(locktime?: number): string {
   ]);
 }
 
-const proof = (secret: string): Proof => ({
+const proof = (secret: string) => ({
   id: '00aa',
   amount: 1,
   secret,
   C: `02${'d'.repeat(64)}`,
-}) as Proof;
+});
 
 describe('escrowDrill timing helpers', () => {
   it('builds the deposit beyond the deployed API minimum (24h), not the stale 1h', () => {

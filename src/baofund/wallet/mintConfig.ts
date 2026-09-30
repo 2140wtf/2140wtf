@@ -67,8 +67,11 @@ export function parseMintUrls(raw: string | undefined): string[] {
   return out;
 }
 
-export const configuredMints: string[] = parseMintUrls(
-  (import.meta.env as Record<string, string | undefined>).VITE_BAO_MINT_URL,
-);
+// Same safe env access as the rail modules: `import.meta.env` exists under
+// Vite but is undefined under plain node/tsx, where these pure helpers are
+// also used by the agent CLIs.
+const VITE_ENV = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
+
+export const configuredMints: string[] = parseMintUrls(VITE_ENV.VITE_BAO_MINT_URL);
 
 export const PRIMARY_MINT_URL = configuredMints[0] ?? FALLBACK_MINT_URL;

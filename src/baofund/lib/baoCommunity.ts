@@ -19,7 +19,7 @@ import {
   type RoomSession,
 } from '@/baofund/community/client.js';
 import { validateRoomInvite } from './roomInvite';
-import { WebRelayConn } from '@/baofund/community/websocket.js';
+import { WebRelayConn } from '@/baofund/community-websocket/websocket.js';
 import { roomLinkPrivacy } from '@/baofund/community/agents.js';
 import type { AdmissionProofs } from '@/baofund/community/admission.js';
 import { fundFetch, type FundHttpSigner } from './fundHttp';
@@ -86,10 +86,6 @@ export function loadFundRooms(storage: RoomStorage = localStorage, identity?: st
     for (const r of parsed) {
       const candidate = r as FundRoomMeta;
       if (typeof candidate?.link !== 'string' || typeof candidate?.roomId !== 'string') continue;
-      // Drop the retired hosted-2140 Trollbox: the BAO chat must use the Fund
-      // relay's rooms (relay.bao.fund) only. A room on another relay cannot
-      // share the fund scroll and rendered empty.
-      if (/2140\.social/i.test(candidate.link)) continue;
       // Re-derive the identity from the LINK - the link is the room's only
       // durable handle; a tampered/stale stored roomId must not win over it
       // (it would desync identity, privacy display, and reaction targets).

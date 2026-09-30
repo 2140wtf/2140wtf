@@ -540,6 +540,75 @@ describe('liquidTestnetAccount — send', () => {
     expect(opened.assetId.toLowerCase()).toBe(NATIVE.toLowerCase());
   });
 
+  it('blinds the change when a confidential input pays an UNCONFIDENTIAL destination (escrow shape, real wasm)', async () => {
+    const holder = deriveLiquidTestnetAccountFromSeed(new Uint8Array(32).fill(0x66));
+
+    // 1. Fund the holder's confidential address from an explicit input.
+    const first = await sendLiquidTestnet(account, {
+      to: holder.confidentialAddress,
+      sats: 80_000,
+      utxos: [explicitUtxo(account, 100_000)],
+      fetchFn: fetchFor({ [`POST ${BASE}/tx`]: () => text('33'.repeat(32)) }),
+      baseUrl: BASE,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const blindedOutput = Transaction.fromHex(first.rawTx).outs[0];
+    const funding = new Transaction();
+    funding.addInput(Buffer.alloc(32, 9), 0, 0xffffffff, Buffer.alloc(0));
+    funding.addOutput(
+      blindedOutput.script,
+      blindedOutput.value,
+      blindedOutput.asset,
+      blindedOutput.nonce,
+      blindedOutput.rangeProof,
+      blindedOutput.surjectionProof,
+    );
+    const fundingTxid = funding.getId();
+
+    // 2. Scan with the real unblinder to get the confidential UTXO.
+    const held = (await scanLiquidTestnetUtxos(holder, {
+      fetchFn: fetchFor({
+        [`${BASE}/address/${holder.confidentialAddress}/utxo`]: () =>
+          json([{ txid: fundingTxid, vout: 0, status: { confirmed: true, block_height: 5 } }]),
+        [`${BASE}/address/${holder.unconfidentialAddress}/utxo`]: () => json([]),
+        [`${BASE}/tx/${fundingTxid}/hex`]: () => text(funding.toHex()),
+      }),
+      baseUrl: BASE,
+    }))[0];
+    expect(held).toBeTruthy();
+    if (!held) return;
+
+    // 3. Spend to an UNCONFIDENTIAL destination (the escrow address shape the
+    //    API issues). Without the change-blinding fix the node rejects this
+    //    with `bad-txns-in-ne-out, value in != value out`.
+    const sent = await sendLiquidTestnet(holder, {
+      to: recipientAccount.unconfidentialAddress,
+      sats: 1_000,
+      utxos: [held],
+      fetchFn: fetchFor({ [`POST ${BASE}/tx`]: () => text('44'.repeat(32)) }),
+      baseUrl: BASE,
+    });
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) return;
+    const parsed = Transaction.fromHex(sent.rawTx);
+    const [dest, change, feeOut] = parsed.outs;
+    if (!dest || !change || !feeOut) return;
+    // Destination stays explicit so address-based watchers (Esplora
+    // /address/<tex1…>/utxo) can see the payment.
+    expect(dest.value.equals(valueBuf(1_000))).toBe(true);
+    expect((dest.rangeProof ?? new Uint8Array()).length).toBe(0);
+    // Change is blinded with the balancing factor and opens with OUR key.
+    expect(change.value.length).toBe(33);
+    expect((change.rangeProof ?? new Uint8Array()).length).toBeGreaterThan(0);
+    const opened = await unblindLiquidOutput(change, holder.blindingPrivateKey);
+    expect(opened.valueSats).toBe(80_000 - 1_000 - sent.feeSats);
+    expect(opened.assetId.toLowerCase()).toBe(NATIVE.toLowerCase());
+    // Fee output stays explicit (empty script, fee amount).
+    expect(feeOut.script.length).toBe(0);
+    expect(feeOut.value.equals(valueBuf(sent.feeSats))).toBe(true);
+  });
+
   it('refuses cross-chain destinations and reports insufficient funds honestly', async () => {
     const missing = await sendLiquidTestnet(account, {
       to: 'tb1q3ejchc0s0st9rnzlry0m3fgc9j6vgwat3tq5ts',

@@ -28,9 +28,20 @@ import {
   parseEscrowSwapForCompletion,
   signEscrowSwapForParty,
   type EscrowSwapExpectation,
+  type EscrowSwapWire,
 } from '../cashu/escrowSwapComplete';
+import { recoverEscrowPayout, type EscrowPayoutSignature, type RecoveredEscrowPayout } from '../cashu/escrowPayout';
 
 export type CourtSettlementStatus = 'executed' | 'initiated-unsigned-method' | 'initiated-failed';
+
+/** Outcome of the payout unblind/store step that follows a completion. */
+export interface EscrowPayoutOutcome {
+  amountSats: number;
+  /** `wallet` = adopted into the local wallet; `journal` = saved for manual
+   *  recovery; `failed` = NOT stored (warning carries the reason). */
+  stored: 'wallet' | 'journal' | 'failed';
+  warning?: string;
+}
 
 export interface CourtSettlementResult {
   status: CourtSettlementStatus;
@@ -40,6 +51,8 @@ export interface CourtSettlementResult {
   /** Present when the escrow swap was completed client-side. */
   milestoneStatus?: string;
   releasedSats?: number;
+  /** Present when the completion settled an escrow payout (or failed to). */
+  payout?: EscrowPayoutOutcome;
 }
 
 export interface CourtSettlementDeps {
@@ -60,11 +73,73 @@ export interface CourtSettlementDeps {
   release?: typeof releaseMilestone;
   completeRelease?: typeof completeEscrowRelease;
   completeRefund?: typeof completeEscrowRefund;
+  /** Injectable payout recovery (unblind + store). */
+  recoverPayout?: typeof recoverEscrowPayout;
   /**
    * Refund initiate transport; defaults to POST .../refund through fundFetch.
    * Returns the raw `data` object (the `escrow_refund` lives on it).
    */
   fetchRefundInitiate?: (opts: { signer: SignerLike; cid: string }) => Promise<Record<string, unknown> | undefined>;
+}
+
+/**
+ * Unblind + store a completed swap's payout; never throws. A recovery
+ * failure must not turn a settled release/refund into a reported failure
+ * (the escrow IS settled at the mint) - it is surfaced as a warning.
+ */
+async function recoverPayoutFor(opts: {
+  kind: 'release' | 'refund';
+  recover: typeof recoverEscrowPayout | undefined;
+  wire: EscrowSwapWire;
+  signatures: readonly EscrowPayoutSignature[] | null;
+  expectedPayoutSats: number;
+  myPubkey: string;
+  identityHex: string | null;
+  frId: string;
+  milestoneId: string;
+  /**
+   * Journal scope override. The payout journal dedupes by (frId,
+   * milestoneId), which is exact for a RELEASE (one per milestone) but
+   * collides for REFUNDS: a donor with two refunded contributions in one
+   * milestone would have the second payout overwrite the first's journal
+   * entry. Refunds therefore journal under `<milestoneId>::c<contributionId>`.
+   */
+  journalId?: string;
+}): Promise<EscrowPayoutOutcome | undefined> {
+  if (!opts.signatures || opts.signatures.length === 0) {
+    return {
+      amountSats: 0,
+      stored: 'failed',
+      warning: 'the API returned no mint signatures for the payout - it cannot be unblinded or stored (contact an admin with the release details)',
+    };
+  }
+  const recover = opts.recover ?? recoverEscrowPayout;
+  try {
+    const recovered: RecoveredEscrowPayout = await recover({
+      kind: opts.kind,
+      frId: opts.frId,
+      milestoneId: opts.journalId ?? opts.milestoneId,
+      mint: opts.wire.mint,
+      expectedPayoutSats: opts.expectedPayoutSats,
+      outputs: opts.wire.outputs,
+      signatures: opts.signatures,
+      identityPubkey: opts.myPubkey,
+      identityHex: opts.identityHex,
+    });
+    return { amountSats: recovered.amountSats, stored: recovered.stored };
+  } catch (err) {
+    return { amountSats: 0, stored: 'failed', warning: errorMessage(err) };
+  }
+}
+
+/** The user-facing sentence for a payout outcome (empty when none). */
+export function payoutOutcomeNote(payout: EscrowPayoutOutcome | undefined): string {
+  if (!payout) return '';
+  if (payout.stored === 'failed') {
+    return ` Payout recovery pending: ${payout.warning ?? 'the payout could not be stored'}.`;
+  }
+  const verb = payout.stored === 'wallet' ? 'added to your wallet' : 'saved under Wallet - escrow payouts';
+  return ` Payout ${payout.amountSats.toLocaleString()} sats ${verb}.`;
 }
 
 interface ReleaseEscrowWire {
@@ -109,6 +184,8 @@ export interface FounderReleaseDeps {
   /** Injectable transports for tests. */
   release?: typeof releaseMilestone;
   completeRelease?: typeof completeEscrowRelease;
+  /** Injectable payout recovery (unblind + store). */
+  recoverPayout?: typeof recoverEscrowPayout;
 }
 
 /**
@@ -172,11 +249,25 @@ export async function executeFounderRelease(deps: FounderReleaseDeps): Promise<C
       swap: signed,
       proofEventId: deps.proofEventId,
     });
+    // The settlement is real from here on: a payout-recovery failure is a
+    // warning, never reported as "not settled".
+    const payout = await recoverPayoutFor({
+      kind: 'release',
+      recover: deps.recoverPayout,
+      wire: parsed.wire,
+      signatures: settled.swapSignatures,
+      expectedPayoutSats: escrow.project_output_sats,
+      myPubkey: deps.myPubkey,
+      identityHex: deps.identityHex,
+      frId: deps.frId,
+      milestoneId: deps.milestoneId,
+    });
     return {
       status: 'executed',
-      message: `Settlement complete - milestone ${settled.milestoneStatus} (${settled.releasedSats.toLocaleString()} sats released).`,
+      message: `Settlement complete - milestone ${settled.milestoneStatus} (${settled.releasedSats.toLocaleString()} sats released).${payoutOutcomeNote(payout)}`,
       milestoneStatus: settled.milestoneStatus,
       releasedSats: settled.releasedSats,
+      ...(payout ? { payout } : {}),
     };
   } catch (err) {
     return incomplete(awaiting, err);
@@ -196,6 +287,7 @@ export async function executeCourtSettlement(deps: CourtSettlementDeps): Promise
       payoutReference: deps.myPubkey,
       release: deps.release,
       completeRelease: deps.completeRelease,
+      recoverPayout: deps.recoverPayout,
     });
   }
   const completeRefund = deps.completeRefund ?? completeEscrowRefund;
@@ -213,7 +305,10 @@ export async function executeCourtSettlement(deps: CourtSettlementDeps): Promise
     if (data?.escrow_release) {
       return incomplete('donor', new Error('the refund initiate returned a release-shaped swap - refusing to report the refund as settled'));
     }
-    return { status: 'executed', message: 'Court verdict executed.' };
+    // The refund route settles ONLY by swap: a 2xx response without an
+    // `escrow_refund` is a protocol violation, not a recorded settlement.
+    // Reporting it as executed hid uncompleted refunds (audit).
+    return incomplete('donor', new Error('the refund response is missing the escrow_refund swap - refusing to report the refund as settled'));
   }
   const awaiting = Array.isArray(escrow.awaiting) ? escrow.awaiting.join('/') : 'donor';
   if (!deps.identityHex) return unsignedMethod(awaiting);
@@ -235,9 +330,24 @@ export async function executeCourtSettlement(deps: CourtSettlementDeps): Promise
       contributionId: String(cid),
       swap: signed,
     });
+    const payout = await recoverPayoutFor({
+      kind: 'refund',
+      recover: deps.recoverPayout,
+      wire: parsed.wire,
+      signatures: settled.swapSignatures,
+      expectedPayoutSats: escrow.refund_sats,
+      myPubkey: deps.myPubkey,
+      identityHex: deps.identityHex,
+      frId: deps.frId,
+      milestoneId: deps.milestoneId,
+      // Per-contribution journal scope: two refunds on one milestone must not
+      // overwrite each other's unrecovered payout (money-journal audit).
+      journalId: `${deps.milestoneId}::c${cid}`,
+    });
     return {
       status: 'executed',
-      message: `Court verdict executed - ${settled.refundSats.toLocaleString()} sats refunded to the donor.`,
+      message: `Court verdict executed - ${settled.refundSats.toLocaleString()} sats refunded to the donor.${payoutOutcomeNote(payout)}`,
+      ...(payout ? { payout } : {}),
     };
   } catch (err) {
     return incomplete(awaiting, err);

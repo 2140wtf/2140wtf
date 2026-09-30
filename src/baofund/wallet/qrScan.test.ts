@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
-import { getEncodedToken } from 'cashu-ts3';
+import { getEncodedToken, normalizeProofAmounts } from '@cashu/cashu-ts';
 import { QrScanSession, setQrUrDecoderFactory, staticCodeKind } from './qrScan';
 
 afterEach(() => setQrUrDecoderFactory(null));
@@ -8,12 +8,12 @@ function makeToken(proofCount = 1): string {
   return getEncodedToken({
     mint: 'https://mint.example.com',
     unit: 'sat',
-    proofs: Array.from({ length: proofCount }, (_, i) => ({
+    proofs: normalizeProofAmounts(Array.from({ length: proofCount }, (_, i) => ({
       id: '00ad268c6d1f09e6',
       amount: 1,
       secret: `scan-secret-${i}-${'x'.repeat(60)}`,
       C: '02' + String(i + 10).padStart(2, '0').repeat(32),
-    })),
+    }))),
   });
 }
 

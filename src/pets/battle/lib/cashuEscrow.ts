@@ -10,8 +10,8 @@
 // instant release; disagree (or a missing attestation) → after the 24h
 // locktime each player reclaims their own stake with their own key.
 
-import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
+import { CashuMint, CashuWallet } from 'cashu-ts2';
+import { hashToCurve } from 'cashu-ts2/crypto/common';
 import { finalizeEvent } from 'nostr-tools';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 

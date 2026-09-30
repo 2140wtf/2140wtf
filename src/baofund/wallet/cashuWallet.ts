@@ -1,19 +1,55 @@
-import { Mint, Wallet, getDecodedToken, getEncodedToken, type CounterSource, type MeltQuoteResponse, type Proof } from 'cashu-ts3';
+import {
+  Mint,
+  Wallet,
+  getEncodedToken,
+  getTokenMetadata,
+  type CounterSource,
+  type MeltQuoteBolt11Response,
+  type ProofLike,
+} from '@cashu/cashu-ts';
 import {
   decodeCashuToken,
   isAllowedMintUrl,
   MAX_TOKEN_LENGTH,
-  normalizeProofWitnessForEncode,
   safeNormalizeMintUrl,
+  toStoredProofs,
+  type StoredProof,
 } from '../lib/cashu/tokenUtils';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 const STORAGE_KEY = 'bao-fund-wallet';
 import { isBlockedMintUrl, PRIMARY_MINT_URL } from './mintConfig';
-import { decryptWalletState, encryptWalletState, isEncryptedWalletState } from './walletCrypto';
 import { recordTransaction } from './walletHistory';
+import {
+  adoptLegacyStorageKey,
+  getActiveIdentity,
+  onActiveIdentityChange,
+  scopedStorageKey,
+} from '../lib/activeIdentity';
 export const DEFAULT_MINT_URL = PRIMARY_MINT_URL;
+
+/**
+ * The ACTIVE identity's wallet slot. The Stored Wallet is per-identity: a
+ * later identity on the same origin must never read, spend or republish the
+ * previous identity's proofs (audit run-2 global-cashu-wallet-cross-identity).
+ * Reads with no identity return an empty wallet; writes fail closed.
+ */
+function walletStorageKey(): string | null {
+  const identity = getActiveIdentity();
+  return identity ? scopedStorageKey(STORAGE_KEY, identity) : null;
+}
+
+function walletStorageKeyOrThrow(): string {
+  const key = walletStorageKey();
+  if (!key) throw new Error('Sign in to use the wallet');
+  return key;
+}
+
+/** Fail closed on mutations while signed out: never a shared/global slot. */
+function requireWalletIdentity(): void {
+  if (!getActiveIdentity()) throw new Error('Sign in to use the wallet');
+}
 
 /**
  * Durable journal of an in-flight mint operation (R11 crash recovery).
@@ -29,7 +65,7 @@ export const DEFAULT_MINT_URL = PRIMARY_MINT_URL;
  */
 export interface PendingOp {
   kind: 'spend' | 'receive' | 'mint' | 'melt';
-  inputs: Proof[];
+  inputs: StoredProof[];
   counterStart: number;
   keysetId: string;
   at: number;
@@ -41,7 +77,7 @@ export interface PendingOp {
 
 /** Per-mint wallet state: proofs, recovery seed, counter and crash journal. */
 export interface MintState {
-  proofs: Proof[];
+  proofs: StoredProof[];
   /** Hex 32-byte local seed for deterministic (NUT-09) outputs. Generated
    *  once per mint on first mint operation and persisted with the wallet.
    *  NOT a spending key: it only lets a crashed swap's outputs be re-derived. */
@@ -61,7 +97,7 @@ export interface MintState {
 export interface StoredWallet {
   /** Active mint: default target for spends and the UI's selected mint. */
   mintUrl: string;
-  proofs: Proof[];
+  proofs: StoredProof[];
   seed?: string;
   counter?: number;
   pending?: PendingOp;
@@ -95,7 +131,7 @@ function parseMintState(raw: unknown): MintState | null {
   if (!raw || typeof raw !== 'object') return null;
   const parsed = raw as Partial<MintState>;
   const state: MintState = {
-    proofs: Array.isArray(parsed.proofs) ? (parsed.proofs as Proof[]) : [],
+    proofs: Array.isArray(parsed.proofs) ? (parsed.proofs as StoredProof[]) : [],
   };
   if (typeof parsed.seed === 'string' && HEX64.test(parsed.seed)) state.seed = parsed.seed;
   if (Number.isSafeInteger(parsed.counter) && (parsed.counter as number) >= 0) state.counter = parsed.counter as number;
@@ -130,10 +166,10 @@ function emptyWallet(mintUrl: string): StoredWallet {
  */
 export function loadStoredWallet(): StoredWallet {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return emptyWallet(DEFAULT_MINT_URL);
-    const raw = decryptWalletState(stored);
-    if (raw === null) return emptyWallet(DEFAULT_MINT_URL);
+    const key = walletStorageKey();
+    if (!key) return emptyWallet(DEFAULT_MINT_URL);
+    const raw = localStorage.getItem(key);
+    if (!raw) return emptyWallet(DEFAULT_MINT_URL);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const rawMintUrl = typeof parsed.mintUrl === 'string' && parsed.mintUrl ? parsed.mintUrl : DEFAULT_MINT_URL;
     // Canonicalize every key on read: operations always look buckets up by
@@ -149,7 +185,7 @@ export function loadStoredWallet(): StoredWallet {
         return;
       }
       mints[url] = {
-        proofs: unionProofsBySecret(existing.proofs, state.proofs) as Proof[],
+        proofs: unionProofsBySecret(existing.proofs, state.proofs) as StoredProof[],
         ...(existing.seed !== undefined ? { seed: existing.seed } : state.seed !== undefined ? { seed: state.seed } : {}),
         counter: Math.max(existing.counter ?? 0, state.counter ?? 0),
         ...(existing.pending !== undefined ? { pending: existing.pending } : state.pending !== undefined ? { pending: state.pending } : {}),
@@ -164,7 +200,7 @@ export function loadStoredWallet(): StoredWallet {
     }
     // Legacy single-mint shape: fold the top-level fields into the active bucket.
     const legacy: MintState = {
-      proofs: Array.isArray(parsed.proofs) ? (parsed.proofs as Proof[]) : [],
+      proofs: Array.isArray(parsed.proofs) ? (parsed.proofs as StoredProof[]) : [],
       ...(typeof parsed.seed === 'string' && HEX64.test(parsed.seed) ? { seed: parsed.seed } : {}),
       ...(Number.isSafeInteger(parsed.counter) && (parsed.counter as number) >= 0 ? { counter: parsed.counter as number } : {}),
       ...(parsed.pending && typeof parsed.pending === 'object' && Array.isArray((parsed.pending as Partial<PendingOp>).inputs)
@@ -196,7 +232,7 @@ export function loadStoredWallet(): StoredWallet {
   }
 }
 
-export function sumProofs(proofs: Proof[]): number {
+export function sumProofs(proofs: ReadonlyArray<Pick<StoredProof, 'amount'>>): number {
   return proofs.reduce((acc, p) => acc + (p.amount ?? 0), 0);
 }
 
@@ -270,9 +306,21 @@ function installStorageBridge(): void {
   window.addEventListener('storage', (e) => {
     // `storage` fires only in tabs OTHER than the writer - exactly the
     // foreign-commit signal we want to surface through the same listeners.
-    if (e.key === STORAGE_KEY) notifyListeners();
+    // Every per-identity slot (and the legacy key, during migration) counts.
+    if (e.key === STORAGE_KEY || e.key?.startsWith(`${STORAGE_KEY}:`)) notifyListeners();
   });
 }
+
+// Identity change: adopt the legacy global store for the newly ACTIVE
+// identity (one-time), then refresh every subscriber - the visible wallet is
+// a different identity's now (or empty after sign-out).
+onActiveIdentityChange((identity) => {
+  if (identity) {
+    adoptLegacyStorageKey(STORAGE_KEY, identity);
+    adoptLegacyStorageKey(TOPUP_QUOTE_KEY, identity);
+  }
+  notifyListeners();
+});
 
 /** Return a copy of `stored` with `next` as the bucket for `mintUrl`. */
 function withMintState(stored: StoredWallet, mintUrl: string, next: MintState): StoredWallet {
@@ -293,17 +341,14 @@ function saveStoredWallet(state: StoredWallet, notify = true): void {
       ...(state.pending !== undefined ? { pending: state.pending } : {}),
     },
   };
-  // The browser wallet's proofs (the user's own funds) and mint seed are
-  // sealed with XChaCha20-Poly1305 before they touch localStorage; only the
-  // ciphertext is stored (see walletCrypto.ts).
-  localStorage.setItem(STORAGE_KEY, encryptWalletState(JSON.stringify({
+  localStorage.setItem(walletStorageKeyOrThrow(), JSON.stringify({
     mintUrl: state.mintUrl,
     proofs: state.proofs,
     ...(state.seed !== undefined ? { seed: state.seed } : {}),
     ...(state.counter !== undefined ? { counter: state.counter } : {}),
     ...(state.pending !== undefined ? { pending: state.pending } : {}),
     mints,
-  })));
+  }));
   // Single choke point for user-visible commits. The pre-mint intent journal
   // writes with notify=false: it changes no proof/mint state the UI renders,
   // and notifying would double-fire every receive/spend.
@@ -371,22 +416,26 @@ async function receiveToken(
   wallet: Wallet,
   tokenStr: string,
   opts?: ReceiveOptions,
-): Promise<Proof[]> {
+): Promise<StoredProof[]> {
   // Defensive decode FIRST: length cap + proof-shape validation + mint
-  // allowlist rules from tokenUtils.
+  // allowlist rules from tokenUtils. getTokenMetadata is the 4.x synchronous
+  // decode (no keyset map needed; the wallet below resolves the real ids).
   if (typeof tokenStr !== 'string' || tokenStr.length > MAX_TOKEN_LENGTH) {
     throw new Error('Token is too large or malformed');
   }
-  const decoded = getDecodedToken(tokenStr);
-  if (safeNormalizeMintUrl(decoded.mint) !== safeNormalizeMintUrl(wallet.mint.mintUrl)) {
-    throw new Error(`Token mint ${decoded.mint} does not match wallet mint ${wallet.mint.mintUrl}`);
+  const meta = getTokenMetadata(tokenStr);
+  if (safeNormalizeMintUrl(meta.mint) !== safeNormalizeMintUrl(wallet.mint.mintUrl)) {
+    throw new Error(`Token mint ${meta.mint} does not match wallet mint ${wallet.mint.mintUrl}`);
   }
   if (!decodeCashuToken(tokenStr)) throw new Error('Token failed defensive validation');
+  // The token string goes to the library untouched: it decodes with the
+  // wallet's own keysets (v2 SHORT ids included) and never re-encodes the
+  // witness (the old app-level re-encode double-encoded it).
   // `keysetId` binds the deterministic (NUT-09) outputs to the keyset the
   // crash journal records, so a recovery restore re-derives against the same
   // key material.
   const proofs = await wallet.receive(tokenStr, { ...opts, keysetId: wallet.keysetId });
-  return Array.isArray(proofs) ? proofs : [];
+  return toStoredProofs(Array.isArray(proofs) ? proofs : []);
 }
 
 /**
@@ -421,9 +470,12 @@ function withCrossTabLock<T>(op: () => Promise<T>): Promise<T> {
   const locks =
     typeof navigator !== 'undefined' ? (navigator as Navigator & { locks?: LockManagerLike }).locks : undefined;
   if (!locks?.request) return op();
-  // The DOM LockManager flattens the callback's promise; the local structural
-  // type infers R = Promise<T>, so pin the real shape here.
-  return locks.request(STORAGE_KEY, op) as Promise<T>;
+  // Lock the ACTIVE identity's slot: same-identity tabs still serialize, while
+  // a different identity's operations are independent (and signed-out ops fall
+  // back to the base name).
+  // LockManagerLike#request types the callback result as T, but our op is
+  // already a promise - keep the runtime lock, present the promise type.
+  return locks.request(walletStorageKey() ?? STORAGE_KEY, op) as Promise<T>;
 }
 
 /**
@@ -436,13 +488,10 @@ function withCrossTabLock<T>(op: () => Promise<T>): Promise<T> {
  * through `enqueueOp`, so this one check covers them all.
  */
 function assertStoredWalletReadable(): void {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === null) return; // fresh wallet: nothing to protect
-  const raw = decryptWalletState(stored);
-  if (raw === null) {
-    // Sealed bytes that fail authentication: fail closed, never overwrite.
-    throw new Error('Wallet data cannot be read. Recover or back it up before using the wallet.');
-  }
+  const key = walletStorageKey();
+  if (!key) return; // signed out: no wallet slot exists to protect
+  const raw = localStorage.getItem(key);
+  if (raw === null) return; // fresh wallet: nothing to protect
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -502,33 +551,8 @@ function enqueueOp<T>(op: () => Promise<T>): Promise<T> {
  * Idempotent: no marker → no-op; a second run after a successful recovery
  * finds no marker and does nothing.
  */
-/**
- * Re-seal legacy clear-text wallet (and top-up) bytes in place. Idempotent:
- * already-sealed values are left untouched; a malformed value is sealed too
- * (its bytes are preserved as ciphertext).
- */
-function migrateWalletAtRest(): void {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored !== null && !isEncryptedWalletState(stored)) {
-      localStorage.setItem(STORAGE_KEY, encryptWalletState(stored));
-    }
-  } catch {
-    /* storage unavailable: nothing to migrate */
-  }
-  try {
-    const stored = localStorage.getItem(TOPUP_QUOTE_KEY);
-    if (stored !== null && !isEncryptedWalletState(stored)) {
-      localStorage.setItem(TOPUP_QUOTE_KEY, encryptWalletState(stored));
-    }
-  } catch {
-    /* storage unavailable: nothing to migrate */
-  }
-}
-
-export async function hydrateStoredWallet(): Promise<{ recovered: number }> {  return enqueueOp(async () => {
-    // One-time upgrade: re-seal any legacy clear-text wallet bytes in place.
-    migrateWalletAtRest();
+export async function hydrateStoredWallet(): Promise<{ recovered: number }> {
+  return enqueueOp(async () => {
     const result = await hydrateCore();
     if (result.recovered > 0) notifyListeners();
     // Recoveries that succeeded are committed; unresolved markers still
@@ -564,35 +588,42 @@ async function hydrateCore(targetMint?: string): Promise<{ recovered: number; fa
   return { recovered, failures };
 }
 
+/** Drop one mint's in-flight marker (committed change, notifies listeners). */
+function dropPendingMarker(mintUrl: string): void {
+  const stored = loadStoredWallet();
+  const bucket = stored.mints[mintUrl];
+  if (bucket?.pending) saveStoredWallet(withMintState(stored, mintUrl, { ...bucket, pending: undefined }));
+}
+
 /** Recover one mint's journaled operation. Returns proofs recovered (0-…). */
 async function recoverPendingForMint(mintUrl: string, pending: PendingOp): Promise<number> {
-  const dropMarker = (): void => {
-    const stored = loadStoredWallet();
-    const bucket = stored.mints[mintUrl];
-    if (bucket) saveStoredWallet(withMintState(stored, mintUrl, { ...bucket, pending: undefined }));
-  };
-  // Top-up (mint) ops consume NO local inputs: a targeted restore recovers
-  // deterministic outputs. Nothing issued → the marker is dropped (the quote
-  // can be completed later).
-  if (pending.kind === 'mint') {
+  const dropMarker = (): void => dropPendingMarker(mintUrl);
+  // Top-up (mint) ops and receives consume NO LOCAL inputs we can check:
+  // a targeted NUT-09 restore re-derives OUR deterministic outputs. Nothing
+  // issued → the marker is dropped (the quote/token can be retried later).
+  // Receive markers never carry sender proofs, so recovery can never be
+  // pinned on a foreign proof's PENDING/SPENT state.
+  if (pending.kind === 'mint' || pending.kind === 'receive') {
     const bucket = loadStoredWallet().mints[mintUrl];
     if (!bucket?.seed) {
       dropMarker();
       return 0;
     }
     const wallet = await getWallet(mintUrl, bucket.seed);
-    const { proofs: recoveredProofs, lastCounterWithSignature } = await wallet.restore(
+    const restored = await wallet.restore(
       pending.counterStart,
       RECOVERY_SPAN,
       pending.keysetId ? { keysetId: pending.keysetId } : undefined,
     );
+    const recoveredProofs = toStoredProofs(restored.proofs);
+    const { lastCounterWithSignature } = restored;
     if (recoveredProofs.length === 0) {
       dropMarker();
       return 0;
     }
     const current = loadStoredWallet();
     const cur = current.mints[mintUrl] ?? { proofs: [] };
-    const merged = unionProofsBySecret(cur.proofs, recoveredProofs) as Proof[];
+    const merged = unionProofsBySecret(cur.proofs, recoveredProofs) as StoredProof[];
     saveStoredWallet(withMintState(current, mintUrl, {
       ...cur,
       proofs: merged,
@@ -624,11 +655,13 @@ async function recoverPendingForMint(mintUrl: string, pending: PendingOp): Promi
     dropMarker();
     return 0;
   }
-  const { proofs: recovered, lastCounterWithSignature } = await wallet.restore(
+  const restored = await wallet.restore(
     pending.counterStart,
     RECOVERY_SPAN,
     pending.keysetId ? { keysetId: pending.keysetId } : undefined,
   );
+  const recovered = toStoredProofs(restored.proofs);
+  const { lastCounterWithSignature } = restored;
   if (recovered.length > 0 && lastCounterWithSignature === pending.counterStart + RECOVERY_SPAN - 1) {
     throw new Error(`wallet recovery: counter span ${RECOVERY_SPAN} exhausted - increase RECOVERY_SPAN`);
   }
@@ -644,7 +677,7 @@ async function recoverPendingForMint(mintUrl: string, pending: PendingOp): Promi
   const current = loadStoredWallet();
   const cur = current.mints[mintUrl] ?? { proofs: [] };
   const kept = cur.proofs.filter((p) => !spentSecrets.has(p.secret));
-  const merged = unionProofsBySecret(kept, recovered) as Proof[];
+  const merged = unionProofsBySecret(kept, recovered) as StoredProof[];
   saveStoredWallet(withMintState(current, mintUrl, {
     ...cur,
     proofs: merged,
@@ -675,8 +708,8 @@ async function recoverPendingInQueue(targetMint?: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /** Greedy input selection (fewest proofs covering the amount). */
-function selectProofs(proofs: Proof[], amount: number): Proof[] {
-  const selected: Proof[] = [];
+function selectProofs(proofs: StoredProof[], amount: number): StoredProof[] {
+  const selected: StoredProof[] = [];
   let selectedSum = 0;
   for (const p of proofs) {
     selected.push(p);
@@ -701,6 +734,7 @@ export async function spendFromStoredWallet(
 ): Promise<{ token: string; balanceAfter: number; mintUrl: string }> {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Amount must be a positive whole number of sats');
   return enqueueOp(async () => {
+    requireWalletIdentity();
     const target = safeNormalizeMintUrl(mintUrl ?? loadStoredWallet().mintUrl);
     // Only THIS mint's crash marker can block this operation. Reload after
     // recovery - the recovered change is the spend's balance.
@@ -745,7 +779,7 @@ export interface ReceiveOptions {
  * not seen before are adopted automatically - a token is self-describing and
  * cannot orphan anything because each mint keeps its own bucket.
  *
- * Error boundary: cashu-ts (2.x and 3.x) cannot decode multi-entry v3
+ * Error boundary: cashu-ts (2.x through 4.x) cannot decode multi-entry v3
  * ("cashuA") tokens - its decoder throws "Multi entry token are not
  * supported" (an upstream limitation, see tokenUtils.decodeCashuToken). Such tokens fail
  * closed here with "Token failed defensive validation" before any journal
@@ -755,8 +789,9 @@ export interface ReceiveOptions {
 export async function receiveIntoStoredWallet(
   tokenStr: string,
   opts?: ReceiveOptions,
-): Promise<{ received: Proof[]; receivedSats: number; balanceAfter: number; mintUrls: string[] }> {
+): Promise<{ received: StoredProof[]; receivedSats: number; balanceAfter: number; mintUrls: string[] }> {
   return enqueueOp(async () => {
+    requireWalletIdentity();
     if (typeof tokenStr !== 'string' || tokenStr.length > MAX_TOKEN_LENGTH) {
       throw new Error('Token is too large or malformed');
     }
@@ -764,7 +799,7 @@ export async function receiveIntoStoredWallet(
     // leaves a spurious recovery marker behind.
     const entries = decodeCashuToken(tokenStr);
     if (!entries || entries.length === 0) throw new Error('Token failed defensive validation');
-    const receivedAll: Proof[] = [];
+    const receivedAll: StoredProof[] = [];
     const mintUrls: string[] = [];
     for (const entry of entries) {
       const mintUrl = safeNormalizeMintUrl(entry.mintUrl);
@@ -783,7 +818,12 @@ export async function receiveIntoStoredWallet(
           counter: counterStart,
           pending: {
             kind: 'receive',
-            inputs: entry.proofs as Proof[],
+            // The token's proofs are the SENDER's, never ours: journaling
+            // them as recovery inputs let one failed claim wedge every later
+            // wallet op on this mint (checkProofsStates PENDING/SPENT - audit
+            // run-2 nip61-claim-journal-poisoning). Crash recovery re-derives
+            // OUR deterministic NUT-09 outputs via restore instead.
+            inputs: [],
             counterStart,
             keysetId: wallet.keysetId,
             at: Date.now(),
@@ -792,15 +832,18 @@ export async function receiveIntoStoredWallet(
         }),
         false,
       );
-      // Re-encode the single entry for its own mint: witness strings are
-      // parsed back to objects first (a double-encoded witness fails P2PK
-      // signature checks at the mint).
-      const entryToken = getEncodedToken({
-        mint: mintUrl,
-        proofs: (entry.proofs as Proof[]).map(normalizeProofWitnessForEncode),
-        unit: 'sat',
-      });
-      const received = await receiveToken(wallet, entryToken, opts);
+      // The raw token goes to the library untouched: wallet.receive decodes
+      // with its own keysets and never double-encodes a witness (the old
+      // app-level re-encode did, which broke P2PK signature checks).
+      let received: StoredProof[];
+      try {
+        received = await receiveToken(wallet, entry.token, opts);
+      } catch (err) {
+        // A failed receive must not poison recovery: drop the marker so the
+        // rejected sender proofs are never replayed as our in-flight inputs.
+        dropPendingMarker(mintUrl);
+        throw err;
+      }
       const current = loadStoredWallet();
       const cur = current.mints[mintUrl] ?? { proofs: [] };
       const next = [...cur.proofs, ...received];
@@ -835,6 +878,7 @@ export async function mergeStoredProofs(
   preferredMint?: string,
 ): Promise<{ activeMint: string; balanceAfter: number }> {
   return enqueueOp(async () => {
+    requireWalletIdentity();
     const stored = loadStoredWallet();
     const mints: Record<string, MintState> = { ...stored.mints };
     for (const [rawUrl, incoming] of Object.entries(proofsByMint)) {
@@ -854,7 +898,7 @@ export async function mergeStoredProofs(
         // Bounded: this runs inside the serialized op queue, so a
         // black-holing mint must not stall every wallet action.
         const states = await Promise.race([
-          wallet.checkProofsStates(incoming as Proof[]),
+          wallet.checkProofsStates(incoming as Array<Pick<ProofLike, 'secret' | 'id'>>),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 6_000)),
         ]);
         if (Array.isArray(states) && states.length === incoming.length) {
@@ -864,7 +908,7 @@ export async function mergeStoredProofs(
         /* mint unreachable: keep the restored proofs */
       }
       const bucket = mints[mintUrl] ?? { proofs: [] };
-      mints[mintUrl] = { ...bucket, proofs: unionProofsBySecret(bucket.proofs, additions) as Proof[] };
+      mints[mintUrl] = { ...bucket, proofs: unionProofsBySecret(bucket.proofs, additions) as StoredProof[] };
     }
     const hasProofs = (url: string | undefined): boolean => Boolean(url && (mints[url]?.proofs.length ?? 0) > 0);
     const preferred = preferredMint ? safeNormalizeMintUrl(preferredMint) : undefined;
@@ -890,6 +934,7 @@ export async function mergeStoredProofs(
  */
 export async function switchStoredMint(mintUrl: string): Promise<void> {
   return enqueueOp(async () => {
+    requireWalletIdentity();
     if (typeof mintUrl !== 'string' || !mintUrl.trim()) throw new Error('Mint URL is required');
     const target = safeNormalizeMintUrl(mintUrl);
     // Corrupt storage is rejected by the queue guard before this body runs.
@@ -916,6 +961,7 @@ export async function switchStoredMint(mintUrl: string): Promise<void> {
  */
 export async function removeStoredMint(mintUrl: string): Promise<void> {
   return enqueueOp(async () => {
+    requireWalletIdentity();
     const target = safeNormalizeMintUrl(mintUrl);
     const stored = loadStoredWallet();
     const bucket = stored.mints[target];
@@ -955,12 +1001,18 @@ export interface LightningTopUp {
  */
 const TOPUP_QUOTE_KEY = 'bao-fund-wallet-topup';
 
+/** The active identity's open-quote slot; null when signed out. */
+function topUpStorageKey(): string | null {
+  const identity = getActiveIdentity();
+  return identity ? scopedStorageKey(TOPUP_QUOTE_KEY, identity) : null;
+}
+
 export function loadPendingTopUp(): LightningTopUp | null {
   try {
-    const stored = localStorage.getItem(TOPUP_QUOTE_KEY);
-    if (!stored) return null;
-    const raw = decryptWalletState(stored);
-    if (raw === null) return null;
+    const key = topUpStorageKey();
+    if (!key) return null;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<LightningTopUp>;
     if (
       typeof parsed.quoteId !== 'string' || !parsed.quoteId ||
@@ -989,7 +1041,8 @@ export function loadPendingTopUp(): LightningTopUp | null {
 
 export function clearPendingTopUp(): void {
   try {
-    localStorage.removeItem(TOPUP_QUOTE_KEY);
+    const key = topUpStorageKey();
+    if (key) localStorage.removeItem(key);
   } catch {
     /* storage unavailable */
   }
@@ -1016,21 +1069,25 @@ function persistedTopUpAmount(mintUrl: string, quoteId: string): number {
  */
 export async function createLightningTopUp(amountSats: number, mintUrl?: string): Promise<LightningTopUp> {
   if (!Number.isSafeInteger(amountSats) || amountSats <= 0) throw new Error('Amount must be a positive whole number of sats');
+  const quoteKey = topUpStorageKey();
+  if (!quoteKey) throw new Error('Sign in to use the wallet');
   const stored = loadStoredWallet();
   const target = safeNormalizeMintUrl(mintUrl ?? stored.mintUrl);
   const bucket = stored.mints[target] ?? { proofs: [] };
   const wallet = await getWallet(target, bucket.seed ?? newSeedHex());
-  const quote = await wallet.createMintQuote(amountSats);
+  // cashu-ts 4.x: the bolt11-specific method (the bare `createMintQuote`
+  // alias is gone; the generic one takes a payment-method string first).
+  const quote = await wallet.createMintQuoteBolt11(amountSats);
   if (!quote?.quote || !quote?.request) throw new Error('The mint did not return a Lightning invoice');
   const topUp: LightningTopUp = {
     quoteId: quote.quote,
     invoice: quote.request,
-    amountSats: quote.amount ?? amountSats,
-    expiry: (quote as { expiry?: number | null }).expiry ?? null,
+    amountSats: quote.amount.toNumber(),
+    expiry: quote.expiry ?? null,
     mintUrl: target,
   };
   try {
-    localStorage.setItem(TOPUP_QUOTE_KEY, encryptWalletState(JSON.stringify(topUp)));
+    localStorage.setItem(quoteKey, JSON.stringify(topUp));
   } catch {
     /* storage unavailable: the in-memory quote still works this session */
   }
@@ -1048,6 +1105,7 @@ export async function completeLightningTopUp(
 ): Promise<{ state: 'paid' | 'pending'; minted: number; balanceAfter: number }> {
   if (typeof quoteId !== 'string' || quoteId.length === 0 || quoteId.length > 256) throw new Error('A mint quote id is required');
   return enqueueOp(async () => {
+    requireWalletIdentity();
     const target = safeNormalizeMintUrl(mintUrl ?? loadStoredWallet().mintUrl);
     await recoverPendingInQueue(target);
     const stored = loadStoredWallet();
@@ -1056,13 +1114,15 @@ export async function completeLightningTopUp(
     const counterStart = bucket.counter ?? 0;
     const counters = new StoredCounterSource(counterStart);
     const wallet = await getWallet(target, seed, counters);
-    const quote = await wallet.checkMintQuote(quoteId);
+    const quote = await wallet.checkMintQuoteBolt11(quoteId);
     if (quote.state === 'ISSUED') {
       // Already minted (crash between mint and commit): recover via restore.
-      const { proofs: recovered, lastCounterWithSignature } = await wallet.restore(counterStart, RECOVERY_SPAN, { keysetId: wallet.keysetId });
+      const restored = await wallet.restore(counterStart, RECOVERY_SPAN, { keysetId: wallet.keysetId });
+      const recovered = toStoredProofs(restored.proofs);
+      const { lastCounterWithSignature } = restored;
       const current = loadStoredWallet();
       const cur = current.mints[target] ?? { proofs: [] };
-      const merged = unionProofsBySecret(cur.proofs, recovered) as Proof[];
+      const merged = unionProofsBySecret(cur.proofs, recovered) as StoredProof[];
       const added = Math.max(0, merged.length - cur.proofs.length);
       // Record BEFORE the notifying save so the store listener's refresh sees
       // the entry, and only for genuinely NEW proofs: a second caller on an
@@ -1079,7 +1139,7 @@ export async function completeLightningTopUp(
       return { state: 'paid' as const, minted: sumProofs(recovered), balanceAfter: sumProofs(merged) };
     }
     if (quote.state !== 'PAID') return { state: 'pending' as const, minted: 0, balanceAfter: sumProofs(bucket.proofs) };
-    const amount = quote.amount ?? persistedTopUpAmount(target, quoteId);
+    const amount = quote.amount?.toNumber() ?? persistedTopUpAmount(target, quoteId);
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('The mint quote has no mintable amount');
     saveStoredWallet(
       withMintState(stored, target, {
@@ -1090,10 +1150,10 @@ export async function completeLightningTopUp(
       }),
       false,
     );
-    const minted = await wallet.mintProofs(amount, quoteId, { keysetId: wallet.keysetId });
+    const minted = toStoredProofs(await wallet.mintProofsBolt11(amount, quoteId, { keysetId: wallet.keysetId }));
     const current = loadStoredWallet();
     const cur = current.mints[target] ?? { proofs: [] };
-    const next = unionProofsBySecret(cur.proofs, minted) as Proof[];
+    const next = unionProofsBySecret(cur.proofs, minted) as StoredProof[];
     recordTransaction({ type: 'topup', mintUrl: target, amountSats: sumProofs(minted) });
     saveStoredWallet(withMintState(current, target, { proofs: next, seed: cur.seed ?? seed, counter: counters.next }));
     clearPendingTopUp();
@@ -1103,7 +1163,7 @@ export async function completeLightningTopUp(
 
 export interface LightningPaymentQuote {
   /** Raw melt quote — pass back to `payLightningQuote`. */
-  quote: MeltQuoteResponse;
+  quote: MeltQuoteBolt11Response;
   amountSats: number;
   feeReserveSats: number;
   expiry: number | null;
@@ -1119,13 +1179,13 @@ export async function quoteLightningPayment(invoice: string, mintUrl?: string): 
   const target = safeNormalizeMintUrl(mintUrl ?? stored.mintUrl);
   const bucket = stored.mints[target] ?? { proofs: [] };
   const wallet = await getWallet(target, bucket.seed ?? newSeedHex());
-  const quote = await wallet.createMeltQuote(bolt11);
+  const quote = await wallet.createMeltQuoteBolt11(bolt11);
   if (!quote?.quote) throw new Error('The mint did not return a payment quote');
   return {
     quote,
-    amountSats: quote.amount,
-    feeReserveSats: quote.fee_reserve,
-    expiry: (quote as { expiry?: number | null }).expiry ?? null,
+    amountSats: quote.amount.toNumber(),
+    feeReserveSats: quote.fee_reserve.toNumber(),
+    expiry: quote.expiry ?? null,
     mintUrl: target,
   };
 }
@@ -1136,11 +1196,12 @@ export async function quoteLightningPayment(invoice: string, mintUrl?: string): 
  * spend) and persists the returned change.
  */
 export async function payLightningQuote(
-  quote: MeltQuoteResponse,
+  quote: MeltQuoteBolt11Response,
   mintUrl?: string,
 ): Promise<{ paid: boolean; changeSats: number; balanceAfter: number; state: string }> {
   if (!quote || typeof quote.quote !== 'string' || quote.quote.length === 0) throw new Error('A payment quote is required');
   return enqueueOp(async () => {
+    requireWalletIdentity();
     const target = safeNormalizeMintUrl(mintUrl ?? loadStoredWallet().mintUrl);
     await recoverPendingInQueue(target);
     const stored = loadStoredWallet();
@@ -1153,8 +1214,8 @@ export async function payLightningQuote(
     // already be PAID at the mint: melting it again would consume the fresh
     // inputs without the mint taking them. Fail closed on any non-UNPAID
     // state instead.
-    const fresh = await wallet.checkMeltQuote(quote.quote);
-    const freshState = String((fresh as { state?: unknown }).state ?? 'UNPAID');
+    const fresh = await wallet.checkMeltQuoteBolt11(quote.quote);
+    const freshState = String(fresh.state ?? 'UNPAID');
     if (freshState !== 'UNPAID') {
       return {
         paid: freshState === 'PAID',
@@ -1163,7 +1224,8 @@ export async function payLightningQuote(
         state: freshState,
       };
     }
-    const selected = selectProofs(bucket.proofs, quote.amount + quote.fee_reserve);
+    const quoteAmount = quote.amount.toNumber();
+    const selected = selectProofs(bucket.proofs, quoteAmount + quote.fee_reserve.toNumber());
     saveStoredWallet(
       withMintState(stored, target, {
         proofs: bucket.proofs,
@@ -1173,22 +1235,22 @@ export async function payLightningQuote(
       }),
       false,
     );
-    const result = await wallet.meltProofs(quote, selected, { keysetId: wallet.keysetId });
+    const result = await wallet.meltProofsBolt11(quote, selected, { keysetId: wallet.keysetId });
     const selectedSet = new Set(selected);
     const kept = bucket.proofs.filter((p) => !selectedSet.has(p));
-    const change = (result?.change ?? []) as Proof[];
+    const change = toStoredProofs(result?.change ?? []);
     const next = [...kept, ...change];
     // NUT-09: the mint was handed deterministic blank outputs for the WHOLE
     // leftover (cashu-ts: ceil(log2(leftover)) || 1), not just the ones it
     // used as change. `counters.next` has advanced past every submitted
     // counter (cashu-ts reserved them), so the next op never re-derives
     // already-submitted secrets.
-    const leftover = Math.max(0, sumProofs(selected) - quote.amount);
+    const leftover = Math.max(0, sumProofs(selected) - quoteAmount);
     const state = String(result?.quote?.state ?? 'PAID');
     recordTransaction({
       type: 'pay',
       mintUrl: target,
-      amountSats: quote.amount,
+      amountSats: quoteAmount,
       // Actual fee = leftover after the minted amount minus the returned
       // change (the fee reserve is only an upper bound).
       feeSats: Math.max(0, leftover - sumProofs(change)),
@@ -1208,9 +1270,9 @@ export async function payLightningQuote(
 
 async function sendSats(
   wallet: Wallet,
-  proofs: Proof[],
+  proofs: StoredProof[],
   amount: number,
-): Promise<{ token: string; change: Proof[] }> {
+): Promise<{ token: string; change: StoredProof[] }> {
   if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Amount must be a positive whole number of sats');
   const selected = selectProofs(proofs, amount);
   // `keysetId` pins the deterministic (NUT-09) outputs to the journaled
@@ -1222,8 +1284,8 @@ async function sendSats(
   // valid proofs erased client-side. Carry the tail through.
   const selectedSet = new Set(selected);
   const unselected = proofs.filter((p) => !selectedSet.has(p));
-  // Flat v3 token shape ({ mint, proofs }) - the { token: [...] } container is
-  // the decode-side vocabulary; encoding with it crashes on hasNonHexId.
+  // Flat v4 token shape ({ mint, proofs }); the send proofs come from the
+  // library already amount-normalized (Proof[]).
   const token = getEncodedToken({ mint: wallet.mint.mintUrl, proofs: send, unit: 'sat' });
-  return { token, change: [...keep, ...unselected] };
+  return { token, change: [...toStoredProofs(keep), ...unselected] };
 }

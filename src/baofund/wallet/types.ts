@@ -1,4 +1,5 @@
-import type { MeltQuoteResponse, Proof } from 'cashu-ts3';
+import type { MeltQuoteBolt11Response } from '@cashu/cashu-ts';
+import type { StoredProof } from '../lib/cashu/tokenUtils';
 import type { WalletTransaction } from './walletHistory';
 
 export { PRIMARY_MINT_URL as DEFAULT_MINT_URL } from './mintConfig';
@@ -24,12 +25,12 @@ export interface LightningPayQuote {
   expiry: number | null;
   mintUrl: string;
   /** Raw melt quote — pass back to payQuotedInvoice. */
-  quote: MeltQuoteResponse;
+  quote: MeltQuoteBolt11Response;
 }
 
 export interface WalletState {
   mintUrl: string;
-  proofs: Proof[];
+  proofs: StoredProof[];
   balanceSats: number;
   /** Balance across every known mint. */
   totalBalanceSats: number;
@@ -58,7 +59,7 @@ export interface WalletActions {
   /** NUT-05: quote a bolt11 invoice payment (no funds move yet). */
   quotePayment: (invoice: string, mintUrl?: string) => Promise<LightningPayQuote>;
   /** NUT-05: pay a quoted invoice from this wallet. */
-  payQuotedInvoice: (quote: MeltQuoteResponse, mintUrl?: string) => Promise<{ paid: boolean; changeSats: number; balanceAfter: number; state: string }>;
+  payQuotedInvoice: (quote: MeltQuoteBolt11Response, mintUrl?: string) => Promise<{ paid: boolean; changeSats: number; balanceAfter: number; state: string }>;
   /** Clear the local operation history. */
   clearHistory: () => void;
 }

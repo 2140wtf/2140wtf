@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bao.fund/schemas/event-49305-ledger-entry.v1.json",
+  "title": "BAO Fund escrow ledger entry — kind 49305 content v1",
+  "description": "Content object of one registrar-signed kind-49305 escrow-ledger entry. 49305 is a REGULAR kind (>=40000): every entry is retained, so gaps, reordering and restarts cannot collapse the append-only chain (R01/B1). Ledger identity is (pubkey, campaign, seq): events MUST NOT carry a d tag. Hash-ref fields (prevHash, proofSetHash, nullifierRoot, verdict.hash) are 64-hex, accepted with a legacy 'bl3hex:' prefix during the B4 transition window and normalized to bare hex. Reference implementation: src/lib/baoLedger39805.ts (validateLedgerEntry).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "v",
+    "seq",
+    "prevHash",
+    "campaign",
+    "type",
+    "milestone",
+    "amountSats",
+    "proofSetHash",
+    "nullifierRoot",
+    "externalContributors",
+    "window",
+    "verdict",
+    "registrarEpoch"
+  ],
+  "$comment": "Per-type field presence is normative in the reference MATRIX (baoLedger39805.ts ledgerFieldRules): req = non-null value, null = must be null, zero = exactly 0, opt = value or null. JSON Schema cannot express that type-dependent matrix; consumers MUST apply it in addition to this structural schema.",
+  "properties": {
+    "v": { "const": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "prevHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "campaign": {
+      "type": "string",
+      "pattern": "^39801:[0-9a-f]{64}:[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "type": {
+      "enum": [
+        "STAKE_LOCK",
+        "CONTRIB_LOCK",
+        "RELEASE",
+        "REFUND_ALL",
+        "DISPUTE_OPEN",
+        "DISPUTE_RESOLVED",
+        "ROTATION",
+        "CLOSE"
+      ]
+    },
+    "milestone": { "type": ["string", "null"] },
+    "amountSats": { "type": ["integer", "null"], "minimum": 0 },
+    "proofSetHash": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "nullifierRoot": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "externalContributors": { "type": ["integer", "null"], "minimum": 0 },
+    "window": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["disputeEndsUnix", "paused"],
+          "properties": {
+            "disputeEndsUnix": { "type": "integer", "minimum": 0 },
+            "paused": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "verdict": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "hash", "courtSigHint", "final"],
+          "properties": {
+            "id": { "type": "string" },
+            "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "courtSigHint": { "type": "string" },
+            "final": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "registrarEpoch": { "type": "integer", "minimum": 0 }
+  }
+}

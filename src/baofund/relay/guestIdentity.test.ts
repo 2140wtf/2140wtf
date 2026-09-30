@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getGuestKeyHex, getGuestPubkeyHex, createGuestSigner } from './guestIdentity';
+import { getGuestKeyHex, getGuestPubkeyHex, createGuestSigner, rotateGuestKey } from './guestIdentity';
 
 const STORAGE_KEY = 'bao-fund-guest-key';
 
@@ -41,6 +41,25 @@ describe('guestIdentity', () => {
     const key = getGuestKeyHex();
     expect(key).toMatch(/^[0-9a-f]{64}$/);
     expect(key).not.toBe('not-valid-hex');
+  });
+
+  it('rotateGuestKey drops the stored key so the next guest read mints a fresh identity', () => {
+    const first = getGuestKeyHex();
+    expect(store[STORAGE_KEY]).toBe(first);
+    rotateGuestKey();
+    expect(store[STORAGE_KEY]).toBeUndefined();
+    const second = getGuestKeyHex();
+    expect(second).toMatch(/^[0-9a-f]{64}$/);
+    expect(second).not.toBe(first);
+  });
+
+  it('rotateGuestKey tolerates a storage that refuses removal', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => { throw new Error('denied'); },
+    });
+    expect(() => rotateGuestKey()).not.toThrow();
   });
 
   it('getGuestPubkeyHex returns a valid compressed pubkey derived from the guest key', () => {

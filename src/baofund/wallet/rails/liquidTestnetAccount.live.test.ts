@@ -145,19 +145,23 @@ describe.skipIf(!LIVE)('Liquid testnet live E2E (real coins)', () => {
     log(`shielded send ${sendSats} sats -> ${sent.txid} (fee ${sent.feeSats})`);
 
     // 4. Recipient unblinds the incoming output (see the explorer listing too).
-    let w2Utxos: LiquidUtxo[] = [];
-    for (let attempt = 0; attempt < 20 && w2Utxos.length === 0; attempt++) {
+    // Target THIS send's txid: the state-persisted W2 accumulates UTXOs across
+    // runs (same faucet amounts), so w2Utxos[0] can be an older, unconfidential
+    // output of the same size - asserting on it made this check fail forever
+    // after the first run (deep-battery finding 2026-09-29).
+    let received: LiquidUtxo | undefined;
+    for (let attempt = 0; attempt < 20 && !received; attempt++) {
       if (attempt > 0) await sleep(15_000);
       try {
-        w2Utxos = await scanLiquidTestnetUtxos(w2);
+        const scanned = await scanLiquidTestnetUtxos(w2);
+        received = scanned.find((u) => u.txid === sent.txid);
       } catch (e) {
         log(`recipient scan attempt ${attempt + 1} hit a transient explorer error: ${e instanceof Error ? e.message : e}`);
       }
     }
-    expect(w2Utxos.length, 'recipient never saw the shielded output').toBeGreaterThan(0);
-    const received = w2Utxos[0]!;
-    log(`W2 unblinded ${received.value} sats from ${received.txid}:${received.vout}`);
-    expect(received.value).toBe(sendSats);
-    expect(received.confidential).toBe(true);
+    expect(received, `recipient never saw the shielded output from ${sent.txid}`).toBeDefined();
+    log(`W2 unblinded ${received!.value} sats from ${received!.txid}:${received!.vout}`);
+    expect(received!.value).toBe(sendSats);
+    expect(received!.confidential).toBe(true);
   }, 900_000);
 });

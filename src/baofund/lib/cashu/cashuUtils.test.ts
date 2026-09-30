@@ -38,6 +38,6 @@ describe('normalizeMintUrl', () => {
   });
   it('strips trailing slashes and lowercases the origin', () => {
     const r = normalizeMintUrl('https://Mint.Example.com///');
-    if (r !== null) expect(new URL(r).hostname).toBe('mint.example.com');
+    if (r !== null) expect(r.startsWith('https://mint.example.com')).toBe(true);
   });
 });

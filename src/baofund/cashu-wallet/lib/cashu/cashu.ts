@@ -7,9 +7,9 @@
  */
 import { generateMnemonic, mnemonicToSeedSync, entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { CashuMint, CashuWallet, getDecodedToken } from '@cashu/cashu-ts';
-import { hashToCurve, pointFromHex } from '@cashu/cashu-ts/crypto/common';
-import { verifyDLEQProof_reblind } from '@cashu/cashu-ts/crypto/client/NUT12';
+import { CashuMint, CashuWallet, getDecodedToken } from 'cashu-ts2';
+import { hashToCurve, pointFromHex } from 'cashu-ts2/crypto/common';
+import { verifyDLEQProof_reblind } from 'cashu-ts2/crypto/client/NUT12';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';

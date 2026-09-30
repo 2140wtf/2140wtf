@@ -25,22 +25,28 @@
 // (`buildP2PKSigAllMessage`): inputs' secret+C concatenated with the outputs'
 // amount+B_ (no separators), sha256'd, then BIP-340 signed.
 //
-// Why this is still implemented here after the cashu-ts 3.7.2 bump: 3.x ships
-// `buildP2PKSigAllMessage` only as a RUNTIME export - api-extractor marks it
-// "Excluded from this release type", so it is absent from the public .d.ts
-// (importing it fails `tsc`). Adopting it would mean an untyped cast in the
-// money-authorizing path; the local mirror is six lines, is verified
-// byte-for-byte against the installed runtime implementation by
-// escrowSwapComplete.test.ts ("parity with the runtime builder"), and keeps
-// the signing inputs fully typed. The same reasoning keeps
-// `signSigAllDigest`/`verifySigAllSignature` on the shared noble primitives:
-// `signP2PKProofs(..., message)` requires Proof objects and witness
-// extraction, which is strictly more machinery than signing the digest once.
+// Why this is still implemented here after the cashu-ts 4.x bump:
+// `buildP2PKSigAllMessage` (a 3.x runtime-only export) is GONE in 4.x; its
+// replacement is the PUBLIC but @experimental `SigAll.computeDigests()`
+// helper family. Re-evaluated per the upgrade order: the escrow swap wire
+// shape is the API's own SerializedEscrowSwap, not a Wallet SwapPreview, so
+// adopting SigAll would mean hand-building SerializedBlindedMessage objects
+// (Amount coercions on every output) to reproduce a six-line transcript the
+// local mirror already builds from the wire verbatim - more machinery in the
+// money-authorizing path, against an API marked experimental, for no
+// simplification. The local mirror stays, and escrowSwapComplete.test.ts
+// pins it byte-for-byte against `SigAll.computeDigests().v0` (typed public
+// API, no untyped cast anywhere near the signing path). The same reasoning
+// keeps `signSigAllDigest`/`verifySigAllSignature` on the shared noble
+// primitives: `signP2PKProofs(..., message)` requires Proof objects and
+// witness extraction, which is strictly more machinery than signing the
+// digest once. Escrow validation semantics are unchanged.
 
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { normalizeMultisigPubkey, parseMultisigLockSecret } from './escrowMultisig';
+import { parseEscrowPayoutSignatures, type EscrowPayoutSignature } from './escrowPayout';
 import { fundFetch } from '../fundHttp';
 import type { SignerLike } from '../baoFundraising';
 
@@ -359,14 +365,20 @@ export function signEscrowSwapForParty(
   return { mint: parsed.wire.mint, inputs, outputs: parsed.wire.outputs };
 }
 
-/** Complete a milestone release with the project-signed swap. */
+/**
+ * Complete a milestone release with the project-signed swap. Returns the
+ * mint's blind signatures for the swap's outputs (`swapSignatures`): without
+ * unblinding them against the signed swap, the project payout is
+ * unrecoverable. Null means the API omitted them (payout recovery
+ * impossible); malformed signatures throw.
+ */
 export async function completeEscrowRelease(opts: {
   signer: SignerLike;
   frId: string;
   milestoneId: string;
   swap: EscrowSwapWire;
   proofEventId?: string;
-}): Promise<{ milestoneStatus: string; releasedSats: number }> {
+}): Promise<{ milestoneStatus: string; releasedSats: number; swapSignatures: EscrowPayoutSignature[] | null }> {
   const body = await fundFetch<{ data?: Record<string, unknown> }>(
     `/v1/fundraisers/${encodeURIComponent(opts.frId)}/milestones/${encodeURIComponent(opts.milestoneId)}/release/complete`,
     {
@@ -383,16 +395,20 @@ export async function completeEscrowRelease(opts: {
     || typeof releasedSats !== 'number') {
     throw new Error('The Fund API did not confirm the release swap - the milestone was NOT settled');
   }
-  return { milestoneStatus: milestone.status, releasedSats };
+  return { milestoneStatus: milestone.status, releasedSats, swapSignatures: parseEscrowPayoutSignatures(data.swap_signatures) };
 }
 
-/** Complete a contribution refund with the donor-signed swap. */
+/**
+ * Complete a contribution refund with the donor-signed swap. Returns the
+ * mint's blind signatures for the refund output (`swapSignatures`) so the
+ * donor payout can be unblinded and stored; see completeEscrowRelease.
+ */
 export async function completeEscrowRefund(opts: {
   signer: SignerLike;
   frId: string;
   contributionId: string;
   swap: EscrowSwapWire;
-}): Promise<{ refundSats: number }> {
+}): Promise<{ refundSats: number; swapSignatures: EscrowPayoutSignature[] | null }> {
   const body = await fundFetch<{ data?: Record<string, unknown> }>(
     `/v1/fundraisers/${encodeURIComponent(opts.frId)}/contributions/${encodeURIComponent(opts.contributionId)}/refund/complete`,
     { method: 'POST', body: { swap: opts.swap }, signer: opts.signer },
@@ -404,5 +420,5 @@ export async function completeEscrowRefund(opts: {
     || typeof refundSats !== 'number') {
     throw new Error('The Fund API did not confirm the refund swap - the contribution was NOT refunded');
   }
-  return { refundSats };
+  return { refundSats, swapSignatures: parseEscrowPayoutSignatures(data.swap_signatures) };
 }

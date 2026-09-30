@@ -178,10 +178,14 @@ export function buildRefundSpend(input: BuildRefundSpendInput): BuiltRefundSpend
     throw new Testnet4RefundError('utxo_mismatch', `deposit tx has no output ${stage.vout} at the stage scriptPubKey`);
   }
   const value = input.depositVouts[idx].value;
-  if (value !== stage.amountSats) {
+  // Both sides must be SAFE INTEGER sats before any arithmetic: NaN/Infinity/
+  // fractional values would otherwise slip past the range comparisons (all
+  // false for NaN) and reach BigInt() as an untyped RangeError at signing
+  // time (round-4 fuzz). Fail closed with the typed error instead.
+  if (!Number.isSafeInteger(value) || !Number.isSafeInteger(stage.amountSats) || value !== stage.amountSats) {
     throw new Testnet4RefundError('utxo_mismatch', `stage value ${value} ≠ expected ${stage.amountSats} - refusing`);
   }
-  if (input.feeSats <= 0 || input.feeSats >= value) {
+  if (!Number.isSafeInteger(input.feeSats) || input.feeSats <= 0 || input.feeSats >= value) {
     throw new Testnet4RefundError('utxo_mismatch', `fee ${input.feeSats} invalid for value ${value}`);
   }
 
@@ -214,14 +218,17 @@ export function buildRefundSpend(input: BuildRefundSpendInput): BuiltRefundSpend
   // Destination = the donor's OWN taproot address (self-refund), derived from
   // the signing key so funds can never leave to an unrelated party.
   const donorXOnly = btc.utils.pubSchnorr(signerKey);
-  const donorPayment = btc.p2tr(donorXOnly, undefined, btc.TEST_NETWORK, true);
-  const donorAddress = donorPayment.address;
+  const donorAddress = btc.p2tr(donorXOnly, undefined, btc.TEST_NETWORK, true).address;
   spend.addOutput({
-    script: donorPayment.script,
+    // 2.2 types Address.decode() as possibly-undefined; the address was just
+    // derived from this key, so the decode is total here.
+    script: btc.OutScript.encode(btc.Address(btc.TEST_NETWORK).decode(donorAddress)!),
     amount: BigInt(value - input.feeSats),
   });
 
-  spend.sign(signerKey);
+  // @scure/btc-signer 2.2 types narrow Bytes to Uint8Array<ArrayBuffer>; the
+  // runtime accepts raw key bytes exactly like newer versions.
+  spend.sign(signerKey as unknown as Parameters<typeof spend.sign>[0]);
   spend.finalize();
   return {
     rawTxHex: hex.encode(spend.extract()),

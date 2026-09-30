@@ -38,6 +38,7 @@ import {
 } from './cashuWallet';
 import { parseMine } from './nip61';
 import { errorMessage } from '../lib/errors';
+import { setActiveIdentity } from '../lib/activeIdentity';
 
 export type Nip60Status = 'off' | 'loading' | 'ready' | 'error';
 
@@ -261,6 +262,9 @@ export function useNip60Wallet() {
       identitySignerRef.current = signer;
       identityPubkeyRef.current = identityPubkey;
       identityPrivkeyRef.current = parseHexPrivkey(identityPrivkeyHex);
+      // Defensive: the wallet store is per-identity. useAuth already binds
+      // this before 'ready' renders; standalone hook use binds it here.
+      setActiveIdentity(identityPubkey);
       patch({ identityPubkey });
       await refresh();
     },
@@ -278,6 +282,8 @@ export function useNip60Wallet() {
         const identitySigner = createSeedIdentitySigner(seed);
         const identityPubkey = identitySigner.pubkey;
         identityPubkeyRef.current = identityPubkey;
+        // Bind the per-identity wallet store before the restore merges into it.
+        setActiveIdentity(identityPubkey);
 
         const { relays, api, restored, walletSigner, walletPrivkey, fallbackMintUrl } =
           await restoreAndMerge(identitySigner);

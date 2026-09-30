@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { QrScanDialog } from './QrScanDialog';
+import { MAX_FRAME_DIM, QrScanDialog, boundedFrameSize } from './QrScanDialog';
 
 const jsqrMock = vi.hoisted(() => vi.fn(() => ({ data: 'cashuBmocked-jsqr' })));
 vi.mock('jsqr', () => ({ default: jsqrMock }));
@@ -99,6 +99,88 @@ it('decodes with the real jsqr default path (lazy import + canvas frame)', async
     getContext.mockRestore();
     width.mockRestore();
     height.mockRestore();
+  }
+});
+
+it('bounds the jsqr decode frame to the max dimension (downscale, never upscale)', () => {
+  expect(boundedFrameSize(1920, 1080)).toEqual({ width: MAX_FRAME_DIM, height: Math.round(1080 * (MAX_FRAME_DIM / 1920)) });
+  expect(boundedFrameSize(1080, 1920)).toEqual({ width: Math.round(1080 * (MAX_FRAME_DIM / 1920)), height: MAX_FRAME_DIM });
+  expect(boundedFrameSize(320, 240)).toEqual({ width: 320, height: 240 }); // no upscale
+  expect(boundedFrameSize(0, 240)).toEqual({ width: 0, height: 0 });
+});
+
+it('downscales a large camera frame before jsqr (bounded per-tick work)', async () => {
+  const onResult = vi.fn();
+  const { stream } = fakeStream();
+  const drawImage = vi.fn();
+  const getImageData = vi.fn(() => ({ data: new Uint8ClampedArray(4) }));
+  const getContext = vi
+    .spyOn(HTMLCanvasElement.prototype, 'getContext')
+    .mockReturnValue({ drawImage, getImageData } as unknown as CanvasRenderingContext2D);
+  const width = vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(3840);
+  const height = vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(2160);
+  try {
+    await act(async () => {
+      root.render(
+        <QrScanDialog
+          open
+          title="Scan a Cashu token"
+          onResult={onResult}
+          onClose={vi.fn()}
+          detectorFactory={() => null}
+          mediaDevices={{ getUserMedia: vi.fn(async () => stream) }}
+        />,
+      );
+    });
+    await vi.waitFor(() => expect(onResult).toHaveBeenCalledWith('cashuBmocked-jsqr'), { timeout: 10_000 });
+    // 4K frames must never reach jsqr at full resolution.
+    expect(drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, MAX_FRAME_DIM, Math.round(2160 * (MAX_FRAME_DIM / 3840)));
+    expect(getImageData).toHaveBeenCalledWith(0, 0, MAX_FRAME_DIM, Math.round(2160 * (MAX_FRAME_DIM / 3840)));
+  } finally {
+    getContext.mockRestore();
+    width.mockRestore();
+    height.mockRestore();
+  }
+});
+
+it('skips overlapping decode ticks while a decode is still in flight', async () => {
+  vi.useFakeTimers();
+  try {
+    const onResult = vi.fn();
+    const { stream } = fakeStream();
+    const pending: Array<(codes: Array<{ rawValue: string }>) => void> = [];
+    const detect = vi.fn(() => new Promise<Array<{ rawValue: string }>>((resolve) => pending.push(resolve)));
+    await act(async () => {
+      root.render(
+        <QrScanDialog
+          open
+          title="Scan a Cashu token"
+          onResult={onResult}
+          onClose={vi.fn()}
+          detectorFactory={() => ({ detect })}
+          mediaDevices={{ getUserMedia: vi.fn(async () => stream) }}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Three 300ms ticks while the first detect() never settles: one decode.
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(detect).toHaveBeenCalledTimes(1);
+    // Settling the in-flight decode releases the latch for the next tick.
+    await act(async () => {
+      pending[0]([]);
+      await Promise.resolve();
+    });
+    await act(async () => { vi.advanceTimersByTime(300); });
+    expect(detect).toHaveBeenCalledTimes(2);
+    pending[1]([]);
+  } finally {
+    vi.useRealTimers();
   }
 });
 

@@ -12,7 +12,7 @@ import {
   testnet4AddressAt,
   deriveTestnet4Account,
 } from './testnet4Account';
-import { loadRailWallet, saveRailWallet } from './railWalletStore';
+import { loadRailWallet, readTestnet4Cursors, saveRailWallet } from './railWalletStore';
 
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -39,7 +39,7 @@ afterEach(async () => {
 const json = (body: unknown): Response =>
   ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as unknown as Response;
 
-function fetchFor(account = ACCOUNT): typeof fetch {
+function fetchFor(account = ACCOUNT, valueSats = 5000): typeof fetch {
   return (async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url.endsWith('/v1/fees/recommended')) {
@@ -49,8 +49,8 @@ function fetchFor(account = ACCOUNT): typeof fetch {
       const recv = testnet4AddressAt(account, 0, i);
       if (url.endsWith(`/address/${recv.address}/utxo`)) {
         return json(
-          i === 0
-            ? [{ txid: 'aa'.repeat(32), vout: 0, value: 5000, status: { confirmed: true, block_height: 10 } }]
+          i === 0 && valueSats > 0
+            ? [{ txid: 'aa'.repeat(32), vout: 0, value: valueSats, status: { confirmed: true, block_height: 10 } }]
             : [],
         );
       }
@@ -78,8 +78,31 @@ it('renders the derived receive address, no-value badge and honest balance', asy
   await vi.waitFor(() => {
     expect(container.querySelector('[data-testid=testnet4-receive-qr]')).toBeTruthy();
   }, { timeout: 5000 });
-  expect(container.textContent).toContain('coinfaucet.eu/en/btc-testnet4');
-  expect(container.textContent).toContain('mempool.space/testnet4');
+  expect(container.textContent).toContain('mempool.space/testnet4/faucet');
+});
+
+it('prefills the send form and disables Send with a typed reason when the balance is insufficient', async () => {
+  await render({ identityHex: SESSION_SECRET, identityPubkey: null, initialTo: 'tb1pescrowdestination', initialSats: '6000', fetchFn: fetchFor(ACCOUNT, 5000) });
+  await vi.waitFor(() => {
+    expect(container.querySelector<HTMLInputElement>('[data-testid=testnet4-send-to]')?.value).toBe('tb1pescrowdestination');
+  }, { timeout: 5000 });
+  expect(container.querySelector<HTMLInputElement>('[data-testid=testnet4-send-amount]')?.value).toBe('6000');
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=testnet4-send-disabled-reason]')?.textContent)
+      .toContain('Insufficient confirmed balance (5,000 sats available)');
+  }, { timeout: 5000 });
+  const send = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Send') as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+});
+
+it('enables Send when the confirmed balance covers the pre-filled amount', async () => {
+  await render({ identityHex: SESSION_SECRET, identityPubkey: null, initialTo: 'tb1pescrowdestination', initialSats: '1000', fetchFn: fetchFor(ACCOUNT, 5000) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=testnet4-balance]')?.textContent).toContain('5,000');
+  }, { timeout: 5000 });
+  expect(container.querySelector('[data-testid=testnet4-send-disabled-reason]')).toBeNull();
+  const send = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Send') as HTMLButtonElement;
+  expect(send.disabled).toBe(false);
 });
 
 it('persists the receive cursor per identity without storing keys', async () => {
@@ -99,6 +122,32 @@ it('persists the receive cursor per identity without storing keys', async () => 
   }, { timeout: 5000 });
   const stored = JSON.parse(window.localStorage.getItem(`baofund:l1:${PK}`) ?? '{}') as Record<string, unknown>;
   expect(stored).toEqual({ receiveIndex: 1, changeIndex: 0 });
+});
+
+it('persists a browser wallet’s rotated receive cursor and reloads at that index', async () => {
+  const browserAccount = importTestnet4AccountFromMnemonic(MNEMONIC);
+  saveRailWallet(PK, 'testnet4', { version: 1, mnemonic: MNEMONIC, createdAt: 1, source: 'created' });
+  await render({ identityHex: SESSION_SECRET, identityPubkey: PK, fetchFn: fetchFor(browserAccount) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(IMPORTED_ADDRESS);
+  }, { timeout: 5000 });
+
+  const newAddress = (): HTMLButtonElement =>
+    [...container.querySelectorAll('button')].find((b) => b.textContent?.includes('New address')) as HTMLButtonElement;
+  await act(async () => newAddress().click());
+  await act(async () => newAddress().click());
+  const index2 = testnet4AddressAt(browserAccount, 0, 2).address;
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(index2);
+  }, { timeout: 5000 });
+  // The cursor is persisted for a BROWSER wallet too (was session-only).
+  expect(readTestnet4Cursors(PK)).toEqual({ receiveIndex: 2, changeIndex: 0 });
+
+  // Reload: the card re-activates the stored wallet AT the persisted index.
+  await remount({ identityHex: SESSION_SECRET, identityPubkey: PK, fetchFn: fetchFor(browserAccount) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(index2);
+  }, { timeout: 5000 });
 });
 
 it('imports a mnemonic wallet session-only when no seed identity is available', async () => {
@@ -234,7 +283,7 @@ it('reveals stored words only on explicit click and forgets the wallet behind a 
   expect(container.textContent).toContain('Active wallet: identity-derived session wallet');
 });
 
-it('adopts a wallet created while signed out when the user signs in', async () => {
+it('requires explicit confirmation before adopting a tab-only wallet for a new identity', async () => {
   const imported = importTestnet4AccountFromMnemonic(MNEMONIC);
   await render({ identityHex: null, identityPubkey: null, fetchFn: fetchFor(imported) });
   await importWallet(MNEMONIC);
@@ -243,13 +292,64 @@ it('adopts a wallet created while signed out when the user signs in', async () =
   }, { timeout: 5000 });
   expect(loadRailWallet(PK, 'testnet4')).toBeNull();
 
-  // Sign-in without a remount: the tab-only wallet is adopted, not dropped.
+  // Sign-in without a remount: the tab-only wallet is NOT adopted
+  // automatically; the session account stays active behind a prompt.
   await render({ identityHex: SESSION_SECRET, identityPubkey: PK, fetchFn: fetchFor(imported) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=testnet4-adopt-confirm]')).toBeTruthy();
+  }, { timeout: 5000 });
+  expect(loadRailWallet(PK, 'testnet4')).toBeNull();
+  expect(container.textContent).toContain('tb1q3ejchc0s0st9rnzlry0m3fgc9j6vgwat3tq5ts');
+
+  await act(async () => (container.querySelector('[data-testid=testnet4-adopt-confirmed]') as HTMLButtonElement).click());
   await vi.waitFor(() => {
     expect(loadRailWallet(PK, 'testnet4')?.mnemonic).toBe(MNEMONIC);
   }, { timeout: 5000 });
   expect(container.textContent).toContain(IMPORTED_ADDRESS);
   expect(container.textContent).toContain('saved for this identity');
+});
+
+it('discards a tab-only wallet instead of binding it to the new identity', async () => {
+  await render({ identityHex: null, identityPubkey: null, fetchFn: fetchFor() });
+  await importWallet(MNEMONIC);
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(IMPORTED_ADDRESS);
+  }, { timeout: 5000 });
+
+  await render({ identityHex: SESSION_SECRET, identityPubkey: PK, fetchFn: fetchFor(ACCOUNT) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=testnet4-adopt-confirm]')).toBeTruthy();
+  }, { timeout: 5000 });
+  await act(async () => (container.querySelector('[data-testid=testnet4-adopt-discard]') as HTMLButtonElement).click());
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=testnet4-adopt-confirm]')).toBeNull();
+  }, { timeout: 5000 });
+  expect(loadRailWallet(PK, 'testnet4')).toBeNull();
+  expect(container.textContent).not.toContain(IMPORTED_ADDRESS);
+  expect(container.textContent).not.toContain('abandon');
+});
+
+it('never keeps one identity’s revealed words on screen after an account switch', async () => {
+  const OTHER = 'b3'.repeat(32);
+  const OTHER_MNEMONIC = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+  const otherAccount = importTestnet4AccountFromMnemonic(OTHER_MNEMONIC);
+  saveRailWallet(PK, 'testnet4', { version: 1, mnemonic: MNEMONIC, createdAt: 1, source: 'created' });
+  await render({ identityHex: SESSION_SECRET, identityPubkey: PK, fetchFn: fetchFor(importTestnet4AccountFromMnemonic(MNEMONIC)) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(IMPORTED_ADDRESS);
+  }, { timeout: 5000 });
+  await act(async () => (container.querySelector('[data-testid=testnet4-reveal-words]') as HTMLButtonElement).click());
+  expect(container.querySelector('[data-testid=testnet4-recovery-words]')?.textContent).toContain('abandon');
+
+  // Switch to an identity with its OWN stored wallet: the first identity's
+  // revealed words must be gone, not just overshadowed by the new wallet.
+  saveRailWallet(OTHER, 'testnet4', { version: 1, mnemonic: OTHER_MNEMONIC, createdAt: 1, source: 'imported' });
+  await remount({ identityHex: SESSION_SECRET, identityPubkey: OTHER, fetchFn: fetchFor(otherAccount) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain('imported browser wallet');
+  }, { timeout: 5000 });
+  expect(container.querySelector('[data-testid=testnet4-recovery-words]')).toBeNull();
+  expect(container.textContent).not.toContain('abandon');
 });
 
 it('keeps the stored wallet for the identity that owns it across an account switch', async () => {

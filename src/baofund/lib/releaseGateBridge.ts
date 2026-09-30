@@ -49,6 +49,7 @@ export function releaseGateView(input: {
       seq: input.summary.entriesCount,
       runningSats: input.summary.raisedSats,
       closed: input.summary.closed,
+      refunded: input.summary.terminal === 'refunded',
       frozen: false,
     },
     // No dispute surface is folded into the card feed yet: unknown must not

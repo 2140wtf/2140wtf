@@ -24,7 +24,7 @@
  * (fingerprint `ae69bad8d77d32e5`). Rotation replaces this constant and the
  * `VITE_FUND_COURT_GROUP_PUBKEY` pin in the same change window — see
  * docs/COURT-GUI-WIRING-DESIGN.md and bao.markets
- * docs/FROST-COURT-SIGNER.md.
+ * docs/FROST-COURT-SIGNER.md (signer service v1.2.0).
  */
 export const STANDING_COURT_GROUP_PUBKEY = '981c3a0bdf6e436fdbe6959d5eb34fd7d29881b811f0e7ccec9bb3ff5963e788';
 

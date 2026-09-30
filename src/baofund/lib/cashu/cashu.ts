@@ -7,7 +7,7 @@
  */
 import { generateMnemonic, mnemonicToSeedSync, entropyToMnemonic, mnemonicToEntropy } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
-import { Wallet, getDecodedToken, hashToCurve, pointFromHex, verifyDLEQProof_reblind } from 'cashu-ts3';
+import { Amount, Wallet, getTokenMetadata, hashToCurve, pointFromHex, verifyDLEQProof_reblind, type AmountLike, type ProofLike } from '@cashu/cashu-ts';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import type { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { hexToBytes, bytesToNumberBE, bytesToHex } from '@noble/curves/utils.js';
@@ -18,6 +18,7 @@ import { bytesToBase64, base64ToBytes } from './base64';
 import { devLog } from './devLog';
 
 export const DEFAULT_MINTS = [
+  { name: 'Mint.btcforplebs', url: 'https://mint.btcforplebs.com' },
   { name: 'Kashu', url: 'https://kashu.me' },
   { name: 'Minibits', url: 'https://mint.minibits.cash/Bitcoin' },
 ];
@@ -116,7 +117,9 @@ export interface ValidateReceivedProofsOptions {
 
 /** Validate proofs returned by a mint after a receive/swap.
  *  Checks keyset membership, curve-point validity, local-secret duplication,
- *  and (optionally) DLEQ proofs against the mint's published keys.
+ *  in-batch secret duplication (a repeated secret counts twice in the sum but
+ *  is spendable once), and (optionally) DLEQ proofs against the mint's
+ *  published keys.
  */
 export function validateReceivedProofs(
   proofs: unknown[],
@@ -124,6 +127,7 @@ export function validateReceivedProofs(
 ): { valid: boolean; reason?: string } {
   if (!Array.isArray(proofs)) return { valid: false, reason: 'proofs must be an array' };
   const { activeKeysetIds, localSecrets, getKeyset, requireDleq } = options;
+  const seenSecrets = new Set<string>();
 
   for (const p of proofs) {
     if (!p || typeof p !== 'object') return { valid: false, reason: 'proof is not an object' };
@@ -131,7 +135,14 @@ export function validateReceivedProofs(
 
     const id = String(proof.id);
     const secret = String(proof.secret);
-    const amount = Number(proof.amount);
+    let amount: number;
+    try {
+      // cashu-ts 4.x: Proof.amount is an Amount value object; older callers
+      // may still hand in plain numbers (AmountLike).
+      amount = Amount.from(proof.amount as AmountLike).toNumber();
+    } catch {
+      return { valid: false, reason: 'received proof has invalid amount' };
+    }
 
     if (!activeKeysetIds.has(id)) {
       return { valid: false, reason: `received proof has invalid keyset id: ${id}` };
@@ -145,6 +156,13 @@ export function validateReceivedProofs(
     if (localSecrets?.has(secret)) {
       return { valid: false, reason: 'received proof reuses a secret already in local store' };
     }
+    // A repeated secret (intra-token/intra-batch) counts twice in the batch
+    // amount but is spendable only once at the mint: reject before any
+    // accounting so a crafted token cannot double-count.
+    if (seenSecrets.has(secret)) {
+      return { valid: false, reason: 'received proofs contain a duplicate secret (spendable once)' };
+    }
+    seenSecrets.add(secret);
 
     const C = proofCtoPoint(proof.C);
     if (!C.valid) {
@@ -566,6 +584,8 @@ export interface DecodedTokenEntry {
   mintUrl: string;
   proofs: unknown[];
   amount: number;
+  /** The validated token in canonical `cashu`-prefixed form. */
+  token: string;
 }
 
 function ipv4ToInt(ip: string): number {
@@ -696,10 +716,10 @@ export function normalizeProofWitnessForEncode<T extends object>(proof: T): T {
   return proof;
 }
 
-function isValidProof(p: unknown): p is { id: string; amount: number; secret: string; C: string } {
+function isValidProof(p: unknown): p is { id?: string; amount: number; secret: string; C: string } {
   if (!p || typeof p !== 'object') return false;
   const proof = p as Record<string, unknown>;
-  if (typeof proof.id !== 'string' || proof.id.length === 0 || proof.id.length > MAX_PROOF_FIELD_LENGTH) return false;
+  if (proof.id !== undefined && (typeof proof.id !== 'string' || proof.id.length === 0 || proof.id.length > MAX_PROOF_FIELD_LENGTH)) return false;
   if (typeof proof.C !== 'string' || proof.C.length === 0 || proof.C.length > MAX_PROOF_FIELD_LENGTH) return false;
   if (typeof proof.secret !== 'string' || proof.secret.length === 0 || proof.secret.length > MAX_PROOF_FIELD_LENGTH) return false;
   if (proof.witness !== undefined && (typeof proof.witness !== 'string' || proof.witness.length > MAX_PROOF_FIELD_LENGTH)) return false;
@@ -743,37 +763,38 @@ export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
   }
   if (!toDecode) return null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let decoded: any;
+  // cashu-ts 4.x: `getDecodedToken` needs the mint's full keyset id list for
+  // v2 SHORT ids; `getTokenMetadata` is the synchronous, keyset-less decode.
+  // See src/lib/cashu/tokenUtils.ts for the full rationale.
+  let meta: ReturnType<typeof getTokenMetadata>;
   try {
-    decoded = getDecodedToken(toDecode);
+    meta = getTokenMetadata(toDecode);
   } catch {
     return null;
   }
 
-  const entries: DecodedTokenEntry[] = [];
+  const mintUrl = meta.mint;
+  if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl)) return null;
+  if (!Array.isArray(meta.incompleteProofs) || meta.incompleteProofs.length === 0) return null;
 
-  if ('token' in decoded && Array.isArray(decoded.token)) {
-    for (const entry of decoded.token) {
-      const mintUrl = entry?.mint;
-      const proofs = entry?.proofs;
-      if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) continue;
-      const validProofs = proofs.filter(isValidProof);
-      if (validProofs.length === 0) continue;
-      const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
-      entries.push({ mintUrl, proofs: validProofs, amount });
+  const validProofs: unknown[] = [];
+  let amount = 0;
+  for (const proof of meta.incompleteProofs) {
+    let normalizedAmount: number;
+    try {
+      normalizedAmount = Amount.from((proof as { amount?: AmountLike }).amount as AmountLike).toNumber();
+    } catch {
+      return null;
     }
-  } else if ('mint' in decoded && 'proofs' in decoded) {
-    const mintUrl = decoded.mint;
-    const proofs = decoded.proofs;
-    if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) return null;
-    const validProofs = proofs.filter(isValidProof);
-    if (validProofs.length === 0) return null;
-    const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
-    entries.push({ mintUrl, proofs: validProofs, amount });
+    const normalized = { ...(proof as object), amount: normalizedAmount };
+    if (!isValidProof(normalized)) return null;
+    validProofs.push(normalized);
+    amount += normalizedAmount;
   }
 
-  return entries.length > 0 ? entries : null;
+  // Canonical NUT-00 token string (the version char follows the `cashu`
+  // prefix) - the stripped form is only the library's internal vocabulary.
+  return [{ mintUrl, proofs: validProofs, amount, token: `cashu${toDecode}` }];
 }
 
 /**
@@ -796,12 +817,10 @@ export async function checkTokenProofsSpent(tokenStr: string): Promise<boolean |
   for (const entry of entries) {
     const normalized = normalizeMintUrl(entry.mintUrl);
     if (!normalized) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let states: any[];
+    let states: Array<{ Y: string; state: string }>;
     try {
       const w = new Wallet(normalized);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      states = await w.checkProofsStates(entry.proofs as any);
+      states = await w.checkProofsStates(entry.proofs as Array<Pick<ProofLike, 'secret' | 'id'>>);
     } catch {
       return null;
     }

@@ -54,7 +54,6 @@ import {
   isTestDispute,
   type CampaignNameSource,
 } from '../lib/court/disputeCopy';
-import { TESTNET4_FAUCET_URL, TESTNET4_EXPLORER_BASE } from '../lib/testnet4Rail';
 import './court.css';
 
 const COURT_KIND_DISPUTE = 38025;
@@ -360,33 +359,12 @@ export function CourtPanel(props: CourtPanelProps): React.ReactElement {
       <h2 className="dispute-status-head">⚖ ₿AO Court</h2>
       {!explainerSeen && (
         <div className="dispute-status-card" data-testid="court-explainer">
-          <strong>How BAO Court works - in plain terms.</strong>
-          <ol style={{ margin: '0.5rem 0 0.5rem 1.1rem', padding: 0, lineHeight: 1.55 }}>
-            <li>
-              <strong>Post a bond.</strong> To be a juror you lock a small amount
-              of testnet sats (5% of the dispute size, minimum 10k).
-            </li>
-            <li>
-              <strong>Get selected.</strong> The court picks jurors at random.
-              You only act when a summons arrives in your inbox.
-            </li>
-            <li>
-              <strong>Vote once.</strong> Reveal one vote for the party you
-              believe is right. Honest jurors get the bond back plus a share of
-              the fee; voting twice or never revealing forfeits it
-              (double-vote {Math.round(ALPHA_DOUBLE_VOTE * 100)}%, no-reveal{' '}
-              {Math.round(ALPHA_NON_REVEAL * 100)}%, incoherent vote{' '}
-              {Math.round((1 - ALPHA_INCOHERENT) * 100)}%).
-            </li>
-          </ol>
-          <div style={{ fontSize: '0.85em', lineHeight: 1.5, color: 'var(--np-muted)' }}>
-            Need testnet coins for a bond? Bitcoin testnet4:{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_FAUCET_URL} target="_blank" rel="noreferrer">coinfaucet.eu/en/btc-testnet4</a>{' '}
-            - verify on{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_EXPLORER_BASE} target="_blank" rel="noreferrer">mempool.space/testnet4</a>.
-            Liquid testnet:{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href="https://liquidtestnet.com/faucet" target="_blank" rel="noreferrer">liquidtestnet.com/faucet</a>.
-          </div>
+          <strong>What juror bonds are for.</strong> Jurors post a sat bond before
+          being selected. If you reveal a vote that is incoherent with the verdict
+          tally you lose {Math.round((1 - ALPHA_INCOHERENT) * 100)}% of it. Never
+          revealing, or voting twice, forfeits {Math.round(ALPHA_NON_REVEAL * 100)}%
+          (double-vote: {Math.round(ALPHA_DOUBLE_VOTE * 100)}%). Honest jurors get
+          their bond back plus a share of the dispute fee.
           <div style={{ marginTop: '0.5rem' }}>
             <button type="button" className="dispute-btn" onClick={() => {
               setExplainerSeen(true);
@@ -639,7 +617,7 @@ function VoteSection(props: {
       </button>
       {selected && (
         <div style={{ paddingLeft: '0.75rem', borderLeft: '2px solid var(--np-rule, #d8d2c4)' }}>
-          <div>opened by {myPubkey && dispute.publisher === myPubkey ? 'you' : `${dispute.publisher.slice(0, 8)}…`} · {new Date(dispute.createdAt * 1000).toLocaleString()}</div>
+          <div title={`filed by ${dispute.publisher}`}>opened by {myPubkey && dispute.publisher.toLowerCase() === myPubkey.toLowerCase() ? 'you' : 'the other party'} · {new Date(dispute.createdAt * 1000).toLocaleString()}</div>
           <div data-testid="vote-tally">
             Tally: <strong>{view.tally.outcome || '-'}</strong> · reveals {view.revealsSoFar}/{view.threshold}{view.finalized ? ' - FINALIZED' : ''}
             {view.tally.invalidReveals.length > 0 && <span title="reveals whose hash disagrees with their commit"> · ⚠ {view.tally.invalidReveals.length} invalid</span>}
@@ -647,8 +625,8 @@ function VoteSection(props: {
           {view.rows.length > 0 && (
             <div style={{ margin: '0.3rem 0' }}>
               {view.rows.map((r) => (
-                <div key={`${r.pubkey}:${r.jurorIdx}`} data-testid={`vote-row-${r.jurorIdx}`}>
-                  juror #{r.jurorIdx} <code>{r.pubkey.slice(0, 10)}…</code> - {r.commit ? 'committed' : 'NO COMMIT'}{r.reveal ? ` → revealed ${r.reveal.outcome}` : ''}{r.mismatch ? ' ⚠ MISMATCH' : ''}
+                <div key={`${r.pubkey}:${r.jurorIdx}`} data-testid={`vote-row-${r.jurorIdx}`} title={`juror ${r.pubkey}`}>
+                  juror #{r.jurorIdx}{myPubkey && r.pubkey === myPubkey.toLowerCase() ? ' (you)' : ''} - {r.commit ? 'committed' : 'NO COMMIT'}{r.reveal ? ` → revealed ${r.reveal.outcome}` : ''}{r.mismatch ? ' ⚠ MISMATCH' : ''}
                 </div>
               ))}
             </div>

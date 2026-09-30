@@ -164,6 +164,30 @@ it('offers a prefilled captcha-free faucet link that opens in a new tab', async 
   }, { timeout: 5000 });
 });
 
+it('prefills the send form and disables Send with a typed reason when the balance is insufficient', async () => {
+  await render({ identityHex: SECRET, identityPubkey: null, initialTo: 'tex1escrowdestination', initialSats: '5000', fetchFn: fetchFor(ACCOUNT, 0) });
+  await vi.waitFor(() => {
+    expect(container.querySelector<HTMLInputElement>('[data-testid=liquid-send-to]')?.value).toBe('tex1escrowdestination');
+  }, { timeout: 5000 });
+  expect(container.querySelector<HTMLInputElement>('[data-testid=liquid-send-amount]')?.value).toBe('5000');
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=liquid-send-disabled-reason]')?.textContent)
+      .toContain('Insufficient confirmed balance (0 sats available)');
+  }, { timeout: 5000 });
+  const send = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Send') as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+});
+
+it('enables Send when the confirmed balance covers the pre-filled amount', async () => {
+  await render({ identityHex: SECRET, identityPubkey: null, initialTo: 'tex1escrowdestination', initialSats: '5000', fetchFn: fetchFor(ACCOUNT, 100_000) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=liquid-balance]')?.textContent).toContain('100,000');
+  }, { timeout: 5000 });
+  expect(container.querySelector('[data-testid=liquid-send-disabled-reason]')).toBeNull();
+  const send = [...container.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Send') as HTMLButtonElement;
+  expect(send.disabled).toBe(false);
+});
+
 it('creates a fresh mnemonic wallet, persists it per identity and re-activates it on remount', async () => {
   await render({ identityHex: null, identityPubkey: PK, fetchFn: fetchFor(ACCOUNT, 0) });
   await generateWallet();
@@ -244,7 +268,7 @@ it('reveals stored words only on explicit click and forgets the wallet behind a 
   expect(container.textContent).toContain('Active wallet: identity-derived session wallet');
 });
 
-it('adopts a wallet created while signed out when the user signs in', async () => {
+it('requires explicit confirmation before adopting a tab-only wallet for a new identity', async () => {
   await render({ identityHex: null, identityPubkey: null, fetchFn: fetchFor(IMPORTED, 0) });
   await importWallet(MNEMONIC);
   await vi.waitFor(() => {
@@ -253,13 +277,64 @@ it('adopts a wallet created while signed out when the user signs in', async () =
   expect(container.textContent).toContain('this tab only - sign in to save');
   expect(loadRailWallet(PK, 'liquid')).toBeNull();
 
-  // Sign-in without a remount: the tab-only wallet is adopted, not dropped.
+  // Sign-in without a remount: the tab-only wallet is NOT adopted
+  // automatically; the session account stays active behind a prompt.
   await render({ identityHex: SECRET, identityPubkey: PK, fetchFn: fetchFor(IMPORTED, 0) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=liquid-adopt-confirm]')).toBeTruthy();
+  }, { timeout: 5000 });
+  expect(loadRailWallet(PK, 'liquid')).toBeNull();
+  expect(container.textContent).toContain(ACCOUNT.confidentialAddress);
+
+  await act(async () => (container.querySelector('[data-testid=liquid-adopt-confirmed]') as HTMLButtonElement).click());
   await vi.waitFor(() => {
     expect(loadRailWallet(PK, 'liquid')?.mnemonic).toBe(MNEMONIC);
   }, { timeout: 5000 });
   expect(container.textContent).toContain(IMPORTED.confidentialAddress);
   expect(container.textContent).toContain('saved for this identity');
+});
+
+it('discards a tab-only wallet instead of binding it to the new identity', async () => {
+  await render({ identityHex: null, identityPubkey: null, fetchFn: fetchFor() });
+  await importWallet(MNEMONIC);
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(IMPORTED.confidentialAddress);
+  }, { timeout: 5000 });
+
+  await render({ identityHex: SECRET, identityPubkey: PK, fetchFn: fetchFor(ACCOUNT) });
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=liquid-adopt-confirm]')).toBeTruthy();
+  }, { timeout: 5000 });
+  await act(async () => (container.querySelector('[data-testid=liquid-adopt-discard]') as HTMLButtonElement).click());
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid=liquid-adopt-confirm]')).toBeNull();
+  }, { timeout: 5000 });
+  expect(loadRailWallet(PK, 'liquid')).toBeNull();
+  expect(container.textContent).not.toContain(IMPORTED.confidentialAddress);
+  expect(container.textContent).not.toContain('abandon');
+});
+
+it('never keeps one identity’s revealed words on screen after an account switch', async () => {
+  saveRailWallet(PK, 'liquid', { version: 1, mnemonic: MNEMONIC, createdAt: 1, source: 'created' });
+  await render({ identityHex: SECRET, identityPubkey: PK, fetchFn: fetchFor(IMPORTED, 0) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain(IMPORTED.confidentialAddress);
+  }, { timeout: 5000 });
+  await act(async () => (container.querySelector('[data-testid=liquid-reveal-words]') as HTMLButtonElement).click());
+  expect(container.querySelector('[data-testid=liquid-recovery-words]')?.textContent).toContain('abandon');
+
+  // Switch to a different identity with its OWN stored wallet: the first
+  // identity's words and reveal state must be gone, not just overshadowed.
+  const OTHER = 'b2'.repeat(32);
+  const OTHER_MNEMONIC = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+  const otherAccount = importLiquidTestnetAccountFromMnemonic(OTHER_MNEMONIC);
+  saveRailWallet(OTHER, 'liquid', { version: 1, mnemonic: OTHER_MNEMONIC, createdAt: 1, source: 'imported' });
+  await remount({ identityHex: SECRET, identityPubkey: OTHER, fetchFn: fetchFor(otherAccount, 0) });
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain('imported browser wallet');
+  }, { timeout: 5000 });
+  expect(container.querySelector('[data-testid=liquid-recovery-words]')).toBeNull();
+  expect(container.textContent).not.toContain('abandon');
 });
 
 it('keeps the stored wallet for the identity that owns it across an account switch', async () => {

@@ -1,7 +1,7 @@
 // src/wallet/nip60/sync.ts
 //
 // NIP-60 wallet sync glue between the app and the vendored
-// @/baofund/cashu-wallet/lib/cashu/index: relay pool adapter (SimplePool), restore (incl.
+// @bao/cashu-wallet: relay pool adapter (SimplePool), restore (incl.
 // cross-app adoption of a 2140/bao.markets wallet the identity published
 // elsewhere), publish of config + token events, and proof merging.
 
@@ -148,7 +148,7 @@ export async function restoreWalletForIdentity(
       // older config; the adopted key is persisted per identity so ordinary
       // refreshes and later restores reuse it even before re-adoption.
       if (cross.configCreatedAt > hwm) persistConfigHwm(identitySigner.pubkey, cross.configCreatedAt);
-      persistIdentityWalletKey(identitySigner.pubkey, walletPrivkey);
+      if (walletPrivkey) persistIdentityWalletKey(identitySigner.pubkey, walletPrivkey);
     }
   } catch {
     /* no foreign config → fresh wallet */

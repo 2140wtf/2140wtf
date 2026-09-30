@@ -17,10 +17,6 @@ export interface ChatPanelProps {
    *  doors opened from the campaign-chat gate). Ignored when defaultRoomId
    *  is set. */
   defaultRoomName?: string | null;
-  /** Lock the panel to ONE room (name): the rooms directory, invite-join,
-   *  create and leave affordances are hidden, so the surface reads as a
-   *  single room. Used by the Fal Live Troll₿ox panel. */
-  lockedRoomName?: string | null;
   /** Start in full-viewport mode (used by the BAO chat-first entry at
    *  app.bao.network). */
   defaultFullscreen?: boolean;
@@ -29,10 +25,6 @@ export interface ChatPanelProps {
    *  panel to the fixed overlay on every surface (owner rule 2026-09-21: all
    *  chats have the same features). */
   embedded?: boolean;
-  /** Fill a fixed-height host and scroll the MESSAGE LIST internally (the
-   *  Fal Live Troll box panel). Embedded inline pages instead scroll as a
-   *  whole, so this is opt-in. */
-  scrollContained?: boolean;
   /** Fund the selected room's campaign without leaving chat (owner priority
    *  2026-09-22). Called with the room's `fundraiserId` and name; the app
    *  opens the pledge flow, whose built-in-wallet step pre-fills the escrow. */
@@ -50,10 +42,7 @@ const REACTIONS = ['⚡', '🤙', '😂', '🔥'] as const;
 const CHAT_CREATE_ENABLED =
   (import.meta.env as Record<string, string | undefined>).VITE_BAO_CHAT_CREATE_ENABLED === '1';
 
-export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = null, defaultFullscreen = false, embedded = false, scrollContained = false, onFundCampaign }: ChatPanelProps): React.ReactElement {
-  // Locked single-room mode: no rooms directory / invite-join / create / leave.
-  const locked = Boolean(lockedRoomName);
-  const landOnRoomName = defaultRoomName ?? lockedRoomName;
+export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = false, embedded = false, onFundCampaign }: ChatPanelProps): React.ReactElement {
   const {
     rooms,
     messages,
@@ -196,11 +185,11 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
 
   React.useEffect(() => {
     // Embedded INLINE pages scroll as a whole (bao.network hub) - never
-    // hijack the page scroll on new messages. The fullscreen overlay and a
-    // fixed-height host (scrollContained) own their scroll on every surface.
-    if (embedded && !fullscreen && !scrollContained) return;
+    // hijack the page scroll on new messages. The fullscreen overlay owns
+    // its scroll on every surface.
+    if (embedded && !fullscreen) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, embedded, fullscreen, scrollContained]);
+  }, [messages, embedded, fullscreen]);
 
   React.useEffect(() => {
     if (!fullscreen) return;
@@ -235,12 +224,12 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
   // user's. defaultRoomId (campaign invites) wins when both are present.
   const landedByName = React.useRef(false);
   React.useEffect(() => {
-    if (landedByName.current || defaultRoomId || !landOnRoomName) return;
-    const room = visibleRooms.find((r) => r.name === landOnRoomName);
+    if (landedByName.current || defaultRoomId || !defaultRoomName) return;
+    const room = visibleRooms.find((r) => r.name === defaultRoomName);
     if (!room) return;
     landedByName.current = true;
     void selectRoom(room.roomId);
-  }, [defaultRoomId, landOnRoomName, visibleRooms, selectRoom]);
+  }, [defaultRoomId, defaultRoomName, visibleRooms, selectRoom]);
 
   const selectedRoom = visibleRooms.find((r) => r.roomId === selectedRoomId);
   // Guests may post in the landing room only (burner identity; the room's
@@ -426,12 +415,11 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
 
   return (
     <div
-      className={`grid gap-4 ${scrollContained ? 'h-full min-h-0' : ''} ${locked ? '' : 'sm:grid-cols-[260px_1fr]'} ${fullscreen ? 'fixed inset-0 z-50 overflow-y-auto p-3 sm:p-5' : ''}`}
+      className={`grid gap-4 sm:grid-cols-[260px_1fr] ${fullscreen ? 'fixed inset-0 z-50 overflow-y-auto p-3 sm:p-5' : ''}`}
       style={fullscreen ? { background: 'var(--np-paper, #fdfdf8)' } : undefined}
     >
 
-      {/* Sidebar (hidden in locked single-room mode) */}
-      {!locked && (
+      {/* Sidebar */}
       <div className="border-r pr-2" style={{ borderColor: 'var(--np-rule)' }}>
         <div className="mb-3 flex items-center justify-between">
           <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)' }}>
@@ -590,7 +578,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
             type="button"
             onClick={() => setShowAgentOnboard(true)}
             className="mt-2 w-full rounded border px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest hover:bg-black/5"
-            style={{ borderColor: 'var(--np-rule)', color: 'var(--np-ink)', fontFamily: 'var(--np-font-mono)' }}
+            style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)', fontFamily: 'var(--np-font-mono)' }}
             title="Copy a ready-to-paste brief for an AI agent"
           >
             🤖 Onboard an AI agent
@@ -656,10 +644,9 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
         )}
 
       </div>
-      )}
 
       {/* Main chat */}
-      <div className={`flex flex-col border ${scrollContained ? 'h-full min-h-0' : 'min-h-[360px]'}`} style={{ borderColor: 'var(--np-rule)' }}>
+      <div className="flex min-h-[360px] flex-col border" style={{ borderColor: 'var(--np-rule)' }}>
         <div className="border-b px-3 py-2" style={{ borderColor: 'var(--np-rule)' }}>
           <div className="flex items-center gap-2 text-sm font-semibold">
             {privacy?.shielded ? <Shield size={14} /> : <Hash size={14} />}
@@ -686,14 +673,13 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
                 )}
                 {/* Room settings (owner spec): roster + grant/revoke roles +
                     ban. Members only - a signed-out guest has no member
-                    surface here (the panel gates every action anyway).
-                    Hidden in locked single-room mode. */}
-                {signer && !locked && (
+                    surface here (the panel gates every action anyway). */}
+                {signer && (
                   <button onClick={() => setShowSettings((v) => !v)} className="text-[10px]" style={{ color: showSettings ? 'var(--np-accent)' : 'var(--np-muted)' }} title="Room settings - members & roles" aria-label="Room settings">
                     <Settings size={12} />
                   </button>
                 )}
-                {signer && !locked && (
+                {signer && (
                   <button onClick={() => removeRoom(selectedRoom.roomId)} className="text-[10px]" style={{ color: 'var(--np-muted)' }} title="Leave room">
                     <Trash2 size={12} />
                   </button>
@@ -798,8 +784,8 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, lockedRoomName = nul
 
         <div
           ref={scrollRef}
-          className={`flex-1 min-h-0 px-3 py-3 ${(embedded && !fullscreen && !scrollContained) ? '' : 'overflow-y-auto'}`}
-          style={(embedded && !fullscreen && !scrollContained) || scrollContained ? undefined : { maxHeight: '420px' }}
+          className={`flex-1 px-3 py-3 ${embedded && !fullscreen ? '' : 'overflow-y-auto'}`}
+          style={embedded && !fullscreen ? undefined : { maxHeight: '420px' }}
         >
           {messages.length === 0 ? (
             <p className="text-center text-xs italic" style={{ color: 'var(--np-muted)' }}>

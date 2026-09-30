@@ -7,8 +7,7 @@
 // built with cashu-ts's own encoder so the decode path is exercised for real.
 
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { getDecodedToken, getEncodedToken } from 'cashu-ts3';
-import type { Proof } from 'cashu-ts3';
+import { Amount, getDecodedToken, getEncodedToken, normalizeProofAmounts } from '@cashu/cashu-ts';
 import { bytesToBase64Url } from '../lib/cashu/base64';
 
 /** Mutable behavior for the fake Wallet instances the module constructs. */
@@ -17,34 +16,34 @@ let walletImpl: {
   receive: (...args: never[]) => Promise<unknown>;
   checkProofsStates: (...args: never[]) => Promise<unknown>;
   restore: (...args: never[]) => Promise<unknown>;
-  createMintQuote: (...args: never[]) => Promise<unknown>;
-  checkMintQuote: (...args: never[]) => Promise<unknown>;
-  checkMeltQuote: (...args: never[]) => Promise<unknown>;
-  mintProofs: (...args: never[]) => Promise<unknown>;
-  createMeltQuote: (...args: never[]) => Promise<unknown>;
-  meltProofs: (...args: never[]) => Promise<unknown>;
+  createMintQuoteBolt11: (...args: never[]) => Promise<unknown>;
+  checkMintQuoteBolt11: (...args: never[]) => Promise<unknown>;
+  checkMeltQuoteBolt11: (...args: never[]) => Promise<unknown>;
+  mintProofsBolt11: (...args: never[]) => Promise<unknown>;
+  createMeltQuoteBolt11: (...args: never[]) => Promise<unknown>;
+  meltProofsBolt11: (...args: never[]) => Promise<unknown>;
 } = {
   send: vi.fn(),
   receive: vi.fn(),
   checkProofsStates: vi.fn(async () => []),
   restore: vi.fn(async () => ({ proofs: [] })),
-  createMintQuote: vi.fn(),
-  checkMintQuote: vi.fn(),
-  checkMeltQuote: vi.fn(async () => ({ state: 'UNPAID' })),
-  mintProofs: vi.fn(),
-  createMeltQuote: vi.fn(),
-  meltProofs: vi.fn(),
+  createMintQuoteBolt11: vi.fn(),
+  checkMintQuoteBolt11: vi.fn(),
+  checkMeltQuoteBolt11: vi.fn(async () => ({ state: 'UNPAID' })),
+  mintProofsBolt11: vi.fn(),
+  createMeltQuoteBolt11: vi.fn(),
+  meltProofsBolt11: vi.fn(),
 };
 
-vi.mock('cashu-ts3', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('cashu-ts3')>();
+vi.mock('@cashu/cashu-ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@cashu/cashu-ts')>();
   class FakeMint {
     mintUrl: string;
     constructor(url: string) {
       this.mintUrl = url;
     }
   }
-  /** cashu-ts 3.x shape: Mint/Wallet + async loadMint + internal counter source. */
+  /** cashu-ts 4.x shape: Mint/Wallet + async loadMint + bolt11-specific methods. */
   class FakeWallet {
     mint: FakeMint;
     keysetId = '00'.repeat(8);
@@ -57,6 +56,10 @@ vi.mock('cashu-ts3', async (importOriginal) => {
       this.counterSource = options?.counterSource as never;
     }
     async loadMint() {}
+    /** Real 4.x decode with the loaded keychain; test fixtures carry v0 ids. */
+    decodeToken(token: string) {
+      return actual.getDecodedToken(token, []);
+    }
     /** Mirror the real wallet's per-operation deterministic reservations. */
     private async reserve(n: number): Promise<void> {
       if (n > 0 && this.counterSource) await this.counterSource.reserve(this.keysetId, n);
@@ -77,29 +80,29 @@ vi.mock('cashu-ts3', async (importOriginal) => {
     async restore(...args: never[]) {
       return walletImpl.restore(...args);
     }
-    async createMintQuote(...args: never[]) {
-      return walletImpl.createMintQuote(...args);
+    async createMintQuoteBolt11(...args: never[]) {
+      return walletImpl.createMintQuoteBolt11(...args);
     }
-    async checkMintQuote(...args: never[]) {
-      return walletImpl.checkMintQuote(...args);
+    async checkMintQuoteBolt11(...args: never[]) {
+      return walletImpl.checkMintQuoteBolt11(...args);
     }
-    async checkMeltQuote(...args: never[]) {
-      return walletImpl.checkMeltQuote(...args);
+    async checkMeltQuoteBolt11(...args: never[]) {
+      return walletImpl.checkMeltQuoteBolt11(...args);
     }
-    async mintProofs(...args: never[]) {
-      const result = (await walletImpl.mintProofs(...args)) as unknown[] | undefined;
+    async mintProofsBolt11(...args: never[]) {
+      const result = (await walletImpl.mintProofsBolt11(...args)) as unknown[] | undefined;
       await this.reserve(Array.isArray(result) ? result.length : 0);
       return result;
     }
-    async createMeltQuote(...args: never[]) {
-      return walletImpl.createMeltQuote(...args);
+    async createMeltQuoteBolt11(...args: never[]) {
+      return walletImpl.createMeltQuoteBolt11(...args);
     }
-    async meltProofs(...args: never[]) {
-      const result = (await walletImpl.meltProofs(...args)) as { change?: unknown[] } | undefined;
+    async meltProofsBolt11(...args: never[]) {
+      const result = (await walletImpl.meltProofsBolt11(...args)) as { change?: unknown[] } | undefined;
       // Real NUT-08 reservation: ceil(log2(leftover)) || 1 blanks when there
       // is a fee-reserve leftover.
-      const [quote, selected] = args as unknown as [{ amount: number }, Array<{ amount: number }>];
-      const leftover = Math.max(0, selected.reduce((sum, p) => sum + p.amount, 0) - quote.amount);
+      const [quote, selected] = args as unknown as [{ amount: { toNumber(): number } }, Array<{ amount: number }>];
+      const leftover = Math.max(0, selected.reduce((sum, p) => sum + p.amount, 0) - quote.amount.toNumber());
       await this.reserve(leftover > 0 ? Math.ceil(Math.log2(Math.max(1, leftover))) || 1 : 0);
       return result;
     }
@@ -109,6 +112,7 @@ vi.mock('cashu-ts3', async (importOriginal) => {
 });
 
 import {
+  clearPendingTopUp,
   completeLightningTopUp,
   createLightningTopUp,
   loadPendingTopUp,
@@ -128,21 +132,25 @@ import {
   type PendingOp,
 } from './cashuWallet';
 import { loadTransactions } from './walletHistory';
+import { setActiveIdentity } from '../lib/activeIdentity';
 
 const MINT = 'https://mint.example.com';
-const STORAGE_KEY = 'bao-fund-wallet';
+const IDENTITY_A = 'aa'.repeat(32);
+const IDENTITY_B = 'bb'.repeat(32);
+const LEGACY_STORAGE_KEY = 'bao-fund-wallet';
+const STORAGE_KEY = `${LEGACY_STORAGE_KEY}:${IDENTITY_A}`;
 const DEFAULT_MINT = 'https://mint.minibits.cash/Bitcoin';
 
-/** A proof shaped like what cashu-ts actually produces/accepts. */
+/** A proof shaped like the app's storage format (plain-number amount). */
 function proof(secret: string, amount: number) {
   return { id: '00' + '0'.repeat(62), C: '02' + '0'.repeat(64), secret, amount };
 }
 
-function encodeToken(mint: string, proofs: Proof[]): string {
-  return getEncodedToken({ mint, proofs, unit: 'sat' });
+function encodeToken(mint: string, proofs: Array<{ id: string; amount: number; secret: string; C: string }>): string {
+  return getEncodedToken({ mint, proofs: normalizeProofAmounts(proofs), unit: 'sat' });
 }
 
-function seed(mintUrl: string, proofs: Proof[]): void {
+function seed(mintUrl: string, proofs: Array<{ id: string; amount: number; secret: string; C: string }>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ mintUrl, proofs }));
 }
 
@@ -160,17 +168,21 @@ afterEach(() => {
 
 beforeEach(() => {
   localStorage.clear();
+  // Every wallet op is identity-scoped: bind a fresh identity A (the reset
+  // also exercises the listener path; storage was just cleared).
+  setActiveIdentity(null);
+  setActiveIdentity(IDENTITY_A);
   walletImpl = {
     send: vi.fn(),
     receive: vi.fn(),
     checkProofsStates: vi.fn(async () => []),
     restore: vi.fn(async () => ({ proofs: [] })),
-    createMintQuote: vi.fn(),
-    checkMintQuote: vi.fn(),
-    checkMeltQuote: vi.fn(async () => ({ state: 'UNPAID' })),
-    mintProofs: vi.fn(),
-    createMeltQuote: vi.fn(),
-    meltProofs: vi.fn(),
+    createMintQuoteBolt11: vi.fn(),
+    checkMintQuoteBolt11: vi.fn(),
+    checkMeltQuoteBolt11: vi.fn(async () => ({ state: 'UNPAID' })),
+    mintProofsBolt11: vi.fn(),
+    createMeltQuoteBolt11: vi.fn(),
+    meltProofsBolt11: vi.fn(),
   };
 });
 
@@ -205,10 +217,71 @@ describe('loadStoredWallet (read)', () => {
   });
 });
 
+describe('per-identity storage isolation (audit run-2)', () => {
+  it("identity B never sees or resumes identity A's proofs", async () => {
+    seed(MINT, [proof('a-funds', 42)]);
+    expect(totalStoredBalance()).toBe(42);
+    setActiveIdentity(IDENTITY_B);
+    expect(loadStoredWallet().proofs).toEqual([]);
+    expect(totalStoredBalance()).toBe(0);
+    // B receives into its OWN slot; A's slot stays untouched.
+    walletImpl.receive = vi.fn(async () => [proof('b-funds', 7)]);
+    await receiveIntoStoredWallet(encodeToken(MINT, [proof('incoming-b', 7)]));
+    expect(totalStoredBalance()).toBe(7);
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).proofs.map((p: { secret: string }) => p.secret)).toEqual(['a-funds']);
+    setActiveIdentity(IDENTITY_A);
+    expect(loadStoredWallet().proofs.map((p) => p.secret)).toEqual(['a-funds']);
+  });
+
+  it('refuses every wallet mutation while signed out (no global fallback)', async () => {
+    setActiveIdentity(null);
+    await expect(receiveIntoStoredWallet(encodeToken(MINT, [proof('t', 5)]))).rejects.toThrow(/Sign in/);
+    await expect(spendFromStoredWallet(1)).rejects.toThrow(/Sign in/);
+    await expect(mergeStoredProofs({ [MINT]: [proof('r', 5)] })).rejects.toThrow(/Sign in/);
+    await expect(switchStoredMint('https://next.example.com')).rejects.toThrow(/Sign in/);
+    await expect(removeStoredMint(MINT)).rejects.toThrow(/Sign in/);
+    await expect(completeLightningTopUp('mq-1')).rejects.toThrow(/Sign in/);
+    await expect(payLightningQuote({ quote: 'melt-1', amount: 21, fee_reserve: 1 } as never)).rejects.toThrow(/Sign in/);
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
+    expect(walletImpl.receive).not.toHaveBeenCalled();
+    expect(walletImpl.send).not.toHaveBeenCalled();
+    expect(walletImpl.mintProofsBolt11).not.toHaveBeenCalled();
+    expect(walletImpl.meltProofsBolt11).not.toHaveBeenCalled();
+  });
+
+  it('adopts the legacy global wallet once, for the ACTIVE identity only', () => {
+    setActiveIdentity(null);
+    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify({ mintUrl: MINT, proofs: [proof('legacy', 11)] }));
+    setActiveIdentity(IDENTITY_A);
+    expect(loadStoredWallet().proofs.map((p) => p.secret)).toEqual(['legacy']);
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull(); // legacy slot consumed
+    setActiveIdentity(IDENTITY_B);
+    expect(loadStoredWallet().proofs).toEqual([]); // B never inherits A's funds
+  });
+});
+
+describe('top-up quote isolation (audit run-2 topup-history-global)', () => {
+  it("identity B cannot resume identity A's open quote", async () => {
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-a', request: 'lnbc1a', amount: Amount.from(21), expiry: null }));
+    const quote = await createLightningTopUp(21, MINT);
+    expect(loadPendingTopUp()?.quoteId).toBe(quote.quoteId);
+    setActiveIdentity(IDENTITY_B);
+    expect(loadPendingTopUp()).toBeNull();
+    // B's own quote lives in B's slot; A's survives for A.
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-b', request: 'lnbc1b', amount: Amount.from(5), expiry: null }));
+    await createLightningTopUp(5, MINT);
+    expect(loadPendingTopUp()?.quoteId).toBe('mq-b');
+    setActiveIdentity(IDENTITY_A);
+    expect(loadPendingTopUp()?.quoteId).toBe('mq-a');
+    clearPendingTopUp();
+    expect(loadPendingTopUp()).toBeNull();
+  });
+});
+
 describe('sumProofs', () => {
   it('sums positive amounts and ignores missing ones', () => {
     expect(sumProofs([proof('a', 10), proof('b', 20)])).toBe(30);
-    expect(sumProofs([{ id: 'x', C: 'y', secret: 'z', amount: 0 } as Proof])).toBe(0);
+    expect(sumProofs([{ amount: 0 }])).toBe(0);
   });
 });
 
@@ -230,7 +303,7 @@ describe('receiveIntoStoredWallet', () => {
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('sent', 20)] }));
     const res = await spendFromStoredWallet(20, 'https://other.example.com');
     expect(res.mintUrl).toBe('https://other.example.com');
-    expect(getDecodedToken(res.token).mint).toBe('https://other.example.com');
+    expect(getDecodedToken(res.token, []).mint).toBe('https://other.example.com');
     expect(loadStoredWallet().mintUrl).toBe(DEFAULT_MINT); // active untouched
   });
   it('persists redeemed proofs atomically and reports balances', async () => {
@@ -265,6 +338,49 @@ describe('receiveIntoStoredWallet', () => {
   });
 });
 
+describe('receive journal cannot poison recovery (audit run-2 nip61-claim-journal-poisoning)', () => {
+  it("never journals the sender's proofs as our recovery inputs", async () => {
+    let journal: PendingOp | undefined;
+    walletImpl.receive = vi.fn(async () => {
+      journal = loadStoredWallet().mints[MINT]?.pending;
+      return [proof('r', 5)];
+    });
+    await receiveIntoStoredWallet(encodeToken(MINT, [proof('sender', 5)]));
+    expect(journal?.kind).toBe('receive');
+    // The journal carries NO foreign inputs - recovery can never be pinned on
+    // a sender proof's PENDING/SPENT state.
+    expect(journal?.inputs).toEqual([]);
+    expect(loadStoredWallet().pending).toBeUndefined();
+  });
+
+  it('clears the marker on a failed receive so later wallet ops are never wedged', async () => {
+    walletImpl.receive = vi.fn(async () => { throw new Error('proofs already spent'); });
+    await expect(receiveIntoStoredWallet(encodeToken(MINT, [proof('sender', 5)]))).rejects.toThrow(/already spent/);
+    expect(loadStoredWallet().pending).toBeUndefined(); // no marker left behind
+    // The next operation runs normally - no recovery pass over sender proofs.
+    seed(MINT, [proof('a', 10)]);
+    walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('s', 1)] }));
+    await spendFromStoredWallet(1);
+    expect(walletImpl.checkProofsStates).not.toHaveBeenCalled();
+  });
+
+  it('recovers a crashed receive via NUT-09 restore, never via sender inputs', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      mintUrl: MINT,
+      proofs: [],
+      seed: 'ab'.repeat(32),
+      counter: 0,
+      pending: { kind: 'receive', inputs: [], counterStart: 0, keysetId: '00'.repeat(8), at: Date.now(), tokenHash: 'x' },
+    }));
+    walletImpl.restore = vi.fn(async () => ({ proofs: [proof('recovered', 10)], lastCounterWithSignature: 0 }));
+    const res = await hydrateStoredWallet();
+    expect(res.recovered).toBe(1);
+    expect(loadStoredWallet().proofs.map((p) => p.secret)).toEqual(['recovered']);
+    expect(loadStoredWallet().pending).toBeUndefined();
+    expect(walletImpl.checkProofsStates).not.toHaveBeenCalled();
+  });
+});
+
 describe('spendFromStoredWallet', () => {
   it('rejects non-positive or fractional amounts before touching the mint', async () => {
     await expect(spendFromStoredWallet(0)).rejects.toThrow(/positive/);
@@ -283,7 +399,7 @@ describe('spendFromStoredWallet', () => {
     walletImpl.send = vi.fn(async () => ({ keep: [proof('k', 5)], send: [proof('s1', 10), proof('s2', 15)] }));
     const { token, balanceAfter } = await spendFromStoredWallet(25);
     expect(walletImpl.send).toHaveBeenCalledWith(25, [proofs[0], proofs[1]], { keysetId: '00'.repeat(8) });
-    const decoded = getDecodedToken(token);
+    const decoded = getDecodedToken(token, []);
     expect(decoded.mint).toBe(MINT);
     expect(decoded.proofs).toHaveLength(2);
     // Persisted change = keep + unselected tail ('c'), NOT just keep.
@@ -372,7 +488,7 @@ describe('switchStoredMint (multi-mint active selector)', () => {
     expect(stored.mints[MINT].proofs.map((p) => p.secret)).toEqual(['received']);
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('received', 10)] }));
     const result = await spendFromStoredWallet(10, MINT);
-    expect(getDecodedToken(result.token).mint).toBe(MINT);
+    expect(getDecodedToken(result.token, []).mint).toBe(MINT);
   });
 });
 
@@ -397,8 +513,8 @@ describe('corrupt wallet storage is never overwritten by any mutation', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe(CORRUPT); // bytes preserved for recovery
     expect(walletImpl.send).not.toHaveBeenCalled();
     expect(walletImpl.receive).not.toHaveBeenCalled();
-    expect(walletImpl.mintProofs).not.toHaveBeenCalled();
-    expect(walletImpl.meltProofs).not.toHaveBeenCalled();
+    expect(walletImpl.mintProofsBolt11).not.toHaveBeenCalled();
+    expect(walletImpl.meltProofsBolt11).not.toHaveBeenCalled();
   });
 
   it.each(Object.entries(mutations))('%s refuses parseable-but-malformed storage', async (_name, run) => {
@@ -417,7 +533,7 @@ describe('corrupt wallet storage is never overwritten by any mutation', () => {
     seed(MINT, [proof('a', 10)]);
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('a', 10)] }));
     const { token } = await spendFromStoredWallet(10);
-    expect(getDecodedToken(token).proofs).toHaveLength(1);
+    expect(getDecodedToken(token, []).proofs).toHaveLength(1);
   });
 });
 
@@ -562,7 +678,7 @@ describe('crash recovery (R11)', () => {
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('s', 10)] }));
     const { token, balanceAfter } = await spendFromStoredWallet(10);
     expect(walletImpl.send).toHaveBeenCalledWith(10, [expect.objectContaining({ secret: 'recovered' })], { keysetId: '00'.repeat(8) });
-    expect(getDecodedToken(token).proofs).toHaveLength(1);
+    expect(getDecodedToken(token, []).proofs).toHaveLength(1);
     expect(balanceAfter).toBe(0);
     expect(loadStoredWallet().pending).toBeUndefined();
     // The spend resumed at the recovered counter (1) and reserved one output.
@@ -655,14 +771,15 @@ describe('cross-tab exclusion (Web Locks)', () => {
     seed(MINT, [proof('a', 10)]);
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('a', 10)] }));
     const { token } = await spendFromStoredWallet(10);
-    expect(getDecodedToken(token).proofs).toHaveLength(1);
+    expect(getDecodedToken(token, []).proofs).toHaveLength(1);
   });
 });
 
 describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
   const INVOICE = `lnbc21u1p${'q'.repeat(80)}`;
-  const MINT_QUOTE = { quote: 'mq-1', request: INVOICE, state: 'PAID', amount: 21, unit: 'sat' };
-  const MELT_QUOTE = { quote: 'melt-1', request: INVOICE, state: 'UNPAID', amount: 21, fee_reserve: 1, unit: 'sat' };
+  // cashu-ts 4.x: quote amount/fee_reserve are Amount value objects.
+  const MINT_QUOTE = { quote: 'mq-1', request: INVOICE, state: 'PAID', amount: Amount.from(21), unit: 'sat' };
+  const MELT_QUOTE = { quote: 'melt-1', request: INVOICE, state: 'UNPAID', amount: Amount.from(21), fee_reserve: Amount.from(1), unit: 'sat' };
 
   function seedWallet(proofs: ReturnType<typeof proof>[], counter = 0) {
     localStorage.setItem(
@@ -673,7 +790,7 @@ describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
 
   it('creates a top-up invoice and validates the amount', async () => {
     seedWallet([], 0);
-    walletImpl.createMintQuote = vi.fn(async () => ({ quote: 'mq-1', request: INVOICE, state: 'UNPAID', amount: 100, unit: 'sat', expiry: 1_900_000_000 }));
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-1', request: INVOICE, state: 'UNPAID', amount: Amount.from(100), unit: 'sat', expiry: 1_900_000_000 }));
     const quote = await createLightningTopUp(100);
     expect(quote).toMatchObject({ quoteId: 'mq-1', invoice: INVOICE, amountSats: 100, expiry: 1_900_000_000, mintUrl: MINT });
     await expect(createLightningTopUp(0)).rejects.toThrow(/positive whole number/);
@@ -682,14 +799,14 @@ describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
 
   it('keeps polling while unpaid and mints at the deterministic counter once paid', async () => {
     seedWallet([], 0);
-    walletImpl.checkMintQuote = vi.fn(async () => ({ ...MINT_QUOTE, state: 'UNPAID' }));
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => ({ ...MINT_QUOTE, state: 'UNPAID' }));
     expect(await completeLightningTopUp('mq-1')).toMatchObject({ state: 'pending', minted: 0 });
 
-    walletImpl.checkMintQuote = vi.fn(async () => MINT_QUOTE);
-    walletImpl.mintProofs = vi.fn(async () => [proof('minted', 21)]);
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => MINT_QUOTE);
+    walletImpl.mintProofsBolt11 = vi.fn(async () => [proof('minted', 21)]);
     const res = await completeLightningTopUp('mq-1');
     expect(res).toEqual({ state: 'paid', minted: 21, balanceAfter: 21 });
-    expect(walletImpl.mintProofs).toHaveBeenCalledWith(21, 'mq-1', { keysetId: '00'.repeat(8) });
+    expect(walletImpl.mintProofsBolt11).toHaveBeenCalledWith(21, 'mq-1', { keysetId: '00'.repeat(8) });
     const stored = loadStoredWallet();
     expect(stored.counter).toBe(1);
     expect(stored.pending).toBeUndefined();
@@ -697,7 +814,7 @@ describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
 
   it('recovers a paid-but-unminted quote by restore when the mint reports ISSUED', async () => {
     seedWallet([], 0);
-    walletImpl.checkMintQuote = vi.fn(async () => ({ ...MINT_QUOTE, state: 'ISSUED' }));
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => ({ ...MINT_QUOTE, state: 'ISSUED' }));
     walletImpl.restore = vi.fn(async () => ({ proofs: [proof('recovered', 21)], lastCounterWithSignature: 0 }));
     const res = await completeLightningTopUp('mq-1');
     expect(res).toEqual({ state: 'paid', minted: 21, balanceAfter: 21 });
@@ -723,17 +840,17 @@ describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
   });
 
   it('quotes a Lightning payment and refuses malformed invoices', async () => {
-    walletImpl.createMeltQuote = vi.fn(async () => MELT_QUOTE);
+    walletImpl.createMeltQuoteBolt11 = vi.fn(async () => MELT_QUOTE);
     const q = await quoteLightningPayment(`lightning:${INVOICE}`);
     expect(q.amountSats).toBe(21);
     expect(q.feeReserveSats).toBe(1);
-    expect(walletImpl.createMeltQuote).toHaveBeenCalledWith(INVOICE);
+    expect(walletImpl.createMeltQuoteBolt11).toHaveBeenCalledWith(INVOICE);
     await expect(quoteLightningPayment('not-an-invoice')).rejects.toThrow(/valid Lightning invoice/);
   });
 
   it('pays a quoted invoice, persists the change and journals first', async () => {
     seedWallet([proof('a', 100)], 0);
-    walletImpl.meltProofs = vi.fn(async () => ({ quote: { ...MELT_QUOTE, state: 'PAID' }, change: [proof('change', 78)] }));
+    walletImpl.meltProofsBolt11 = vi.fn(async () => ({ quote: { ...MELT_QUOTE, state: 'PAID' }, change: [proof('change', 78)] }));
     const res = await payLightningQuote(MELT_QUOTE as never);
     expect(res).toEqual({ paid: true, changeSats: 78, balanceAfter: 78, state: 'PAID' });
     const stored = loadStoredWallet();
@@ -747,10 +864,10 @@ describe('Lightning rail — top-up (NUT-04) and pay (NUT-05)', () => {
 
   it('refuses to melt a quote the mint already reports PAID (no proof erasure)', async () => {
     seedWallet([proof('kept', 100)], 0);
-    walletImpl.checkMeltQuote = vi.fn(async () => ({ ...MELT_QUOTE, state: 'PAID' }));
+    walletImpl.checkMeltQuoteBolt11 = vi.fn(async () => ({ ...MELT_QUOTE, state: 'PAID' }));
     const res = await payLightningQuote(MELT_QUOTE as never);
     expect(res).toEqual({ paid: true, changeSats: 0, balanceAfter: 100, state: 'PAID' });
-    expect(walletImpl.meltProofs).not.toHaveBeenCalled();
+    expect(walletImpl.meltProofsBolt11).not.toHaveBeenCalled();
     expect(sumProofs(loadStoredWallet().proofs)).toBe(100);
   });
 
@@ -832,18 +949,18 @@ describe('deep-hunt regressions', () => {
     walletImpl.send = vi.fn(async () => ({ keep: [], send: [proof('sent', 20)] }));
     // The healthy mint still spends; the blocked one still fails closed.
     const res = await spendFromStoredWallet(20, other);
-    expect(getDecodedToken(res.token).mint).toBe(other);
+    expect(getDecodedToken(res.token, []).mint).toBe(other);
     await expect(spendFromStoredWallet(10, MINT)).rejects.toThrow(/PENDING/);
     expect(loadStoredWallet().mints[MINT].pending).toBeDefined();
   });
 
   it('persists an open top-up quote and clears it once paid', async () => {
     seed(MINT, []);
-    walletImpl.createMintQuote = vi.fn(async () => ({ quote: 'mq-keep', request: `lnbc21u1p${'q'.repeat(80)}`, state: 'UNPAID', amount: 21, unit: 'sat' }));
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-keep', request: `lnbc21u1p${'q'.repeat(80)}`, state: 'UNPAID', amount: Amount.from(21), unit: 'sat' }));
     const quote = await createLightningTopUp(21);
     expect(loadPendingTopUp()).toMatchObject({ quoteId: 'mq-keep', mintUrl: MINT, amountSats: 21 });
-    walletImpl.checkMintQuote = vi.fn(async () => ({ quote: 'mq-keep', request: quote.invoice, state: 'PAID', amount: 21, unit: 'sat' }));
-    walletImpl.mintProofs = vi.fn(async () => [proof('minted', 21)]);
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-keep', request: quote.invoice, state: 'PAID', amount: Amount.from(21), unit: 'sat' }));
+    walletImpl.mintProofsBolt11 = vi.fn(async () => [proof('minted', 21)]);
     await completeLightningTopUp('mq-keep', MINT);
     expect(loadPendingTopUp()).toBeNull();
   });
@@ -851,16 +968,16 @@ describe('deep-hunt regressions', () => {
   it('mints a PAID quote whose check response omits amount (NUT-04 response shape)', async () => {
     seed(MINT, []);
     const invoice = `lnbc42u1p${'q'.repeat(80)}`;
-    walletImpl.createMintQuote = vi.fn(async () => ({ quote: 'mq-noamt', request: invoice, state: 'UNPAID', amount: 42, unit: 'sat' }));
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-noamt', request: invoice, state: 'UNPAID', amount: Amount.from(42), unit: 'sat' }));
     await createLightningTopUp(42);
     // A spec-shaped check reply carries quote/request/state only; the amount
     // is already persisted with the open quote. Throwing here would strand a
     // PAID Lightning invoice at the mint forever.
-    walletImpl.checkMintQuote = vi.fn(async () => ({ quote: 'mq-noamt', request: invoice, state: 'PAID' }));
-    walletImpl.mintProofs = vi.fn(async () => [proof('minted-noamt', 42)]);
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-noamt', request: invoice, state: 'PAID' }));
+    walletImpl.mintProofsBolt11 = vi.fn(async () => [proof('minted-noamt', 42)]);
     const res = await completeLightningTopUp('mq-noamt', MINT);
     expect(res).toEqual({ state: 'paid', minted: 42, balanceAfter: 42 });
-    expect(walletImpl.mintProofs).toHaveBeenCalledWith(42, 'mq-noamt', { keysetId: '00'.repeat(8) });
+    expect(walletImpl.mintProofsBolt11).toHaveBeenCalledWith(42, 'mq-noamt', { keysetId: '00'.repeat(8) });
   });
 
   it('never activates the signet mint and prefers another funded mint over the fallback', () => {
@@ -903,9 +1020,9 @@ describe('wallet history recording', () => {
   it('records a Lightning top-up once paid', async () => {
     seed(MINT, []);
     const INVOICE = `lnbc21u1p${'q'.repeat(80)}`;
-    walletImpl.createMintQuote = vi.fn(async () => ({ quote: 'mq-h', request: INVOICE, state: 'UNPAID', amount: 21, unit: 'sat' }));
-    walletImpl.checkMintQuote = vi.fn(async () => ({ quote: 'mq-h', request: INVOICE, state: 'PAID', amount: 21, unit: 'sat' }));
-    walletImpl.mintProofs = vi.fn(async () => [proof('minted-h', 21)]);
+    walletImpl.createMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-h', request: INVOICE, state: 'UNPAID', amount: Amount.from(21), unit: 'sat' }));
+    walletImpl.checkMintQuoteBolt11 = vi.fn(async () => ({ quote: 'mq-h', request: INVOICE, state: 'PAID', amount: Amount.from(21), unit: 'sat' }));
+    walletImpl.mintProofsBolt11 = vi.fn(async () => [proof('minted-h', 21)]);
     await createLightningTopUp(21);
     await completeLightningTopUp('mq-h', MINT);
     const txs = loadTransactions();
@@ -915,10 +1032,10 @@ describe('wallet history recording', () => {
 
   it('records a Lightning payment with the actual fee', async () => {
     seed(MINT, [proof('a', 100)]);
-    const quote = { quote: 'melt-h', request: `lnbc21u1p${'q'.repeat(80)}`, state: 'UNPAID', amount: 21, fee_reserve: 3, unit: 'sat' };
-    walletImpl.createMeltQuote = vi.fn(async () => quote);
-    walletImpl.checkMeltQuote = vi.fn(async () => ({ ...quote, state: 'UNPAID' }));
-    walletImpl.meltProofs = vi.fn(async () => ({ quote: { ...quote, state: 'PAID' }, change: [proof('change', 77)] }));
+    const quote = { quote: 'melt-h', request: `lnbc21u1p${'q'.repeat(80)}`, state: 'UNPAID', amount: Amount.from(21), fee_reserve: Amount.from(3), unit: 'sat' };
+    walletImpl.createMeltQuoteBolt11 = vi.fn(async () => quote);
+    walletImpl.checkMeltQuoteBolt11 = vi.fn(async () => ({ ...quote, state: 'UNPAID' }));
+    walletImpl.meltProofsBolt11 = vi.fn(async () => ({ quote: { ...quote, state: 'PAID' }, change: [proof('change', 77)] }));
     const q = await quoteLightningPayment(quote.request, MINT);
     await payLightningQuote(q.quote, q.mintUrl);
     const txs = loadTransactions();

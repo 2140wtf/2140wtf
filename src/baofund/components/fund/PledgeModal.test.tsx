@@ -7,6 +7,8 @@ import type { CampaignBreakdown } from './campaignBreakdown';
 const mocks = vi.hoisted(() => ({
   submit: vi.fn(), models: vi.fn(), spend: vi.fn(),
   decode: vi.fn(), spent: vi.fn(),
+  balance: 0,
+  pubkey: 'test-pubkey',
   signer: { getPublicKey: async () => 'test-pubkey' },
 }));
 vi.mock('../../lib/baoFundraising', async (importOriginal) => ({
@@ -21,9 +23,9 @@ vi.mock('../../lib/cashu/tokenUtils', async (importOriginal) => ({
   checkTokenProofsSpent: mocks.spent,
 }));
 vi.mock('../../relay/guestIdentity', () => ({ createGuestSigner: vi.fn(), getGuestPubkeyHex: () => 'guest' }));
-vi.mock('../../auth/useAuth', () => ({ useAuth: () => ({ status: 'ready', signer: mocks.signer, pubkey: 'test-pubkey' }) }));
+vi.mock('../../auth/useAuth', () => ({ useAuth: () => ({ status: 'ready', signer: mocks.signer, pubkey: mocks.pubkey }) }));
 vi.mock('../../wallet/nip61', () => ({ sendNutzap: vi.fn() }));
-vi.mock('../../wallet/cashuWallet', () => ({ loadStoredWallet: () => ({ proofs: [], mintUrl: 'https://example.invalid' }), sumProofs: () => 0, spendFromStoredWallet: mocks.spend, loadPendingTopUp: () => null, createLightningTopUp: vi.fn(), completeLightningTopUp: vi.fn() }));
+vi.mock('../../wallet/cashuWallet', () => ({ loadStoredWallet: () => ({ proofs: [], mintUrl: 'https://example.invalid' }), sumProofs: () => mocks.balance, spendFromStoredWallet: mocks.spend, loadPendingTopUp: () => null, createLightningTopUp: vi.fn(), completeLightningTopUp: vi.fn() }));
 let container: HTMLDivElement;
 let root: Root;
 let onDone = vi.fn<(msg: string) => void>();
@@ -31,6 +33,9 @@ let onClose = vi.fn<() => void>();
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
+  localStorage.clear();
+  mocks.balance = 0;
+  mocks.pubkey = 'test-pubkey';
   mocks.models.mockResolvedValue({ models: [{ id: 'test-model', name: 'Test model' }], defaultModel: 'test-model' });
   mocks.submit.mockResolvedValue({ ok: true, message: 'Recorded' });
   container = document.createElement('div'); document.body.append(container);
@@ -108,7 +113,8 @@ it('offers the one-transaction split for multi-milestone campaigns and lists eve
   expect(container.querySelector('[data-testid=split-pledge]')).toBeTruthy();
   await submit();
   // A split pledge spans several escrow addresses: the single-address
-  // wallet-drawer shortcut must not be offered.
+  // shortcut would silently underpay, so the multi-output path offers one
+  // pay-from-wallet action PER output instead (each address is watched).
   expect(container.querySelector('[data-testid=pledge-open-wallet]')).toBeNull();
   expect(mocks.submit).toHaveBeenCalledWith(
     expect.anything(),
@@ -119,9 +125,73 @@ it('offers the one-transaction split for multi-milestone campaigns and lists eve
   expect(outputs[0].textContent).toContain('First deliverable');
   expect(outputs[1].textContent).toContain('Second deliverable');
   expect(container.textContent).toContain('pay every output in a SINGLE transaction');
+  expect(container.querySelector('[data-testid=split-wallet-note]')).toBeTruthy();
   // The split escrow is the DEFAULT path for multi-milestone campaigns: the
   // NO VALUE badge must render here too, not only on the single-address path.
   expect(container.querySelector('[data-testid="t4-badge-awaiting"]')?.textContent).toBe('TESTNET4 · NO VALUE');
+
+  // Each per-output button opens the drawer pre-filled with THAT output's
+  // address and amount (never the total, never another milestone's address).
+  const events: CustomEvent[] = [];
+  const listener = (e: Event): void => { events.push(e as CustomEvent); };
+  window.addEventListener('bao-open-wallet-drawer', listener);
+  try {
+    const pay0 = container.querySelector<HTMLButtonElement>('[data-testid=pledge-open-wallet-0]')!;
+    const pay1 = container.querySelector<HTMLButtonElement>('[data-testid=pledge-open-wallet-1]')!;
+    expect(pay0).toBeTruthy();
+    expect(pay1).toBeTruthy();
+    await act(async () => { pay0.click(); });
+    await act(async () => { pay1.click(); });
+    expect(events).toHaveLength(2);
+    expect(events[0].detail).toMatchObject({ tab: 'send', rail: 'l1', to: 'tb1pA', sats: '10000' });
+    expect(events[1].detail).toMatchObject({ tab: 'send', rail: 'l1', to: 'tb1pB', sats: '20000' });
+  } finally {
+    window.removeEventListener('bao-open-wallet-drawer', listener);
+  }
+});
+
+it('offers the main wallet button for a single-output split and pre-fills that output', async () => {
+  // A pledge below the first milestone target returns ONE split output -
+  // the built-in wallet must still be offered (this was the owner bug:
+  // every split pledge, even one output, hid the pay-from-wallet action).
+  const bd = milestoneBreakdown();
+  bd.milestones = [
+    { ...bd.milestones[0], id: 'm1', title: 'First deliverable', amountSats: 10_000 },
+    { ...bd.milestones[0], id: 'm2', title: 'Second deliverable', amountSats: 20_000 },
+  ];
+  mocks.submit.mockResolvedValueOnce({
+    ok: true,
+    claimed: 0,
+    message: 'One transaction pays 1 milestone escrow',
+    awaitingPayment: {
+      address: 'tex1single',
+      amountSats: 1_000,
+      explorerUrl: '',
+      rail: 'liquid-testnet',
+      splitGroup: 'group-1',
+      outputs: [{ milestoneId: 'm1', address: 'tex1single', amountSats: 1_000, explorerUrl: '' }],
+    },
+  });
+  await act(async () => root.render(
+    <PledgeModal fundraiserId="test-campaign" title="Test project" breakdown={bd} nowSec={1_700_000_000} onDone={onDone} onClose={onClose} />,
+  ));
+  const lead = [...container.querySelectorAll('button')].find((b) => /Fund this project \(testnet\)/i.test(b.textContent ?? ''));
+  await act(async () => { lead!.click(); });
+  await submit();
+  expect(container.querySelectorAll('[data-testid=split-output]')).toHaveLength(1);
+  const events: CustomEvent[] = [];
+  const listener = (e: Event): void => { events.push(e as CustomEvent); };
+  window.addEventListener('bao-open-wallet-drawer', listener);
+  try {
+    const pay = container.querySelector<HTMLButtonElement>('[data-testid=pledge-open-wallet]');
+    expect(pay).toBeTruthy();
+    expect(pay!.textContent).toContain('Liquid testnet');
+    await act(async () => { pay!.click(); });
+    expect(events).toHaveLength(1);
+    expect(events[0].detail).toMatchObject({ tab: 'send', rail: 'liquid', to: 'tex1single', sats: '1000' });
+  } finally {
+    window.removeEventListener('bao-open-wallet-drawer', listener);
+  }
 });
 
 it('renders a single-milestone escrow once - no duplicate address block', async () => {
@@ -198,6 +268,40 @@ it('blocks issuing a real token when the wallet balance is insufficient', async 
   expect(mocks.spend).not.toHaveBeenCalled();
   expect(mocks.submit).not.toHaveBeenCalled();
   expect(onDone).not.toHaveBeenCalled();
+});
+
+it('persists an issued mainnet token and restores it when the campaign is reopened', async () => {
+  mocks.pubkey = 'ab'.repeat(32);
+  mocks.balance = 5000;
+  mocks.spend.mockResolvedValue({ token: 'cashuBissued', mintUrl: 'https://mint.example', balanceAfter: 4000 });
+  await render(true);
+  await submit();
+  expect(mocks.spend).toHaveBeenCalledWith(1000);
+  expect(container.textContent).toContain('cashuBissued');
+  expect(container.querySelector('[data-testid=pledge-token-saved]')).toBeTruthy();
+  expect(container.querySelector('[data-testid=pledge-token-unsaved]')).toBeNull();
+  const journaled = JSON.parse(localStorage.getItem(`baofund:pending-delivery:${'ab'.repeat(32)}`) ?? '[]');
+  expect(journaled).toHaveLength(1);
+  expect(journaled[0]).toMatchObject({ frId: 'test-campaign', amountSats: 1000, mint: 'https://mint.example' });
+
+  // A fresh mount of the same campaign (reload/close) restores the only copy.
+  await act(async () => root.unmount());
+  container.remove();
+  container = document.createElement('div'); document.body.append(container);
+  root = createRoot(container);
+  await render(true);
+  await act(async () => { await Promise.resolve(); });
+  expect(container.querySelector('[data-testid=pledge-token-restored]')).toBeTruthy();
+  expect(container.textContent).toContain('cashuBissued');
+});
+it('says NOT saved when no identity-scoped journal could be written', async () => {
+  mocks.balance = 5000;
+  mocks.spend.mockResolvedValue({ token: 'cashuBunscoped', mintUrl: 'https://mint.example', balanceAfter: 4000 });
+  await render(true);
+  await submit();
+  expect(container.textContent).toContain('cashuBunscoped');
+  expect(container.querySelector('[data-testid=pledge-token-unsaved]')).toBeTruthy();
+  expect(localStorage.getItem(`baofund:pending-delivery:${'ab'.repeat(32)}`)).toBeNull();
 });
 
 // ── Testnet4 rail (step 5) ─────────────────────────────────────────────────
@@ -368,6 +472,9 @@ it('lets the donor retry a pasted token after a validation error (no permanent l
     mintUrl: 'https://mint.example.com',
     proofs: [{ id: '009a1f293253e41e', amount: 1000, secret: 'synthetic-secret', C: '02' + 'ab'.repeat(32) }],
     amount: 1000,
+    // cashu-ts 4.x: the validator carries the normalized token through (it
+    // cannot re-encode v2 SHORT keyset ids without the mint's keysets).
+    token: 'cashuB-valid-token',
   }]);
   await act(async () => { setValue('cashuB-valid-token'); });
   await act(async () => { container.querySelector<HTMLButtonElement>('[data-testid=pledge-token-deliver]')!.click(); });
