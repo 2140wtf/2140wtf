@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
-import { getEncodedToken, CashuMint, CashuWallet } from '@cashu/cashu-ts';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
-import type { MeltQuoteResponse } from '@cashu/cashu-ts';
+import { getEncodedToken, CashuMint, CashuWallet } from 'cashu-ts2';
+import { hashToCurve } from 'cashu-ts2/crypto/common';
+import type { MeltQuoteResponse } from 'cashu-ts2';
 
 import { acquireMutex, useCashuWallet } from './useCashuWallet';
 import { deriveEncryptionKey, deriveNip60WalletKey, validateReceivedProofs } from '@/lib/cashu/cashu';
@@ -170,8 +170,8 @@ vi.mock('@/lib/cashu/cashu', async () => {
   };
 });
 
-vi.mock('@cashu/cashu-ts', async () => {
-  const actual = await vi.importActual<typeof import('@cashu/cashu-ts')>('@cashu/cashu-ts');
+vi.mock('cashu-ts2', async () => {
+  const actual = await vi.importActual<typeof import('cashu-ts2')>('cashu-ts2');
   return {
     ...actual,
     CashuMint: vi.fn(function () {

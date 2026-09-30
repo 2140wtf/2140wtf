@@ -24,10 +24,6 @@ function bareJson(status: number, body: unknown) {
 }
 
 beforeEach(() => {
-  // This suite asserts the default (no canonical override) transport. 2140.wtf
-  // sets VITE_BAO_FUND_API_SIGN_ORIGIN in .env.local for the dev /fund-api
-  // proxy; the transport's canonical-u behavior has its own coverage below.
-  vi.stubEnv('VITE_BAO_FUND_API_SIGN_ORIGIN', '');
   vi.stubEnv('VITE_BAO_FUND_API_URL', PROXY);
 });
 afterEach(() => {

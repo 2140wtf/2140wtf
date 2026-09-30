@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getEncodedToken } from '@cashu/cashu-ts';
+import { getEncodedToken } from 'cashu-ts2';
 
 import { creditOutboxStorageKey, hasUnsupportedLockSecrets } from './computeCreditsUtils';
 import { extractTokenLockPubkeys } from '@/pets/battle/lib/cashuEscrow';

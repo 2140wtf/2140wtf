@@ -37,7 +37,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import { normalizeMintUrl, safeNormalizeMintUrl } from '@/lib/cashu/cashu';
 import type { CashuWalletState, CashuWalletActions } from '@/hooks/useCashuWallet';
-import type { MintQuoteResponse } from '@cashu/cashu-ts';
+import type { MintQuoteResponse } from 'cashu-ts2';
 
 export interface CashuWalletDrawerProps {
   wallet: CashuWalletState & CashuWalletActions;

@@ -66,10 +66,27 @@ function defaultDetectorFactory(): BarcodeDetectorLike | null {
   }
 }
 
+/** Long-edge cap for a jsqr frame: a 4K camera frame is ~33 MB of ImageData
+ *  decoded on the main thread every tick; QR codes decode fine at 640 px. */
+export const MAX_FRAME_DIM = 640;
+
+/** Downscale (width, height) to fit `maxDim` on the long edge, preserving the
+ *  aspect ratio; never upscales and never returns a zero dimension. Pure. */
+export function boundedFrameSize(
+  width: number,
+  height: number,
+  maxDim = MAX_FRAME_DIM,
+): { width: number; height: number } {
+  if (!(width > 0) || !(height > 0) || !(maxDim > 0)) return { width: 0, height: 0 };
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
 /**
  * jsqr-backed frame decoder. The module is imported lazily (it is ~40 KB) and
  * the canvas is created once per dialog session; frames whose video metadata
- * has not loaded yet decode to null and are retried on the next tick.
+ * has not loaded yet decode to null and are retried on the next tick. Frames
+ * are downscaled to MAX_FRAME_DIM before decoding (bounded work per tick).
  */
 function defaultFrameDecoderFactory(): FrameDecoder {
   let canvas: HTMLCanvasElement | null = null;
@@ -91,17 +108,19 @@ function defaultFrameDecoderFactory(): FrameDecoder {
     const width = video.videoWidth;
     const height = video.videoHeight;
     if (!width || !height) return null;
+    const frameSize = boundedFrameSize(width, height);
+    if (!frameSize.width || !frameSize.height) return null;
     if (!canvas) {
       canvas = document.createElement('canvas');
       ctx = canvas.getContext('2d', { willReadFrequently: true });
     }
     if (!ctx) return null;
-    canvas.width = width;
-    canvas.height = height;
-    ctx.drawImage(video, 0, 0, width, height);
-    const frame = ctx.getImageData(0, 0, width, height);
+    canvas.width = frameSize.width;
+    canvas.height = frameSize.height;
+    ctx.drawImage(video, 0, 0, frameSize.width, frameSize.height);
+    const frame = ctx.getImageData(0, 0, frameSize.width, frameSize.height);
     if (!frame?.data) return null;
-    return jsqr(frame.data, width, height, { inversionAttempts: 'dontInvert' })?.data ?? null;
+    return jsqr(frame.data, frameSize.width, frameSize.height, { inversionAttempts: 'dontInvert' })?.data ?? null;
   };
 }
 
@@ -158,29 +177,38 @@ export function QrScanDialog({
       onCloseRef.current();
     };
 
+    // In-flight latch: a decode slower than the 300 ms tick (jsqr on a big
+    // frame, a busy main thread) must not queue overlapping decodes.
+    let decoding = false;
     const tick = async (): Promise<void> => {
-      const video = videoRef.current;
-      if (!video || cancelled) return;
+      if (decoding) return;
+      decoding = true;
       try {
-        const raws = detector
-          ? (await detector.detect(video)).map((code) => code?.rawValue)
-          : [decodeFrame!(video)];
-        for (const raw of raws) {
-          if (!raw) continue;
-          try {
-            const res = await session.receive(raw);
-            if (cancelled) return;
-            if (res.kind === 'code') return finish(res.value);
-            if (res.kind === 'ur-complete') return finish(res.token);
-            setStatus({ kind: 'progress', progress: res.progress });
-          } catch (err) {
-            // An invalid frame must not kill the session: the animated QR may
-            // need more frames, and a stray code in view is common.
-            setStatus({ kind: 'error', text: err instanceof Error ? err.message : 'Invalid QR code' });
+        const video = videoRef.current;
+        if (!video || cancelled) return;
+        try {
+          const raws = detector
+            ? (await detector.detect(video)).map((code) => code?.rawValue)
+            : [decodeFrame!(video)];
+          for (const raw of raws) {
+            if (!raw) continue;
+            try {
+              const res = await session.receive(raw);
+              if (cancelled) return;
+              if (res.kind === 'code') return finish(res.value);
+              if (res.kind === 'ur-complete') return finish(res.token);
+              setStatus({ kind: 'progress', progress: res.progress });
+            } catch (err) {
+              // An invalid frame must not kill the session: the animated QR may
+              // need more frames, and a stray code in view is common.
+              setStatus({ kind: 'error', text: err instanceof Error ? err.message : 'Invalid QR code' });
+            }
           }
+        } catch {
+          /* detect() can throw while the video warms up; keep scanning */
         }
-      } catch {
-        /* detect() can throw while the video warms up; keep scanning */
+      } finally {
+        decoding = false;
       }
     };
 

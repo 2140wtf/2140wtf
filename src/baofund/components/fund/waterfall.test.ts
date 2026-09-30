@@ -41,3 +41,35 @@ describe('waterfallAllocation - one pot fills milestones in order', () => {
     expect(waterfallAllocation(ms, -5, -1).map((r) => r.addedSats)).toEqual([0, 0, 0]);
   });
 });
+
+describe('waterfallAllocation - split-pledge overfunding (mirrors allocateWaterfallSplit)', () => {
+  it('keeps the remainder hidden unless the caller opts into split semantics', () => {
+    const rows = waterfallAllocation(ms, 0, 700);
+    expect(rows.map((r) => r.addedSats)).toEqual([100, 200, 300]);
+    expect(rows.map((r) => r.overfundSats)).toEqual([0, 0, 0]);
+  });
+
+  it('rides the remainder on the last funded milestone', () => {
+    const rows = waterfallAllocation(ms, 0, 700, { overfundLastRow: true });
+    expect(rows.map((r) => r.addedSats)).toEqual([100, 200, 400]);
+    expect(rows.map((r) => r.overfundSats)).toEqual([0, 0, 100]);
+    expect(rows[2].afterSats).toBe(400);
+    expect(rows[2].complete).toBe(true);
+  });
+
+  it('allocates a pledge to a fully funded campaign to the last milestone (server behavior)', () => {
+    const rows = waterfallAllocation(ms, 1000, 50, { overfundLastRow: true });
+    expect(rows.map((r) => r.overfundSats)).toEqual([0, 0, 50]);
+    expect(rows[2].addedSats).toBe(50);
+  });
+
+  it('falls back to the last milestone when every target is already covered/zero', () => {
+    const zeroTail = [
+      { id: 'm1', title: 'First', amountSats: 100 },
+      { id: 'm2', title: 'Empty', amountSats: 0 },
+    ];
+    const rows = waterfallAllocation(zeroTail, 0, 150, { overfundLastRow: true });
+    expect(rows.map((r) => r.overfundSats)).toEqual([50, 0]);
+    expect(rows[0].addedSats).toBe(150);
+  });
+});

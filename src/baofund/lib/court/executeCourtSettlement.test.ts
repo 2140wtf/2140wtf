@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex } from '@noble/curves/utils.js';
 import { generateSecretKey } from 'nostr-tools/pure';
-import { executeCourtSettlement, type CourtSettlementDeps } from './executeCourtSettlement';
+import { executeCourtSettlement, payoutOutcomeNote, type CourtSettlementDeps } from './executeCourtSettlement';
 import {
   buildSigAllMessage,
   signSigAllDigest,
@@ -74,6 +74,11 @@ function refundSwap() {
   };
 }
 
+/** Mint blind signatures matching a swap's outputs (shape only - recovery is
+ *  mocked in these tests). */
+const signaturesFor = (outputs: EscrowSwapOutputWire[]) =>
+  outputs.map((o) => ({ amount: o.blindedMessage.amount, C_: '02' + 'ab'.repeat(32) }));
+
 function founderDeps(overrides: Partial<CourtSettlementDeps> = {}): CourtSettlementDeps {
   return {
     viewerRole: 'founder',
@@ -94,8 +99,17 @@ function founderDeps(overrides: Partial<CourtSettlementDeps> = {}): CourtSettlem
         mint_fee_sats: 10,
       },
     })) as unknown as CourtSettlementDeps['release'],
-    completeRelease: vi.fn(async () => ({ milestoneStatus: 'released', releasedSats: 150 })) as unknown as CourtSettlementDeps['completeRelease'],
-    completeRefund: vi.fn(async () => ({ refundSats: 98 })) as unknown as CourtSettlementDeps['completeRefund'],
+    completeRelease: vi.fn(async () => ({
+      milestoneStatus: 'released',
+      releasedSats: 150,
+      swapSignatures: signaturesFor(releaseSwap().outputs),
+    })) as unknown as CourtSettlementDeps['completeRelease'],
+    completeRefund: vi.fn(async () => ({ refundSats: 98, swapSignatures: signaturesFor(refundSwap().outputs) })) as unknown as CourtSettlementDeps['completeRefund'],
+    recoverPayout: vi.fn(async (opts: Parameters<NonNullable<CourtSettlementDeps['recoverPayout']>>[0]) => ({
+      token: 'cashuBpayout',
+      amountSats: opts.expectedPayoutSats,
+      stored: 'wallet' as const,
+    })) as unknown as CourtSettlementDeps['recoverPayout'],
     ...overrides,
   };
 }
@@ -114,8 +128,17 @@ function donorDeps(overrides: Partial<CourtSettlementDeps> = {}): CourtSettlemen
     fetchRefundInitiate: vi.fn(async () => ({
       escrow_refund: { swap: refundSwap(), awaiting: ['donor'], refund_sats: 98, donor_pubkey: DONOR_X },
     })) as unknown as CourtSettlementDeps['fetchRefundInitiate'],
-    completeRelease: vi.fn(async () => ({ milestoneStatus: 'released', releasedSats: 150 })) as unknown as CourtSettlementDeps['completeRelease'],
-    completeRefund: vi.fn(async () => ({ refundSats: 98 })) as unknown as CourtSettlementDeps['completeRefund'],
+    completeRelease: vi.fn(async () => ({
+      milestoneStatus: 'released',
+      releasedSats: 150,
+      swapSignatures: signaturesFor(releaseSwap().outputs),
+    })) as unknown as CourtSettlementDeps['completeRelease'],
+    completeRefund: vi.fn(async () => ({ refundSats: 98, swapSignatures: signaturesFor(refundSwap().outputs) })) as unknown as CourtSettlementDeps['completeRefund'],
+    recoverPayout: vi.fn(async (opts: Parameters<NonNullable<CourtSettlementDeps['recoverPayout']>>[0]) => ({
+      token: 'cashuBpayout',
+      amountSats: opts.expectedPayoutSats,
+      stored: 'wallet' as const,
+    })) as unknown as CourtSettlementDeps['recoverPayout'],
     ...overrides,
   };
 }
@@ -181,6 +204,72 @@ it('founder: a release initiate missing the payout facts fails closed as NOT set
   expect(deps.completeRelease).not.toHaveBeenCalled();
 });
 
+it('founder: the completed release payout is unblinded and stored, with a message that says where', async () => {
+  const deps = founderDeps();
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).toBe('executed');
+  expect(res.payout).toEqual({ amountSats: 150, stored: 'wallet' });
+  expect(res.message).toContain('Payout 150 sats added to your wallet');
+  const recover = deps.recoverPayout as unknown as ReturnType<typeof vi.fn>;
+  expect(recover).toHaveBeenCalledTimes(1);
+  const call = recover.mock.calls[0][0] as {
+    kind: string; frId: string; milestoneId: string; mint: string; expectedPayoutSats: number;
+    outputs: unknown[]; signatures: unknown[]; identityPubkey: string;
+  };
+  expect(call.kind).toBe('release');
+  expect(call.frId).toBe('fr_1');
+  expect(call.milestoneId).toBe('m1');
+  expect(call.mint).toBe('https://mint.example.com');
+  expect(call.expectedPayoutSats).toBe(150);
+  expect(call.outputs).toHaveLength(releaseSwap().outputs.length);
+  expect(call.signatures).toHaveLength(releaseSwap().outputs.length);
+  expect(call.identityPubkey).toBe(PROJECT_X);
+});
+
+it('founder: a completion WITHOUT mint signatures is executed but warns the payout is not recoverable', async () => {
+  // The escrow IS settled at the mint - reporting "not settled" would be a
+  // lie; the missing unblinding material must surface as a payout warning.
+  const deps = founderDeps({
+    completeRelease: vi.fn(async () => ({ milestoneStatus: 'released', releasedSats: 150, swapSignatures: null })) as unknown as CourtSettlementDeps['completeRelease'],
+  });
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).toBe('executed');
+  expect(res.payout?.stored).toBe('failed');
+  expect(res.message).toContain('Payout recovery pending');
+  expect(res.message).toContain('no mint signatures');
+  expect(deps.recoverPayout).not.toHaveBeenCalled();
+});
+
+it('founder: a payout recovery failure never flips a settled release to unsettled', async () => {
+  const deps = founderDeps({
+    recoverPayout: vi.fn(async () => { throw new Error('mint keys unreachable'); }) as unknown as CourtSettlementDeps['recoverPayout'],
+  });
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).toBe('executed');
+  expect(res.message).toContain('sats released');
+  expect(res.payout).toEqual({ amountSats: 0, stored: 'failed', warning: 'mint keys unreachable' });
+  expect(res.message).toContain('Payout recovery pending: mint keys unreachable');
+});
+
+it('founder: a journaled payout is reported as saved (not in the wallet)', async () => {
+  const deps = founderDeps({
+    recoverPayout: vi.fn(async (opts: Parameters<NonNullable<CourtSettlementDeps['recoverPayout']>>[0]) => ({
+      token: 'cashuBstored', amountSats: opts.expectedPayoutSats, stored: 'journal' as const,
+    })) as unknown as CourtSettlementDeps['recoverPayout'],
+  });
+  const res = await executeCourtSettlement(deps);
+  expect(res.payout).toEqual({ amountSats: 150, stored: 'journal' });
+  expect(res.message).toContain('saved under Wallet - escrow payouts');
+});
+
+it('payoutOutcomeNote says where the payout went (and never hides a failure)', () => {
+  expect(payoutOutcomeNote(undefined)).toBe('');
+  expect(payoutOutcomeNote({ amountSats: 150, stored: 'wallet' })).toContain('150 sats added to your wallet');
+  expect(payoutOutcomeNote({ amountSats: 150, stored: 'journal' })).toContain('saved under Wallet - escrow payouts');
+  expect(payoutOutcomeNote({ amountSats: 0, stored: 'failed', warning: 'boom' })).toBe(' Payout recovery pending: boom.');
+  expect(payoutOutcomeNote({ amountSats: 0, stored: 'failed' })).toContain('could not be stored');
+});
+
 it('donor: initiate -> sign -> complete refunds the donor', async () => {
   const deps = donorDeps();
   const res = await executeCourtSettlement(deps);
@@ -195,6 +284,19 @@ it('donor: initiate -> sign -> complete refunds the donor', async () => {
   expect(message.length).toBeGreaterThan(0);
 });
 
+it('donor: the completed refund payout is unblinded and stored for the donor', async () => {
+  const deps = donorDeps();
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).toBe('executed');
+  expect(res.payout).toEqual({ amountSats: 98, stored: 'wallet' });
+  expect(res.message).toContain('Payout 98 sats added to your wallet');
+  const recover = deps.recoverPayout as unknown as ReturnType<typeof vi.fn>;
+  const call = recover.mock.calls[0][0] as { kind: string; expectedPayoutSats: number; identityPubkey: string };
+  expect(call.kind).toBe('refund');
+  expect(call.expectedPayoutSats).toBe(98);
+  expect(call.identityPubkey).toBe(DONOR_X);
+});
+
 it('donor: a release-shaped refund initiate is never reported as settled', async () => {
   const deps = donorDeps({
     fetchRefundInitiate: vi.fn(async () => ({ escrow_release: { swap: refundSwap(), awaiting: ['donor'] } })) as unknown as CourtSettlementDeps['fetchRefundInitiate'],
@@ -205,8 +307,52 @@ it('donor: a release-shaped refund initiate is never reported as settled', async
   expect(deps.completeRefund).not.toHaveBeenCalled();
 });
 
+it('donor: a refund response without escrow_refund is never reported as executed', async () => {
+  // The refund route settles ONLY by swap; a 2xx without the initiate swap is
+  // a protocol violation, not a recorded refund (audit: false-executed).
+  const deps = donorDeps({
+    fetchRefundInitiate: vi.fn(async () => ({ demo: true, contribution_id: '55' })) as unknown as CourtSettlementDeps['fetchRefundInitiate'],
+  });
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).not.toBe('executed');
+  expect(res.status).toBe('initiated-failed');
+  expect(res.message).toContain('the escrow is NOT settled');
+  expect(res.message).toContain('missing the escrow_refund swap');
+  expect(deps.completeRefund).not.toHaveBeenCalled();
+});
+
+it('donor: an undefined refund response is never reported as executed', async () => {
+  const deps = donorDeps({
+    fetchRefundInitiate: vi.fn(async () => undefined) as unknown as CourtSettlementDeps['fetchRefundInitiate'],
+  });
+  const res = await executeCourtSettlement(deps);
+  expect(res.status).toBe('initiated-failed');
+  expect(res.message).toContain('the escrow is NOT settled');
+  expect(deps.completeRefund).not.toHaveBeenCalled();
+});
+
 it('donor: no unambiguous contribution refuses before any API write', async () => {
   const deps = donorDeps({ donorContributionId: undefined, resolveDonorContributionId: vi.fn(async () => null) });
   await expect(executeCourtSettlement(deps)).rejects.toThrow(/no unambiguous escrowed cashu contribution/);
   expect(deps.fetchRefundInitiate).not.toHaveBeenCalled();
+});
+
+it('donor: two refunds on one milestone journal under distinct payout keys', async () => {
+  // The journal dedupes by (frId, milestoneId): a shared key would let a
+  // second refund overwrite the first unrecovered payout (money loss).
+  const seen: string[] = [];
+  const seenKinds: string[] = [];
+  const capture = vi.fn(async (opts: Parameters<NonNullable<CourtSettlementDeps['recoverPayout']>>[0]) => {
+    seen.push(opts.milestoneId);
+    seenKinds.push(opts.kind);
+    return { token: 'cashuBpayout', amountSats: opts.expectedPayoutSats, stored: 'journal' as const };
+  }) as unknown as CourtSettlementDeps['recoverPayout'];
+
+  for (const cid of ['55', '77']) {
+    const res = await executeCourtSettlement(donorDeps({ donorContributionId: cid, recoverPayout: capture }));
+    expect(res.status).toBe('executed');
+  }
+  expect(seenKinds).toEqual(['refund', 'refund']);
+  expect(seen).toEqual(['m1::c55', 'm1::c77']);
+  expect(new Set(seen).size).toBe(2);
 });

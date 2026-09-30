@@ -133,13 +133,14 @@ export function MilestoneCourtSection(props: MilestoneCourtSectionProps) {
           status={live.status}
           now={live.now}
           myPubkey={myPubkey}
+          viewerRole={viewerRole}
           onExecute={courtGroupPubkey ? (id, w) => void execute(id, w) : undefined}
         />
       ) : live.disputeEventId ? (
-        <div className="dispute-status-card">
+        <div className="dispute-status-card" title={`Dispute ${live.disputeEventId}`}>
           <strong>⚖️ Court dispute open</strong>
           <div className="dispute-status-meta">
-            id {live.disputeEventId.slice(0, 10)}… - waiting for the jury key to verify the verdict.
+            A dispute is open - waiting for the jury key to verify the verdict.
           </div>
         </div>
       ) : (
@@ -163,9 +164,9 @@ export function MilestoneCourtSection(props: MilestoneCourtSectionProps) {
           existingDispute={existing}
           signEvent={(t) => auth.signer!.signEvent(t) as never}
           sendEvent={sendEvent}
-          onPublished={(id) => {
+          onPublished={() => {
             setModalOpen(false);
-            onDone?.(`Dispute published (${id.slice(0, 10)}…). The court pipeline is now running.`);
+            onDone?.('Dispute published. The court pipeline is now running.');
           }}
           onClose={() => setModalOpen(false)}
         />

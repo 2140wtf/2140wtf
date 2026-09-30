@@ -50,6 +50,12 @@ describe('campaignStatus - happy path and phases', () => {
     expect(v.blockedBy).toEqual(['escrow_balance']);
   });
 
+  it('a closed fold whose terminal was REFUND_ALL reports the refunded phase', () => {
+    const v = campaignStatus(base({ fold: { campaign: 'x', seq: 9, runningSats: 50_000, closed: true, refunded: true, frozen: false } }));
+    expect(v.phase).toBe('refunded');
+    expect(v.releaseEligible).toBe(true); // gates unchanged - phase is display only
+  });
+
   it('frozen fold → frozen phase wins over everything, ledger_frozen blocked', () => {
     const v = campaignStatus(base({ fold: { campaign: 'x', seq: 5, runningSats: 100, closed: false, frozen: 'chain_forked' } }));
     expect(v.phase).toBe('frozen');

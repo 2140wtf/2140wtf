@@ -1,6 +1,6 @@
 // Tests for the 2-of-3 multisig escrow primitive (₿AO escrow, NUT-11).
 import { describe, expect, it } from 'vitest';
-import { getEncodedToken, isP2PKSpendAuthorised, signP2PKProof, schnorrVerifyMessage } from 'cashu-ts3';
+import { getEncodedToken, isP2PKSpendAuthorised, normalizeProofAmounts, signP2PKProof, schnorrVerifyMessage } from '@cashu/cashu-ts';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { schnorr } from '@noble/curves/secp256k1.js';
 
@@ -33,15 +33,15 @@ const LOCKTIME = Math.floor(Date.now() / 1000) + 24 * 3600;
 /** The compressed key list buildMultisigEscrowLock should produce (sorted x-only, 02-prefixed). */
 const sortedCompressed = [PARTY_A, PARTY_B, OPERATOR].sort().map((k) => '02' + k);
 
+/** cashu-ts 4.x `Proof.amount` is an Amount; normalize test fixtures at the boundary. */
+function mkProof(amount: number, secret: string, C: string) {
+  return normalizeProofAmounts([{ id: '00ad268c6d1f09e6', amount, secret, C }])[0]!;
+}
+
 function makeToken(proofs: Array<{ amount: number; secret: string }>, mint = mintUrl) {
   return getEncodedToken({
     mint,
-    proofs: proofs.map((p, i) => ({
-      id: '00ad268c6d1f09e6',
-      amount: p.amount,
-      secret: p.secret,
-      C: '02' + String(i + 1).padStart(2, '0').repeat(32),
-    })),
+    proofs: proofs.map((p, i) => mkProof(p.amount, p.secret, '02' + String(i + 1).padStart(2, '0').repeat(32))),
     unit: 'sat',
   });
 }
@@ -296,12 +296,7 @@ describe('two-of-three witness assembly (operator co-sign + winner receive)', ()
    * verify against the secret, and neither party may sign twice.
    */
   it('operator + winner produce two distinct valid signatures', () => {
-    const proof = {
-      id: '00ad268c6d1f09e6',
-      amount: 21,
-      secret: multisigSecret(),
-      C: '02' + '22'.repeat(32),
-    };
+    const proof = mkProof(21, multisigSecret(), '02' + '22'.repeat(32));
 
     // cashu-ts 3.x: signP2PKProof (singular) still throws on a not-required
     // or already-signed proof; the plural variant logs and returns instead.
@@ -321,19 +316,19 @@ describe('two-of-three witness assembly (operator co-sign + winner receive)', ()
   });
 
   it('refuses a signature from a key outside the lock', () => {
-    const proof = { id: 'x', amount: 21, secret: multisigSecret(), C: '02' + '22'.repeat(32) };
+    const proof = mkProof(21, multisigSecret(), '02' + '22'.repeat(32));
     expect(() => signP2PKProof(proof, STRANGER_PRIV)).toThrow(/Signature not required/);
   });
 
   it('refuses a second signature from the same key', () => {
-    const proof = { id: 'x', amount: 21, secret: multisigSecret(), C: '02' + '22'.repeat(32) };
+    const proof = mkProof(21, multisigSecret(), '02' + '22'.repeat(32));
     const signed = signP2PKProof(proof, OPERATOR_PRIV);
     expect(() => signP2PKProof(signed, OPERATOR_PRIV)).toThrow(/already signed/);
   });
 
   it('authorizes the refund key (and only the refund key) after the locktime', () => {
     const expired = multisigSecret({ locktime: Math.floor(Date.now() / 1000) - 60 });
-    const proof = { id: 'x', amount: 21, secret: expired, C: '02' + '22'.repeat(32) };
+    const proof = mkProof(21, expired, '02' + '22'.repeat(32));
     // Depositor (refund key) can sign alone post-locktime...
     const refunded = signP2PKProof(proof, PARTY_A_PRIV);
     expect(refunded.witness).toBeDefined();

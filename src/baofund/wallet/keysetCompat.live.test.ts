@@ -1,6 +1,6 @@
 /**
  * Opt-in LIVE conformance for NUT-02 v2 keyset handling after the cashu-ts
- * 3.7.2 bump, against the app's default mainnet fallback mint
+ * 4.x bump, against the app's default mainnet fallback mint
  * (`https://mint.minibits.cash/Bitcoin`, a cdk mint advertising v2 keyset IDs
  * `01…`).
  *
@@ -8,7 +8,8 @@
  * rejected every cdk v2 keyset; `src/wallet/keysetCompat.ts` worked around
  * that. 3.x derives the FINAL spec natively, so the shim was deleted with the
  * bump (docs/KEYSET-ID-V2-COMPAT.md exit plan) and this test now proves the
- * native path instead of the repro.
+ * native path instead of the repro. 4.x keeps the final-spec derivation and
+ * moved `deriveKeysetId` to an options object.
  *
  * Run:
  *   BAO_WALLET_LIVE=1 npx vitest run src/wallet/keysetCompat.live.test.ts --testTimeout=90000
@@ -17,22 +18,26 @@
  * NUT-04 quote that is never paid mints nothing (and the quote expires).
  */
 import { describe, expect, it, afterAll } from 'vitest';
-import { Wallet, deriveKeysetId } from 'cashu-ts3';
+import { Wallet, deriveKeysetId } from '@cashu/cashu-ts';
 import {
   clearPendingTopUp,
   completeLightningTopUp,
   createLightningTopUp,
   loadPendingTopUp,
 } from './cashuWallet';
+import { setActiveIdentity } from '../lib/activeIdentity';
 
 const LIVE = process.env.BAO_WALLET_LIVE === '1';
 const MINT = 'https://mint.minibits.cash/Bitcoin';
 const AMOUNT_SATS = 21;
+// Wallet storage is per-identity: bind a throwaway scope for this live run.
+const LIVE_IDENTITY = '1e'.repeat(32);
+setActiveIdentity(LIVE_IDENTITY);
 
 describe.skipIf(!LIVE)('LIVE: cdk v2 keyset mint (Minibits)', () => {
   afterAll(() => clearPendingTopUp());
 
-  it('cashu-ts 3.x loadMint() verifies the live v2 keyset natively', async () => {
+  it('cashu-ts 4.x loadMint() verifies the live v2 keyset natively', async () => {
     const wallet = new Wallet(MINT);
     // Fetches /v1/info + /v1/keysets + /v1/keys and verifies every keyset ID
     // with the current NUT-02 derivation - the exact call that threw
@@ -44,11 +49,12 @@ describe.skipIf(!LIVE)('LIVE: cdk v2 keyset mint (Minibits)', () => {
     expect(keyset.verify()).toBe(true);
     expect(wallet.keysetId).toBe(keyset.id);
     // Independent cross-check through the public typed derivation API.
+    // cashu-ts 4.x signature: (keys, options?) - the positional
+    // (unit, expiry, versionByte) form was removed.
     expect(deriveKeysetId(keyset.keys, {
       unit: keyset.unit,
-      versionByte: 1,
-      input_fee_ppk: keyset.fee,
       expiry: keyset.expiry,
+      versionByte: 1,
     })).toBe(keyset.id);
   });
 

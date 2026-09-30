@@ -16,6 +16,7 @@ import {
   totalStoredBalance,
 } from './cashuWallet';
 import { clearTransactions, loadTransactions, onHistoryChange } from './walletHistory';
+import { onActiveIdentityChange } from '../lib/activeIdentity';
 import type { WalletState, WalletActions } from './types';
 
 /**
@@ -47,10 +48,16 @@ export function useWallet(): WalletState & WalletActions {
 
   // Boot recovery (R11): resolve any mint operation interrupted by a crash
   // BEFORE the UI offers spend/receive. Fail closed with a visible error.
+  // Re-runs on identity change: each identity has its own wallet slot, so its
+  // own crash journal must be resolved (and the UI refreshed) on bind.
   useEffect(() => {
-    hydrateStoredWallet()
-      .then(refresh)
-      .catch((e) => setError(String(e)));
+    const recover = (): void => {
+      hydrateStoredWallet()
+        .then(refresh)
+        .catch((e) => setError(String(e)));
+    };
+    recover();
+    return onActiveIdentityChange(recover);
   }, [refresh]);
 
   /** Run a wallet action with shared loading/error/refresh plumbing. */

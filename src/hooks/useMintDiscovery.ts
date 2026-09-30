@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
-import { CashuMint } from '@cashu/cashu-ts';
+import { CashuMint } from 'cashu-ts2';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
 import { useFollows } from '@/hooks/useFollows';

@@ -65,15 +65,18 @@ import {
   getDecodedToken,
   getEncodedToken,
   hashToCurve,
+  normalizeProofAmounts,
   OutputData,
   pointFromHex,
   unblindSignature,
+  type AmountLike,
   type MintKeys,
   type Proof,
-} from 'cashu-ts3';
+} from '@cashu/cashu-ts';
 import { fetchContributions, fetchFundraiser, releaseMilestone, type SignerLike } from '../baoFundraising';
 import { fundFetch, FundHttpError } from '../fundHttp';
 import { parseMultisigLockSecret } from '../cashu/escrowMultisig';
+import { toStoredProofs, type StoredProof } from '../cashu/tokenUtils';
 import {
   buildSigAllMessage,
   parseEscrowSwapForCompletion,
@@ -160,7 +163,24 @@ function signerFromHex(privHex: string): SignerLike {
 
 const xonly = (v: string): string => v.toLowerCase().replace(/^0[23]/, '');
 
-function keysetFromToken(proofs: Proof[]): string {
+/**
+ * The raw-mint wire proof shape: cashu-ts 4.x `Proof.amount` is an Amount
+ * value object, while the NUT-03/04/05 JSON the drill POSTs to the mint needs
+ * a plain number. Every proof that leaves the library is flattened through
+ * the app's shared `toStoredProofs` helper.
+ */
+type WireProof = StoredProof;
+
+function toWireProofs(proofs: Proof[]): WireProof[] {
+  return toStoredProofs(proofs);
+}
+
+/** Keyset ids for the 4.x `getDecodedToken(token, keysetIds)` mapping. */
+function keysetIdsOf(keysets: MintKeyset[]): string[] {
+  return keysets.map((k) => k.id);
+}
+
+function keysetFromToken(proofs: WireProof[]): string {
   const id = proofs[0]?.id;
   if (!id) throw new Error('token carries no proofs');
   if (!proofs.every((p) => p.id === id)) throw new Error('token mixes keysets');
@@ -199,8 +219,8 @@ function mintInputFeeSats(inputCount: number, keyset: MintKeyset): number {
  */
 async function submitSwap(
   mintUrl: string,
-  inputs: Proof[],
-  outputs: ReturnType<typeof OutputData.createRandomData>,
+  inputs: WireProof[],
+  outputs: Array<{ blindedMessage: { id: string; amount: AmountLike; B_: string } }>,
 ): Promise<Array<{ amount: number; C_: string }>> {
   const res = await fetch(`${mintUrl.replace(/\/+$/, '')}/v1/swap`, {
     method: 'POST',
@@ -215,7 +235,8 @@ async function submitSwap(
           ? { witness: typeof p.witness === 'string' ? p.witness : JSON.stringify(p.witness) }
           : {}),
       })),
-      outputs: outputs.map((o) => o.blindedMessage),
+      // 4.x blinded messages carry an Amount; the raw mint JSON needs a number.
+      outputs: outputs.map((o) => ({ ...o.blindedMessage, amount: Number(o.blindedMessage.amount) })),
     }),
   });
   const text = await res.text();
@@ -234,14 +255,14 @@ async function submitSwap(
  * produces proofs the mint rejects with "Token not verified".
  */
 function unblindProofs(
-  outputs: Array<{ blindedMessage: { id: string; amount: number; B_: string }; secret: string | Uint8Array; blindingFactor: string | bigint }>,
+  outputs: Array<{ blindedMessage: { id: string; amount: AmountLike; B_: string }; secret: string | Uint8Array; blindingFactor: string | bigint }>,
   signatures: Array<{ amount: number; C_: string }>,
   keyset: MintKeyset,
-): Proof[] {
+): WireProof[] {
   return outputs.map((out, i) => {
     const secretBytes = typeof out.secret === 'string' ? hexToBytes(out.secret) : out.secret;
     const r = typeof out.blindingFactor === 'string' ? BigInt('0x' + out.blindingFactor) : out.blindingFactor;
-    const amount = out.blindedMessage.amount;
+    const amount = Number(out.blindedMessage.amount);
     const K = keyset.keys[String(amount)];
     if (!K) throw new Error(`keyset ${keyset.id.slice(0, 16)}... has no key for amount ${amount}`);
     const C = unblindSignature(pointFromHex(signatures[i].C_), r, pointFromHex(K));
@@ -253,16 +274,16 @@ function unblindProofs(
       amount,
       secret: new TextDecoder().decode(secretBytes),
       C: cHex,
-    } as Proof;
+    };
   });
 }
 
 /** Unblind the wire-shaped outputs of an initiate swap (blindingFactor hex). */
-function unblindWireOutputs(outputs: EscrowSwapOutputWire[], signatures: Array<{ amount: number; C_: string }>, keyset: MintKeyset): Proof[] {
+function unblindWireOutputs(outputs: EscrowSwapOutputWire[], signatures: Array<{ amount: number; C_: string }>, keyset: MintKeyset): WireProof[] {
   return unblindProofs(outputs, signatures, keyset);
 }
 
-function total(proofs: Proof[]): number {
+function total(proofs: ReadonlyArray<{ amount: number }>): number {
   return proofs.reduce((sum, p) => sum + p.amount, 0);
 }
 
@@ -295,7 +316,7 @@ function escrowOutputs(opts: {
 }
 
 /** A SIG_ALL witness on every input (the party signatures). */
-function withWitness(proofs: Proof[], message: string, privHexes: string[]): Proof[] {
+function withWitness(proofs: WireProof[], message: string, privHexes: string[]): WireProof[] {
   const signatures = privHexes.map((hex) => signSigAllDigest(hex, message));
   return proofs.map((p) => ({ ...p, witness: { signatures } }));
 }
@@ -312,8 +333,8 @@ function validateLockedEscrow(
   expected: { amountSats: number; project: string; donor: string; oracle: string; minLocktime: number },
   keysets: MintKeyset[],
 ): { valid: boolean; reason?: string } {
-  const decoded = getDecodedToken(lockedToken, keysets);
-  const proofs = decoded.proofs;
+  const decoded = getDecodedToken(lockedToken, keysetIdsOf(keysets));
+  const proofs = toWireProofs(decoded.proofs);
   const amount = total(proofs);
   if (amount !== expected.amountSats) return { valid: false, reason: `token amount ${amount} != ${expected.amountSats}` };
   const expectedKeys = [expected.project, expected.donor, expected.oracle].map(xonly).sort().join(',');
@@ -345,11 +366,11 @@ function validateLockedEscrow(
 }
 
 /** NUT-07 Ys: the curve point of each proof's SECRET (not the proof's C). */
-function proofYs(proofs: Proof[]): string[] {
+function proofYs(proofs: ReadonlyArray<{ secret: string }>): string[] {
   return proofs.map((p) => hashToCurve(new TextEncoder().encode(p.secret)).toHex(true));
 }
 
-async function checkUnspent(mintUrl: string, proofs: Proof[]): Promise<boolean> {
+async function checkUnspent(mintUrl: string, proofs: WireProof[]): Promise<boolean> {
   const res = await fetch(`${mintUrl.replace(/\/+$/, '')}/v1/checkstate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -361,7 +382,7 @@ async function checkUnspent(mintUrl: string, proofs: Proof[]): Promise<boolean> 
 }
 
 /** NUT-07 proof state must read SPENT at the mint (settlement proof). */
-async function checkSpent(mintUrl: string, proofs: Proof[]): Promise<boolean> {
+async function checkSpent(mintUrl: string, proofs: WireProof[]): Promise<boolean> {
   const res = await fetch(`${mintUrl.replace(/\/+$/, '')}/v1/checkstate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -431,7 +452,7 @@ describeLive('court settlement live drill (WS1)', () => {
       if (!selftest.lockedToken) {
         const baseToken = state.baseToken;
         expect(baseToken, 'state.baseToken is required for the preflight').toBeTruthy();
-        const baseProofs = getDecodedToken(baseToken!, keysets).proofs;
+        const baseProofs = toWireProofs(getDecodedToken(baseToken!, keysetIdsOf(keysets)).proofs);
         const baseTotal = total(baseProofs);
         const keysetId = keysetFromToken(baseProofs);
         const keyset = keysets.find((k) => k.id === keysetId || k.id.startsWith(keysetId));
@@ -452,13 +473,13 @@ describeLive('court settlement live drill (WS1)', () => {
         const change = unblindProofs(changeOutputs as never, probeSignatures.slice(probeOutputs.length), keyset!);
         expect(total(probeLocked)).toBe(SELFTEST_SATS);
         expect(total(change)).toBe(baseTotal - lockFee - SELFTEST_SATS);
-        selftest.lockedToken = getEncodedToken({ mint: mintUrl, proofs: probeLocked });
-        selftest.changeToken = getEncodedToken({ mint: mintUrl, proofs: change });
+        selftest.lockedToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(probeLocked) });
+        selftest.changeToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(change) });
         state.baseToken = undefined;
         saveState(state);
       }
 
-      const lockedProofs = getDecodedToken(selftest.lockedToken!, keysets).proofs;
+      const lockedProofs = toWireProofs(getDecodedToken(selftest.lockedToken!, keysetIdsOf(keysets)).proofs);
       const lockedKeysetId = keysetFromToken(lockedProofs);
       const lockedKeyset = keysets.find((k) => k.id === lockedKeysetId || k.id.startsWith(lockedKeysetId));
       expect(lockedKeyset, 'the selftest keyset vanished from the mint').toBeTruthy();
@@ -477,7 +498,7 @@ describeLive('court settlement live drill (WS1)', () => {
       expect(total(refunded)).toBe(SELFTEST_SATS - refundFee);
       state.baseToken = getEncodedToken({
         mint: mintUrl,
-        proofs: [...getDecodedToken(selftest.changeToken!, keysets).proofs, ...refunded],
+        proofs: normalizeProofAmounts([...getDecodedToken(selftest.changeToken!, keysetIdsOf(keysets)).proofs, ...refunded]),
       });
       selftest.done = true;
       selftest.lockedToken = undefined;
@@ -490,7 +511,7 @@ describeLive('court settlement live drill (WS1)', () => {
       // ── 1. deposit ────────────────────────────────────────────────────────
       const baseToken = state.baseToken;
       expect(baseToken, 'state.baseToken is required for the deposit').toBeTruthy();
-      const baseProofs = getDecodedToken(baseToken!, keysets).proofs;
+      const baseProofs = toWireProofs(getDecodedToken(baseToken!, keysetIdsOf(keysets)).proofs);
       const baseTotal = total(baseProofs);
       const keysetId = keysetFromToken(baseProofs);
       const keyset = keysets.find((k) => k.id === keysetId || k.id.startsWith(keysetId));
@@ -510,7 +531,7 @@ describeLive('court settlement live drill (WS1)', () => {
       });
       const depositSignatures = await submitSwap(mintUrl, baseProofs, depositOutputs);
       const lockedProofs = unblindProofs(depositOutputs as never, depositSignatures, keyset!);
-      const lockedToken = getEncodedToken({ mint: mintUrl, proofs: lockedProofs });
+      const lockedToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(lockedProofs) });
 
       // Persist the locked token BEFORE it is validated or recorded anywhere:
       // a crash or a failed validation after the mint swap must not orphan it.
@@ -624,7 +645,7 @@ describeLive('court settlement live drill (WS1)', () => {
         const payoutProofs = unblindWireOutputs(parsed.wire.outputs, completed.data.swap_signatures!, payoutKeyset!);
         expect(total(payoutProofs)).toBe(escrow!.project_output_sats);
         expect(await checkUnspent(mintUrl, payoutProofs), 'the mint does not report the payout proofs UNSPENT').toBe(true);
-        const payoutToken = getEncodedToken({ mint: mintUrl, proofs: payoutProofs });
+        const payoutToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(payoutProofs) });
         state.releasedToken = payoutToken;
         state.contributionId = contributionId;
         saveState(state);
@@ -688,7 +709,7 @@ describeLive('court settlement live drill (WS1)', () => {
         const refundProofs = unblindWireOutputs(parsed.wire.outputs, completed.data.swap_signatures ?? [], payoutKeyset!);
         expect(total(refundProofs)).toBe(apiRefund.refundSats);
         expect(await checkUnspent(mintUrl, refundProofs), 'the mint does not report the refund payout proofs UNSPENT').toBe(true);
-        state.refundToken = getEncodedToken({ mint: mintUrl, proofs: refundProofs });
+        state.refundToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(refundProofs) });
         state.refundAmountSats = apiRefund.refundSats;
         state.refundVia = 'api';
         saveState(state);
@@ -698,7 +719,7 @@ describeLive('court settlement live drill (WS1)', () => {
         // key spends the locked proofs alone (n_sigs_refund = 1).
         const escrowedToken = state.escrowedToken ?? state.lockedToken;
         expect(escrowedToken, 'state has no escrowed token for the donor-side refund').toBeTruthy();
-        const escrowedProofs = getDecodedToken(escrowedToken!, keysets).proofs;
+        const escrowedProofs = toWireProofs(getDecodedToken(escrowedToken!, keysetIdsOf(keysets)).proofs);
         const locktime = escrowLocktimeFromProofs(escrowedProofs);
         const nowSeconds = Math.floor(Date.now() / 1000);
         if (!donorMintRefundReady({ locktime, nowSeconds })) {
@@ -716,7 +737,8 @@ describeLive('court settlement live drill (WS1)', () => {
         expect(refundAmount).toBeGreaterThan(0);
         const refundOutputs = OutputData.createRandomData(refundAmount, keyset! as MintKeys);
         const wireOutputs = refundOutputs.map((o) => ({
-          blindedMessage: o.blindedMessage,
+          // 4.x blinded messages carry an Amount; the wire shape is numeric.
+          blindedMessage: { ...o.blindedMessage, amount: Number(o.blindedMessage.amount) },
           blindingFactor: (typeof o.blindingFactor === 'bigint' ? o.blindingFactor : BigInt(o.blindingFactor)).toString(16).padStart(64, '0'),
           secret: typeof o.secret === 'string' ? o.secret : bytesToHex(o.secret),
         }));
@@ -740,7 +762,7 @@ describeLive('court settlement live drill (WS1)', () => {
         const refunded = unblindProofs(refundOutputs as never, signatures, keyset!);
         expect(total(refunded)).toBe(refundAmount);
         expect(await checkUnspent(mintUrl, refunded), 'the mint does not report the donor refund proofs UNSPENT').toBe(true);
-        state.refundToken = getEncodedToken({ mint: mintUrl, proofs: refunded });
+        state.refundToken = getEncodedToken({ mint: mintUrl, proofs: normalizeProofAmounts(refunded) });
         state.refundAmountSats = refundAmount;
         state.refundVia = 'mint';
         state.mintRefundPending = undefined;
@@ -763,7 +785,7 @@ describeLive('court settlement live drill (WS1)', () => {
       console.log(`[drill] SETTLED: milestone ${milestoneId} released, escrow_released_sats=${settledMilestone?.escrow_released_sats}`);
     } else if (state.refundToken) {
       const escrowedToken = state.escrowedToken ?? state.lockedToken;
-      const escrowedProofs = getDecodedToken(escrowedToken!, keysets).proofs;
+      const escrowedProofs = toWireProofs(getDecodedToken(escrowedToken!, keysetIdsOf(keysets)).proofs);
       expect(await checkSpent(mintUrl, escrowedProofs), 'the escrowed proofs are not SPENT at the mint after the refund').toBe(true);
       const rows = await fetchContributions(campaignId!);
       const row = rows.find((c) => String(c.id) === String(state.contributionId));

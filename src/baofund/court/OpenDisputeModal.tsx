@@ -127,14 +127,17 @@ export function OpenDisputeModal(props: OpenDisputeModalProps) {
         </p>
 
         <label>Proposed winner</label>
+        {/* Party A is the contributor (donor), B the campaign owner (founder)
+            - the MilestoneCourtSection mount order. Users pick a side by role;
+            the raw pubkey stays in the tooltip (owner rule: words, not ids). */}
         <div className="dispute-winner-row">
-          <label className={proposedWinner === partyAPubkey ? 'sel' : ''}>
+          <label className={proposedWinner === partyAPubkey ? 'sel' : ''} title={partyAPubkey}>
             <input type="radio" name="winner" checked={proposedWinner === partyAPubkey} onChange={() => setProposedWinner(partyAPubkey)} />
-            <code>{partyAPubkey.slice(0, 12)}…</code>
+            Contributor (donor){myPubkey.toLowerCase() === partyAPubkey.toLowerCase() ? ' - you' : ''}
           </label>
-          <label className={proposedWinner === partyBPubkey ? 'sel' : ''}>
+          <label className={proposedWinner === partyBPubkey ? 'sel' : ''} title={partyBPubkey}>
             <input type="radio" name="winner" checked={proposedWinner === partyBPubkey} onChange={() => setProposedWinner(partyBPubkey)} />
-            <code>{partyBPubkey.slice(0, 12)}…</code>
+            Campaign owner (founder){myPubkey.toLowerCase() === partyBPubkey.toLowerCase() ? ' - you' : ''}
           </label>
         </div>
 

@@ -5,12 +5,12 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
+import { CashuMint, CashuWallet, getEncodedToken } from 'cashu-ts2';
 import { generateSecretKey, verifyEvent, nip19 } from 'nostr-tools';
 import { bytesToHex } from '@noble/curves/utils.js';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
+import { hashToCurve } from 'cashu-ts2/crypto/common';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MintQuoteResponse, Bolt12MeltQuoteResponse } from '@cashu/cashu-ts';
+import type { MintQuoteResponse, MeltQuoteResponse, Bolt12MintQuoteResponse, Bolt12MeltQuoteResponse } from 'cashu-ts2';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { NRelay1 } from '@nostrify/nostrify';
 import {
@@ -2731,7 +2731,7 @@ export function useCashuWallet(
         // will ask the mint for spent-state rather than blindly restoring this snapshot.
         const normalizedMint = activeMint;
         await storageRef.current.writeProofRecovery(normalizedMint, proofs, encKey);
-        const sendOpts: import('@cashu/cashu-ts').SendOptions = { proofsWeHave: proofs };
+        const sendOpts: import('cashu-ts2').SendOptions = { proofsWeHave: proofs };
         if (recipientPubkey) {
           // NUT-11 specifies a 33-byte compressed pubkey in the P2PK data
           // field. Mirror sendNutzap's normalization exactly: 64-char x-only

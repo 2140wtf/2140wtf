@@ -231,7 +231,7 @@ export function FalLivePage() {
           {/* The single shared ₿AO community chat (relay.bao.fund). Guests see
               and post in the public landing room; signing in unlocks the rest. */}
           <ChatProvider>
-            <ChatPanel embedded scrollContained lockedRoomName={DEFAULT_LANDING_ROOM} />
+            <ChatPanel embedded defaultRoomName={DEFAULT_LANDING_ROOM} />
           </ChatProvider>
         </div>
       </aside>

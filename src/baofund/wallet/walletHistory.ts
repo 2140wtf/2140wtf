@@ -2,8 +2,10 @@
 //
 // Local wallet history (2140 parity). A bounded, append-only log of the
 // user-visible wallet operations: receive, send, Lightning top-up, Lightning
-// payment. It lives in its own localStorage key so the wallet store's shape
-// (and its migration) stays untouched; the UI mirrors it through useWallet.
+// payment. It lives in its own per-identity localStorage key so the wallet
+// store's shape (and its migration) stays untouched; the UI mirrors it
+// through useWallet.
+import { adoptLegacyStorageKey, getActiveIdentity, onActiveIdentityChange, scopedStorageKey } from '../lib/activeIdentity';
 
 export type WalletTxType = 'receive' | 'send' | 'topup' | 'pay';
 
@@ -29,6 +31,17 @@ export interface WalletTransaction {
 
 export const TX_STORAGE_KEY = 'bao-fund-wallet-tx';
 export const MAX_TRANSACTIONS = 200;
+
+/**
+ * The history is per-identity: the global slot let a later identity read the
+ * previous identity's paid top-ups and transaction metadata (audit run-2
+ * topup-history-global). Signed out, reads are empty and writes are dropped
+ * rather than written to a shared slot.
+ */
+function txStorageKey(): string | null {
+  const identity = getActiveIdentity();
+  return identity ? scopedStorageKey(TX_STORAGE_KEY, identity) : null;
+}
 
 /** `mintUrl` value stored for rail sends — the chain, not a mint. */
 export const RAIL_HISTORY_LABEL: Record<WalletTxRail, string> = {
@@ -82,7 +95,9 @@ function emitHistoryChanged(): void {
  *  a source of truth for funds). */
 export function loadTransactions(): WalletTransaction[] {
   try {
-    const raw = localStorage.getItem(TX_STORAGE_KEY);
+    const key = txStorageKey();
+    if (!key) return [];
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -100,11 +115,14 @@ export function recordTransaction(tx: Omit<WalletTransaction, 'id' | 'at'> & { a
     id: `${Date.now().toString(36)}-${txCounter}-${Math.random().toString(36).slice(2, 8)}`,
     at: tx.at ?? Date.now(),
   };
-  try {
-    const next = [entry, ...loadTransactions()].slice(0, MAX_TRANSACTIONS);
-    localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    /* storage unavailable: the operation itself still committed */
+  const key = txStorageKey();
+  if (key) {
+    try {
+      const next = [entry, ...loadTransactions()].slice(0, MAX_TRANSACTIONS);
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      /* storage unavailable: the operation itself still committed */
+    }
   }
   emitHistoryChanged();
   return entry;
@@ -112,12 +130,20 @@ export function recordTransaction(tx: Omit<WalletTransaction, 'id' | 'at'> & { a
 
 export function clearTransactions(): void {
   try {
-    localStorage.removeItem(TX_STORAGE_KEY);
+    const key = txStorageKey();
+    if (key) localStorage.removeItem(key);
   } catch {
     /* noop */
   }
   emitHistoryChanged();
 }
+
+// One-time migration of the legacy global log into the ACTIVE identity's
+// slot, plus a refresh on every identity change (the visible log changed).
+onActiveIdentityChange((identity) => {
+  if (identity) adoptLegacyStorageKey(TX_STORAGE_KEY, identity);
+  emitHistoryChanged();
+});
 
 /**
  * Record a broadcast on-chain send from a rail card. `mintUrl` carries the

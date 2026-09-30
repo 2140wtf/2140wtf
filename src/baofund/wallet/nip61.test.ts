@@ -79,19 +79,39 @@ describe('parseMine', () => {
 });
 
 describe('claimed-id persistence', () => {
-  beforeEach(() => localStorage.removeItem(CLAIMED_KEY));
+  const WALLET_A = RECIPIENT;
+  const WALLET_B = OTHER;
+  beforeEach(() => localStorage.clear());
 
   it('starts empty, persists marks, caps the list', () => {
-    expect(loadClaimedIds().size).toBe(0);
-    markClaimedIds(['a', 'b']);
-    expect(loadClaimedIds()).toEqual(new Set(['a', 'b']));
-    markClaimedIds(Array.from({ length: 600 }, (_, i) => `id${i}`));
-    expect(loadClaimedIds().size).toBeLessThanOrEqual(500);
+    expect(loadClaimedIds(WALLET_A).size).toBe(0);
+    markClaimedIds(['a', 'b'], WALLET_A);
+    expect(loadClaimedIds(WALLET_A)).toEqual(new Set(['a', 'b']));
+    markClaimedIds(Array.from({ length: 600 }, (_, i) => `id${i}`), WALLET_A);
+    expect(loadClaimedIds(WALLET_A).size).toBeLessThanOrEqual(500);
+  });
+
+  it('isolates wallets: identity B never sees A\'s claimed ids', () => {
+    markClaimedIds(['a-claimed'], WALLET_A);
+    expect(loadClaimedIds(WALLET_B).size).toBe(0);
+    markClaimedIds(['b-claimed'], WALLET_B);
+    expect(loadClaimedIds(WALLET_A)).toEqual(new Set(['a-claimed']));
+    expect(loadClaimedIds(WALLET_B)).toEqual(new Set(['b-claimed']));
+    // Two distinct per-wallet slots, no global key left behind.
+    expect(localStorage.getItem(CLAIMED_KEY)).toBeNull();
+  });
+
+  it('adopts the legacy global claimed set once, for the wallet that claims first', () => {
+    localStorage.setItem(CLAIMED_KEY, JSON.stringify(['legacy-1', 'legacy-2']));
+    expect(loadClaimedIds(WALLET_A)).toEqual(new Set(['legacy-1', 'legacy-2']));
+    expect(localStorage.getItem(CLAIMED_KEY)).toBeNull(); // legacy removed
+    // A later wallet does not inherit the adopted set.
+    expect(loadClaimedIds(WALLET_B).size).toBe(0);
   });
 });
 
 describe('claimNutzaps loop', () => {
-  beforeEach(() => localStorage.removeItem(CLAIMED_KEY));
+  beforeEach(() => localStorage.clear());
 
   function makeDeps(events: RawNostrEvent[], opts: { mint?: string; failFirst?: boolean } = {}) {
     const receivedTokens: string[] = [];
@@ -126,7 +146,7 @@ describe('claimNutzaps loop', () => {
     expect(res.sats).toBe(21);
     expect(d.receivedTokens).toHaveLength(1);
     expect(d.merged).toEqual([1]);
-    expect(loadClaimedIds().has(ev.id)).toBe(true);
+    expect(loadClaimedIds(RECIPIENT).has(ev.id)).toBe(true);
   });
 
   it('is idempotent - second run skips claimed ids', async () => {
@@ -152,7 +172,7 @@ describe('claimNutzaps loop', () => {
     const evId = signedEv.id;
     const d2 = makeDeps([signedEv], { failFirst: true });
     await expect(claimNutzaps(d2)).rejects.toThrow(/mint down/);
-    expect(loadClaimedIds().has(evId)).toBe(false);
+    expect(loadClaimedIds(RECIPIENT).has(evId)).toBe(false);
   });
 
   it('ignores nutzaps addressed to other people', async () => {

@@ -14,7 +14,7 @@
 // No code is derived from AGPL-licensed clients (Ditto / 2140wtf /
 // satoshi-pay-wallet). Namespaces and app-key strings are BAO's own.
 
-import { Wallet, getDecodedToken, hashToCurve } from 'cashu-ts3';
+import { Amount, Wallet, getTokenMetadata, hashToCurve, type AmountLike, type Proof, type ProofLike } from '@cashu/cashu-ts';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { isBlockedMintUrl } from '../../wallet/mintConfig';
 import { bytesToBase64 } from './base64';
@@ -22,6 +22,30 @@ import { devLog } from './devLog';
 
 /** Maximum length of an encoded Cashu token string we will decode (bytes). */
 export const MAX_TOKEN_LENGTH = 100_000;
+
+/**
+ * The app's storage/journal proof shape: a cashu-ts `Proof` whose `amount` is
+ * a plain number.
+ *
+ * cashu-ts 4.x made `Proof.amount` an `Amount` value object. The Stored Wallet
+ * keeps its persisted/journal format numeric (existing localStorage records,
+ * the crash journal, the NIP-60 backup payload), so the app converts at the
+ * library boundary: library results (`Proof[]` with `Amount`) are flattened to
+ * `StoredProof[]` here, and `StoredProof[]` is accepted wherever the library
+ * takes `ProofLike[]` (`AmountLike` includes `number`).
+ */
+export type StoredProof = Omit<Proof, 'amount'> & { amount: number };
+
+/** Flatten one library proof to the app's number-amount shape (fail-closed on unsafe amounts). */
+export function toStoredProof(proof: Proof | ProofLike): StoredProof {
+  const { amount, ...rest } = proof as Proof;
+  return { ...rest, amount: Amount.from(amount as AmountLike).toNumber() };
+}
+
+/** Flatten library proofs to the app's number-amount shape. */
+export function toStoredProofs(proofs: ReadonlyArray<Proof | ProofLike>): StoredProof[] {
+  return proofs.map(toStoredProof);
+}
 
 /** Maximum length of individual proof fields (id, C, secret, witness). */
 export const MAX_PROOF_FIELD_LENGTH = 4096;
@@ -41,6 +65,13 @@ export interface DecodedTokenEntry {
   mintUrl: string;
   proofs: unknown[];
   amount: number;
+  /**
+   * The validated token in canonical NUT-00 form (`cashu` + version char +
+   * data, whatever prefix the paste used). The v4 decoder cannot resolve v2
+   * SHORT keyset ids without the mint's keysets, so the app's sync validator
+   * carries the token through instead of re-encoding a hand-built proof list.
+   */
+  token: string;
 }
 
 function ipv4ToInt(ip: string): number {
@@ -63,6 +94,10 @@ function isPrivateIPv4(ip: string): boolean {
   if ((n >>> 20) === 0xac1) return true;
   if ((n >>> 16) === 0xc0a8) return true;
   if ((n >>> 16) === 0xa9fe) return true;
+  // 100.64.0.0/10 - CGNAT/tailnets. Never a legitimate public mint host, and
+  // the execution egress policy denies the same family; an embedded spelling
+  // (mapped/translated/NAT64/6to4) must not slip past the v4 check either.
+  if (n >= 0x64400000 && n <= 0x647fffff) return true;
   if (n === 0) return true;
   return false;
 }
@@ -98,6 +133,22 @@ function ipv6Hextets(ip: string): number[] | null {
   const zeros = 8 - head.length - tail.length;
   if (zeros < 1) return null;
   return [...head, ...new Array(zeros).fill(0), ...tail];
+}
+
+/**
+ * NAT64 (64:ff9b::/96 plus the RFC 8215 local-use 64:ff9b:1::/48) and 6to4
+ * (2002::/16, v4 in hextets 1-2) literals carry a v4 address in their bits.
+ * They are denied as FAMILIES, mirroring the execution egress policy: on an
+ * IPv6-only network the embedded address is routed by the NAT64/6to4 gateway,
+ * so a loopback/private target hides behind a public-looking IPv6 literal -
+ * and a literal transition address is never a legitimate mint host.
+ */
+function isV4TransitionLiteral(ip: string): boolean {
+  const hextets = ipv6Hextets(ip.toLowerCase());
+  if (!hextets) return false;
+  if (hextets[0] === 0x64 && hextets[1] === 0xff9b) return true; // NAT64
+  if (hextets[0] === 0x2002) return true; // 6to4
+  return false;
 }
 
 /**
@@ -152,6 +203,9 @@ export function isAllowedMintUrl(url: string, allowList?: string[]): boolean {
     // Classify by host KIND: IPv6 rules apply ONLY to IPv6 literals, or
     // domain names like `february.mint.example` are wrongly rejected.
     if (host.includes(':')) {
+      // v4-transition families (NAT64/6to4) are denied as families before the
+      // embedded-v4 classification - see isV4TransitionLiteral.
+      if (isV4TransitionLiteral(host)) return false;
       const embedded = embeddedIpv4Of(host);
       if (embedded ? isPrivateIPv4(embedded) : isPrivateIPv6(host)) return false;
     } else if (isPrivateIPv4(host)) {
@@ -239,10 +293,12 @@ export function normalizeProofWitnessForEncode<T extends object>(proof: T): T {
   return proof;
 }
 
-function isValidProof(p: unknown): p is { id: string; amount: number; secret: string; C: string } {
+function isValidProof(p: unknown): p is { id?: string; amount: number; secret: string; C: string } {
   if (!p || typeof p !== 'object') return false;
   const proof = p as Record<string, unknown>;
-  if (typeof proof.id !== 'string' || proof.id.length === 0 || proof.id.length > MAX_PROOF_FIELD_LENGTH) return false;
+  // Metadata-only proofs (getTokenMetadata) carry no id; full proofs (wallet
+  // decode / getDecodedToken) must carry a sane one when present.
+  if (proof.id !== undefined && (typeof proof.id !== 'string' || proof.id.length === 0 || proof.id.length > MAX_PROOF_FIELD_LENGTH)) return false;
   if (typeof proof.C !== 'string' || proof.C.length === 0 || proof.C.length > MAX_PROOF_FIELD_LENGTH) return false;
   if (typeof proof.secret !== 'string' || proof.secret.length === 0 || proof.secret.length > MAX_PROOF_FIELD_LENGTH) return false;
   if (proof.witness !== undefined && (typeof proof.witness !== 'string' || proof.witness.length > MAX_PROOF_FIELD_LENGTH)) return false;
@@ -254,11 +310,25 @@ function isValidProof(p: unknown): p is { id: string; amount: number; secret: st
 /**
  * Defensive decode of a Cashu token into per-mint entries.
  *
- * Upstream limitation (cashu-ts 2.x and 3.x): multi-entry v3 ("cashuA") tokens are
- * rejected by `getDecodedToken` ("Multi entry token are not supported"), so
- * this returns null for them - fail closed rather than hand-rolling the
- * legacy container parse. Single-entry v3 tokens are folded to the flat shape
- * by the library and decode normally. Pinned by tokenUtils.test.ts.
+ * cashu-ts 4.x: `getDecodedToken` requires the mint's FULL keyset id list to
+ * resolve NUT-02 v2 SHORT ids, which a synchronous validator does not have.
+ * The upstream-recommended pre-wallet decode is `getTokenMetadata` - mint,
+ * unit, amount and the incomplete proofs (amount/secret/C/witness, no keyset
+ * id) - so that is what this validator uses. Full proofs (with ids) are
+ * hydrated later by the loaded wallet (`wallet.decodeToken`) in
+ * `receiveIntoStoredWallet`; the validated token string is carried on the
+ * entry for callers that deliver the token without owning a wallet.
+ *
+ * Upstream limitation (cashu-ts 2.x through 4.x): multi-entry v3 ("cashuA")
+ * tokens are rejected ("Multi entry token are not supported"), so this returns
+ * null for them - fail closed rather than hand-rolling the legacy container
+ * parse. Single-entry v3 tokens are folded to the flat shape by the library
+ * and decode normally. Pinned by tokenUtils.test.ts.
+ *
+ * Strictness: a token is rejected entirely when ANY proof fails the shape
+ * check. The old decoder dropped malformed proofs and delivered the rest;
+ * dropping proofs from a bearer token is a value-shape change, so fail-closed
+ * is the only safe answer (the mint would reject the mixed batch anyway).
  */
 export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
   if (typeof tokenStr !== 'string' || tokenStr.length > MAX_TOKEN_LENGTH) return null;
@@ -272,46 +342,46 @@ export function decodeCashuToken(tokenStr: string): DecodedTokenEntry[] | null {
   }
   if (!toDecode) return null;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let decoded: any;
+  let meta: ReturnType<typeof getTokenMetadata>;
   try {
-    decoded = getDecodedToken(toDecode);
+    meta = getTokenMetadata(toDecode);
   } catch {
     return null;
   }
 
-  const entries: DecodedTokenEntry[] = [];
   // The wallet only handles sat ecash; a usd/eur-unit token would be shown
   // and delivered as sats (value misrepresentation). An omitted unit is the
   // legacy sat default.
   const unitIsSat = (unit: unknown): boolean => unit === undefined || unit === null || unit === 'sat';
+  if (!unitIsSat(meta.unit)) return null;
 
-  if ('token' in decoded && Array.isArray(decoded.token)) {
-    for (const entry of decoded.token) {
-      const mintUrl = entry?.mint;
-      const proofs = entry?.proofs;
-      if (!unitIsSat(entry?.unit)) continue;
-      // The blocked host (BAO signet test mint) is never a wallet mint: a
-      // pasted/nutzap token from it must not be adopted, shown as balance, or
-      // delivered as a real-money pledge (owner rule 2026-09-21).
-      if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || isBlockedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) continue;
-      const validProofs = proofs.filter(isValidProof);
-      if (validProofs.length === 0) continue;
-      const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
-      entries.push({ mintUrl, proofs: validProofs, amount });
+  // The blocked host (BAO signet test mint) is never a wallet mint: a
+  // pasted/nutzap token from it must not be adopted, shown as balance, or
+  // delivered as a real-money pledge (owner rule 2026-09-21).
+  const mintUrl = meta.mint;
+  if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || isBlockedMintUrl(mintUrl)) {
+    return null;
+  }
+  if (!Array.isArray(meta.incompleteProofs) || meta.incompleteProofs.length === 0) return null;
+
+  const validProofs: unknown[] = [];
+  let amount = 0;
+  for (const proof of meta.incompleteProofs) {
+    let normalizedAmount: number;
+    try {
+      normalizedAmount = Amount.from((proof as { amount?: AmountLike }).amount as AmountLike).toNumber();
+    } catch {
+      return null;
     }
-  } else if ('mint' in decoded && 'proofs' in decoded) {
-    const mintUrl = decoded.mint;
-    const proofs = decoded.proofs;
-    if (!unitIsSat(decoded.unit)) return null;
-    if (typeof mintUrl !== 'string' || mintUrl.length === 0 || !isAllowedMintUrl(mintUrl) || isBlockedMintUrl(mintUrl) || !Array.isArray(proofs) || proofs.length === 0) return null;
-    const validProofs = proofs.filter(isValidProof);
-    if (validProofs.length === 0) return null;
-    const amount = validProofs.reduce((sum: number, p) => sum + p.amount, 0);
-    entries.push({ mintUrl, proofs: validProofs, amount });
+    const normalized = { ...(proof as object), amount: normalizedAmount };
+    if (!isValidProof(normalized)) return null;
+    validProofs.push(normalized);
+    amount += normalizedAmount;
   }
 
-  return entries.length > 0 ? entries : null;
+  // Canonical NUT-00 token string (the version char follows the `cashu`
+  // prefix) - the stripped form is only the library's internal vocabulary.
+  return [{ mintUrl, proofs: validProofs, amount, token: `cashu${toDecode}` }];
 }
 
 /** Deterministic hash of decoded token entries. Used to deduplicate receive attempts. */
@@ -356,12 +426,10 @@ export async function checkTokenProofsSpent(tokenStr: string): Promise<boolean |
   for (const entry of entries) {
     const normalized = normalizeMintUrl(entry.mintUrl);
     if (!normalized) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let states: any[];
+    let states: Array<{ Y: string; state: string }>;
     try {
       const w = new Wallet(normalized);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      states = await w.checkProofsStates(entry.proofs as any);
+      states = await w.checkProofsStates(entry.proofs as Array<Pick<ProofLike, 'secret' | 'id'>>);
     } catch {
       return null;
     }

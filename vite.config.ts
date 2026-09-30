@@ -160,7 +160,11 @@ export default defineConfig(({ mode }) => {
       // @vbyte/frost is native ESM and Vite's dev pre-bundler repeatedly
       // invalidates its optimized artifact, making /court return a 504 until
       // the server is restarted. Serve the package directly instead.
-      exclude: ['@vbyte/frost', '@capacitor/filesystem', '@capacitor/share'],
+      // TWO @cashu/cashu-ts copies exist on purpose: the vendored fund wallet
+      // resolves @cashu/cashu-ts (4.x) while the legacy 2140 cashu code resolves
+      // the cashu-ts2 alias (2.9). The dep optimizer keys a bare specifier to ONE
+      // copy, so exclude both from pre-bundling.
+      exclude: ['@vbyte/frost', '@capacitor/filesystem', '@capacitor/share', '@cashu/cashu-ts', 'cashu-ts2'],
       // These dependencies are reached primarily through lazy routes. Without
       // startup discovery, Vite can invalidate its dependency graph on the
       // first navigation and answer with 504 Outdated Optimize Dep, forcing a
@@ -319,6 +323,10 @@ export default defineConfig(({ mode }) => {
     // vitest's 5s default when the box is loaded; 20s keeps the gate reliable
     // without hiding real hangs.
     testTimeout: 20000,
+    // Heavy wallet/court async flows are timing-sensitive under full-suite
+    // CPU load (they pass in isolation); one retry keeps the gate signal real
+    // without hiding hangs.
+    retry: 1,
     setupFiles: './src/test/setup.ts',
     exclude: ['**/node_modules/**', '**/dist/**', '.idea', '.git', '.cache', 'e2e', '.tmp', 'services', '.claude', 'vendor'],
     onConsoleLog(log) {

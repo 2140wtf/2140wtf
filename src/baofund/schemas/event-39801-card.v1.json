@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bao.fund/schemas/event-39801-card.v1.json",
+  "title": "BAO Fund fundraiser card — kind 39801 content v1",
+  "description": "Content object of a creator-signed kind-39801 fundraiser card (addressable; d = slug). Tag contract: [['d', slug], ['title', title], ['summary', summary], ['t', topic...], ['alt', 'BAO Fund fundraiser card'], optional ['image', url]]. Canonical bytes: UTF-8/NFC, this schema's key order, integers-only sats, lowercase hex, https-only api. Reference implementation: src/lib/baoCards.ts (buildFundraiserCardContent).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "title", "summary", "format", "rails", "milestones", "attestation", "api", "agentHints"],
+  "properties": {
+    "v": { "const": 1 },
+    "title": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "format": { "enum": ["milestones", "stream"] },
+    "rails": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["cashu", "lightning", "l1", "liquid"] }
+    },
+    "milestones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "amount", "status"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "amount": { "type": "integer", "minimum": 0 },
+          "status": { "enum": ["locked", "unlocked", "released", "refunded"] }
+        }
+      }
+    },
+    "attestation": { "enum": ["human-court", "agent-verified", "none"] },
+    "api": { "type": "string", "pattern": "^https://" },
+    "agentHints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["amountUnit", "canContributeFrom", "idempotency"],
+      "properties": {
+        "amountUnit": { "const": "sats" },
+        "canContributeFrom": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["nostr-only", "browser", "mcp"] }
+        },
+        "idempotency": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

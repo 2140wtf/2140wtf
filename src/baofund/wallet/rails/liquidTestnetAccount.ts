@@ -298,10 +298,11 @@ export async function scanLiquidTestnetUtxos(
 
   for (let index = 0; index <= receiveIndex; index++) {
     const scoped = accountAt(account, index);
-    for (const [address, isConfidential] of [
-      [scoped.confidentialAddress, true],
-      [scoped.unconfidentialAddress, false],
-    ] as const) {
+    // Query the confidential form first: both forms share the scriptPubKey, so
+    // whichever is listed first owns the outpoint's `address` attribution. The
+    // `confidential` flag itself comes from the output's range proof (ground
+    // truth), never from the address form that surfaced it.
+    for (const address of [scoped.confidentialAddress, scoped.unconfidentialAddress]) {
       const listed = await esploraJson<EsploraLiquidUtxo[]>(fetchFn, `${baseUrl}/address/${address}/utxo`);
       for (const entry of listed) {
         const txid = entry.txid.toLowerCase();
@@ -349,7 +350,7 @@ export async function scanLiquidTestnetUtxos(
           status: entry.status,
           index: scoped.index,
           address,
-          confidential: isConfidential && confidentialOutput,
+          confidential: confidentialOutput,
           script: new Uint8Array(output.script),
           valueCommitment: new Uint8Array(output.value),
           assetCommitment: new Uint8Array(output.asset),
@@ -518,6 +519,35 @@ export async function sendLiquidTestnet(
     inputCountEstimate = Math.max(1, selected.length);
   }
 
+  // Confidential INPUTS carry a value blinding factor in their commitment.
+  // Elements balances `sum(in commitments) == sum(out commitments) + fee`, so
+  // an explicit (unconfidential) destination beside an unblinded change would
+  // leave the input's r·H on the left side alone and the node rejects the tx
+  // (`bad-txns-in-ne-out, value in != value out` — live-caught). The change
+  // output is therefore blinded to the wallet's own confidential address
+  // whenever an input is confidential: the blinder assigns it the balancing
+  // factor (r_change = Σr_in), which keeps the recipient's explicit output
+  // visible to address-based watchers and the change unblindable by us.
+  const anyConfidentialInput = selected.some((u) => u.valueCommitment.length > 9);
+  if (anyConfidentialInput && zkp === null) {
+    try {
+      zkp = await (opts.zkpFactory ?? getLiquidZkp)();
+    } catch (e) {
+      return {
+        ok: false,
+        code: 'blinding_unavailable',
+        message: `Confidential inputs need the secp256k1-zkp blinding context, which failed to load: ${e instanceof Error ? e.message : 'unknown error'}`,
+      };
+    }
+    if (zkp === null || zkp === undefined) {
+      return {
+        ok: false,
+        code: 'blinding_unavailable',
+        message: 'Confidential inputs need the secp256k1-zkp blinding context, but the factory returned nothing - refusing to send an unbalanced transaction',
+      };
+    }
+  }
+
   const total = selected.reduce((sum, u) => sum + u.value, 0);
 
   /**
@@ -563,12 +593,18 @@ export async function sendLiquidTestnet(
     if (changeAmount >= LIQUID_TESTNET_DUST_SATS) {
       // Change returns to the CURRENT receive address (highest used index),
       // so the next scan (0..receiveIndex) finds it without gap management.
+      // With confidential inputs the change must be blinded (see above); the
+      // script is the same either way, so the scan still finds it under the
+      // wallet's address pair.
       const changeAccount = accountAt(account, receiveIndex);
       changeAddress = changeAccount.unconfidentialAddress;
       updater.addOutputs([{
         script: liquidAddress.toOutputScript(changeAccount.unconfidentialAddress, networks.testnet),
         amount: changeAmount,
         asset: LIQUID_TESTNET_NATIVE_ASSET_ID,
+        ...(anyConfidentialInput
+          ? { blindingPublicKey: Buffer.from(changeAccount.blindingPublicKey), blinderIndex: 0 }
+          : {}),
       }]);
     }
     // Elements requires an explicit fee output (empty script, LBTC).
@@ -580,7 +616,7 @@ export async function sendLiquidTestnet(
 
     // Blinding must precede signing: the sighash commits output commitments.
     // `zkp` was resolved (and validated) before any build work.
-    if (destination.blindingKey) {
+    if (destination.blindingKey || anyConfidentialInput) {
       const ownedInputs = selected.map((u, index) => ({
         index,
         value: String(u.value),

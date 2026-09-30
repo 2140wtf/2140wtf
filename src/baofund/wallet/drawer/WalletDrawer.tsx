@@ -2,9 +2,9 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { useAuth } from '../../auth/useAuth';
 import { balanceBreakdown } from '../angorPatterns';
-import { deriveTestnet4Account, scanTestnet4Utxos } from '../rails/testnet4Account';
+import { deriveTestnet4Account, importTestnet4AccountFromMnemonic, scanTestnet4Utxos, type Testnet4Account } from '../rails/testnet4Account';
 import { Testnet4WalletCard } from '../rails/Testnet4WalletCard';
-import { readLiquidReceiveIndex, readTestnet4Cursors } from '../rails/railWalletStore';
+import { loadRailWallet, readLiquidReceiveIndex, readTestnet4Cursors } from '../rails/railWalletStore';
 import { useNip60Wallet } from '../useNip60Wallet';
 import { useWallet } from '../useWallet';
 import { WalletHistory } from '../WalletHistory';
@@ -68,25 +68,60 @@ function RailBalances(): React.ReactElement {
   React.useEffect(() => {
     let cancelled = false;
     void Promise.resolve().then(async () => {
-      if (!identityHex) {
-        if (!cancelled) setRails({ l1: { state: 'error', error: 'sign in with a seed identity' }, liquid: { state: 'error', error: 'sign in with a seed identity' } });
-        return;
-      }
-      try {
-        const account = deriveTestnet4Account(identityHex);
-        // Follow the card's persisted receive/change cursors so a rotated
-        // wallet's balance is not under-reported.
-        const cursors = readTestnet4Cursors(identityPubkey);
-        const utxos = await scanTestnet4Utxos(account, { receiveIndex: cursors.receiveIndex, changeIndex: cursors.changeIndex });
-        if (!cancelled) {
-          setRails((prev) => ({ ...prev, l1: { state: 'ok', total: balanceBreakdown(utxos, new Set()).confirmedAvailable } }));
+      // Cards' precedence: a created/imported browser wallet for the signed-in
+      // identity WINS over the identity-derived session account. The cards
+      // spend the stored wallet, so scanning the session account here showed
+      // the wrong balance for exactly the users who hold funds.
+      const noWallet = 'sign in with a seed identity or create/import a browser wallet';
+      let l1Account: Testnet4Account | null = null;
+      let l1Error: string | null = null;
+      const storedL1 = loadRailWallet(identityPubkey, 'testnet4');
+      if (storedL1) {
+        try {
+          l1Account = importTestnet4AccountFromMnemonic(storedL1.mnemonic);
+        } catch {
+          l1Account = null; // corrupt record degrades to the session account
         }
-      } catch (e) {
-        if (!cancelled) setRails((prev) => ({ ...prev, l1: { state: 'error', error: e instanceof Error ? e.message : 'scan failed' } }));
       }
+      if (!l1Account && identityHex) {
+        try {
+          l1Account = deriveTestnet4Account(identityHex);
+        } catch (e) {
+          l1Error = e instanceof Error ? e.message : 'scan failed';
+        }
+      }
+      if (l1Account) {
+        try {
+          // Follow the card's persisted receive/change cursors so a rotated
+          // wallet's balance is not under-reported.
+          const cursors = readTestnet4Cursors(identityPubkey);
+          const utxos = await scanTestnet4Utxos(l1Account, { receiveIndex: cursors.receiveIndex, changeIndex: cursors.changeIndex });
+          if (!cancelled) {
+            setRails((prev) => ({ ...prev, l1: { state: 'ok', total: balanceBreakdown(utxos, new Set()).confirmedAvailable } }));
+          }
+        } catch (e) {
+          if (!cancelled) setRails((prev) => ({ ...prev, l1: { state: 'error', error: e instanceof Error ? e.message : 'scan failed' } }));
+        }
+      } else if (!cancelled) {
+        setRails((prev) => ({ ...prev, l1: { state: 'error', error: l1Error ?? noWallet } }));
+      }
+
       try {
         const mod = await import('../rails/liquidTestnetAccount');
-        const account = mod.deriveLiquidTestnetAccount(identityHex);
+        const storedLiquid = loadRailWallet(identityPubkey, 'liquid');
+        let account: ReturnType<typeof mod.deriveLiquidTestnetAccount> | null = null;
+        if (storedLiquid) {
+          try {
+            account = mod.importLiquidTestnetAccountFromMnemonic(storedLiquid.mnemonic);
+          } catch {
+            account = null;
+          }
+        }
+        if (!account && identityHex) account = mod.deriveLiquidTestnetAccount(identityHex);
+        if (!account) {
+          if (!cancelled) setRails((prev) => ({ ...prev, liquid: { state: 'error', error: noWallet } }));
+          return;
+        }
         // Follow the card's persisted receive cursor so a rotated wallet's
         // balance is not under-reported as 0.
         const utxos = await mod.scanLiquidTestnetUtxos(account, { receiveIndex: readLiquidReceiveIndex(identityPubkey) });
@@ -125,6 +160,22 @@ function RailBalances(): React.ReactElement {
   );
 }
 
+/**
+ * Why the on-chain rail cards cannot sign for this session. A NIP-07 /
+ * passkey identity holds no seed, so the identity-derived wallet cannot be
+ * derived - the honest path is a seed sign-in or an imported browser wallet.
+ * Returns null when the session CAN derive a signer (seed identity present).
+ */
+export function railSigningNotice(identityHex: string | null, identityPubkey: string | null): string | null {
+  if (identityHex) return null;
+  if (identityPubkey) {
+    return 'This sign-in method (extension or passkey) cannot sign on-chain testnet payments - it never exposes your seed. ' +
+      'Sign in with your seed words (Sign out, then "seed phrase"), or import/create a wallet mnemonic below - ' +
+      'an imported wallet signs in this browser and works with any sign-in method.';
+  }
+  return 'Sign in with a seed identity, or import/create a wallet mnemonic below, to send on-chain testnet payments.';
+}
+
 /** Send/Receive reuse the live rail cards (single source of truth per rail). */
 function RailForms({ mode }: { mode: 'send' | 'receive' }): React.ReactElement {
   const auth = useAuth();
@@ -139,6 +190,15 @@ function RailForms({ mode }: { mode: 'send' | 'receive' }): React.ReactElement {
   }, [sendIntent]);
   const identityHex = auth.status === 'ready' ? auth.seedIdentityHex?.() ?? null : null;
   const identityPubkey = auth.status === 'ready' ? auth.pubkey ?? null : null;
+  // The rail cards initialise their send form from the intent ONCE (useState).
+  // Keying them by the intent's material fields remounts the form whenever a
+  // new prefill arrives, so the address/amount on screen always match the
+  // intent the user just clicked - a stale escrow prefill in a money path is
+  // not acceptable.
+  const intentKey = sendIntent
+    ? `${sendIntent.rail ?? 'l1'}|${sendIntent.to ?? ''}|${sendIntent.sats ?? ''}`
+    : 'none';
+  const signingNotice = mode === 'send' ? railSigningNotice(identityHex, identityPubkey) : null;
 
   const pill = (id: RailId, label: string): React.ReactElement => (
     <button
@@ -158,12 +218,22 @@ function RailForms({ mode }: { mode: 'send' | 'receive' }): React.ReactElement {
 
   return (
     <div className="space-y-3" data-testid={`drawer-${mode}`}>
+      {signingNotice && (
+        <p
+          data-testid="rail-no-seed-notice"
+          className="border p-2 text-[11px] leading-relaxed"
+          style={{ borderColor: 'var(--np-accent)', color: 'var(--np-ink)' }}
+        >
+          {signingNotice}
+        </p>
+      )}
       <div className="flex gap-2">
         {pill('l1', 'Bitcoin testnet4')}
         {pill('liquid', 'Liquid testnet')}
       </div>
       {rail === 'l1' ? (
         <Testnet4WalletCard
+          key={`l1|${intentKey}`}
           identityHex={identityHex}
           identityPubkey={identityPubkey}
           {...(sendIntent?.to ? { initialTo: sendIntent.to } : {})}
@@ -172,6 +242,7 @@ function RailForms({ mode }: { mode: 'send' | 'receive' }): React.ReactElement {
       ) : (
         <React.Suspense fallback={<p className="text-[11px]" style={{ color: 'var(--np-muted)' }}>Loading the Liquid wallet…</p>}>
           <LiquidTestnetWalletCard
+            key={`liquid|${intentKey}`}
             identityHex={identityHex}
             identityPubkey={identityPubkey}
             {...(sendIntent?.to ? { initialTo: sendIntent.to } : {})}

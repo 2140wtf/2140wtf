@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ join: vi.fn(), sockets: [] as { close: ReturnT
 vi.mock('@/baofund/community/client.js', async original => ({
   ...await original<typeof import('@/baofund/community/client.js')>(), joinFromLink: mocks.join,
 }));
-vi.mock('@/baofund/community/websocket.js', () => ({
+vi.mock('@/baofund/community-websocket/websocket.js', () => ({
   WebRelayConn: class { close = vi.fn(); constructor() { mocks.sockets.push(this); } },
 }));
 import { joinFundRoom } from './baoCommunity';

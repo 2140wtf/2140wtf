@@ -35,12 +35,17 @@ export function DisputeStatusCard({
   status,
   now,
   myPubkey,
+  viewerRole,
   onExecute,
 }: {
   status: DisputeStatusView;
   now: number;
   /** The viewing user's pubkey - drives role copy + winner affordance. */
   myPubkey: string | null;
+  /** The viewer's escrow side. NEVER infer it from the challenger: BOTH
+   *  parties can open a dispute, so a founder-filed dispute would otherwise
+   *  render donor refund copy (audit). */
+  viewerRole: 'donor' | 'founder';
   /** S3 affordance: call the release route with the attestation. Absent = hide. */
   onExecute?: (attestationEventId: string, winnerPubkey: string) => void;
 }) {
@@ -51,13 +56,21 @@ export function DisputeStatusCard({
   const next = phases.find((p) => p.startsAt > now) ?? null;
   const doneCount = phases.filter((p) => p.endsAt <= now).length;
   const phaseList = phases.filter((p) => p.phase !== 'refund');
-  const role = dispute.challengerPubkey === myPubkey?.toLowerCase() ? 'challenger' : 'respondent';
+  // Parties read as words, never as 64-hex ids (owner rule): the viewer is
+  // one of the two escrow parties, so every other party is the counterparty.
+  const partyLabel = (pubkey: string | null | undefined): string => {
+    if (!pubkey) return 'a party';
+    if (!myPubkey) return 'a party';
+    return pubkey.toLowerCase() === myPubkey.toLowerCase() ? 'you' : 'the counterparty';
+  };
+  const winnerIsMe = Boolean(
+    terminal.kind === 'verdict' && myPubkey && terminal.winnerPubkey.toLowerCase() === myPubkey.toLowerCase(),
+  );
 
   return (
-    <div className="dispute-status-card" data-dispute={dispute.disputeId.slice(0, 12)}>
+    <div className="dispute-status-card" data-dispute={dispute.disputeId.slice(0, 12)} title={`Dispute ${dispute.disputeId}`}>
       <div className="dispute-status-head">
         <strong>⚖️ Court dispute open</strong>
-        <span className="dispute-status-id">id {dispute.disputeId.slice(0, 10)}…</span>
       </div>
 
       {/* Phase summary (round-3: no deadline soup) */}
@@ -81,7 +94,7 @@ export function DisputeStatusCard({
       {!canStillResolveInTime && terminal.kind === 'active' && (
         <div className="dispute-status-race" role="alert">
           ⏱ A court verdict can no longer arrive before the refund locktime.
-          {myPubkey ? ` ${refundRaceCopy(role === 'challenger' ? 'donor' : 'founder')}` : ''}
+          {myPubkey ? ` ${refundRaceCopy(viewerRole)}` : ''}
         </div>
       )}
 
@@ -92,8 +105,8 @@ export function DisputeStatusCard({
         </div>
       )}
       {terminal.kind === 'verdict' && (
-        <div className="dispute-status-verdict">
-          ✅ Court verdict verified: winner <code>{terminal.winnerPubkey.slice(0, 12)}…</code>
+        <div className="dispute-status-verdict" title={`winner ${terminal.winnerPubkey}`}>
+          ✅ Court verdict verified: winner {winnerIsMe ? 'you' : 'the counterparty'}
           {onExecute && myPubkey && terminal.winnerPubkey.toLowerCase() === myPubkey.toLowerCase() && (
             <button
               type="button"
@@ -121,7 +134,7 @@ export function DisputeStatusCard({
         </ol>
       )}
       <div className="dispute-status-meta">
-        opened {fmt(Math.max(0, now - dispute.openedAt))} ago · by {dispute.author.slice(0, 10)}… · proposed winner {dispute.proposedOutcome.slice(0, 10)}…
+        opened {fmt(Math.max(0, now - dispute.openedAt))} ago · filed by {partyLabel(dispute.author)} · proposed winner {partyLabel(dispute.proposedOutcome)}
       </div>
     </div>
   );

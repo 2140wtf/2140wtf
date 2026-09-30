@@ -15,8 +15,8 @@ import { join, relative } from 'node:path';
 import { expect, it } from 'vitest';
 
 // Vitest runs from the project root; `import.meta.url` is not a file URL here.
-// Scope: the ported BAO chat/fund namespace. 2140.wtf's own NIP-98 call sites
-// (Blossom uploads, Routstr) are outside this boundary and own their headers.
+// 2140: only the vendored fund boundary is under this rule; the host app's
+// legacy code is out of scope for the fund transport guard.
 const SRC_DIR = join(process.cwd(), 'src', 'baofund');
 const ALLOWED = new Set(['fundHttp.ts']);
 

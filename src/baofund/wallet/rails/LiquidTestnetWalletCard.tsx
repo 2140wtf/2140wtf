@@ -95,6 +95,13 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
     browserWalletRef.current = browserWallet;
   }, [browserWallet]);
 
+  // A tab-only wallet (created while signed out) awaiting an explicit
+  // adopt/discard decision from the newly signed-in identity. Mirror of the
+  // Testnet4 card: binding recovery words to an identity is never implicit.
+  const pendingAdoption = identityPubkey && browserWallet && browserWallet.pubkey === null && !browserWallet.persisted
+    ? browserWallet
+    : null;
+
   const [showImport, setShowImport] = React.useState(false);
   const [mnemonicInput, setMnemonicInput] = React.useState('');
   const [importError, setImportError] = React.useState<string | null>(null);
@@ -147,11 +154,21 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
 
   // Reload-safe activation: re-derive the stored browser wallet on mount /
   // identity change. A corrupt record degrades to the session account.
+  // A different identity (or sign-out) also drops the previous identity's
+  // transient secret display: the revealed words / just-created mnemonic must
+  // never survive an account switch, even before the storage effect settles.
   React.useEffect(() => {
-    if (!identityPubkey) return;
     let cancelled = false;
+    // Deferred: synchronous setState in an effect cascades renders. Every
+    // identity change (sign-out included) first drops the previous identity's
+    // transient secret display, then re-derives the active wallet.
     void Promise.resolve().then(() => {
       if (cancelled) return;
+      setNewMnemonic(null);
+      setMnemonicInput('');
+      setRevealWords(false);
+      setConfirmForget(false);
+      if (!identityPubkey) return;
       const record = loadRailWallet(identityPubkey, 'liquid');
       if (record) {
         try {
@@ -166,17 +183,13 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
         }
         return;
       }
-      // No stored wallet for this identity: adopt a wallet created in this
-      // tab while signed out instead of dropping it silently on sign-in.
+      // No stored wallet for this identity: a wallet created in this tab
+      // while signed out is NOT adopted automatically - binding its recovery
+      // words to a newly signed-in identity is an explicit decision (parity
+      // with the Testnet4 card, audit run-2). It stays pending in state and
+      // the render below asks for confirmation; anything else is dropped.
       const previous = browserWalletRef.current;
-      if (previous && !previous.persisted) {
-        setBrowserWallet({
-          ...previous,
-          pubkey: identityPubkey,
-          persisted: saveRailWallet(identityPubkey, 'liquid', previous.record),
-        });
-        return;
-      }
+      if (previous && !previous.persisted && previous.pubkey === null) return;
       setBrowserWallet(null);
     });
     return () => {
@@ -292,6 +305,40 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
     setRevealWords(false);
     setConfirmForget(false);
   };
+
+  /** Explicit adoption of the tab-only wallet for the signed-in identity. */
+  const adoptTabWallet = (): void => {
+    if (!identityPubkey || !pendingAdoption) return;
+    setBrowserWallet({
+      ...pendingAdoption,
+      pubkey: identityPubkey,
+      persisted: saveRailWallet(identityPubkey, 'liquid', pendingAdoption.record),
+    });
+    setNewMnemonic(null);
+    setRevealWords(false);
+    setConfirmForget(false);
+  };
+
+  /** Drop the tab-only wallet instead of binding it to this identity. */
+  const discardTabWallet = (): void => {
+    setBrowserWallet(null);
+    setNewMnemonic(null);
+    setRevealWords(false);
+    setConfirmForget(false);
+  };
+
+  // Typed, visible reason when Send is unavailable. Balance is only checked
+  // once the scan has landed (utxos !== null): while scanning, an unknown
+  // balance must not masquerade as insufficient funds.
+  const sendAmount = Number(sendSats);
+  const sendAmountValid = sendSats.trim() !== '' && Number.isFinite(sendAmount) && Math.floor(sendAmount) > 0;
+  const sendDisabledReason: string | null = !sendTo.trim()
+    ? 'Enter the destination address'
+    : !sendAmountValid
+      ? 'Enter the amount in sats'
+      : utxos !== null && balance !== null && balance.confirmedAvailable < Math.floor(sendAmount)
+        ? `Insufficient confirmed balance (${balance.confirmedAvailable.toLocaleString()} sats available) - top up or send less`
+        : null;
 
   const doSend = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -467,9 +514,12 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
               style={{ borderColor: 'var(--np-rule)', color: 'var(--np-ink)' }}
             />
           </div>
-          <button type="submit" disabled={sending || !sendTo.trim() || !sendSats} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}>
+          <button type="submit" disabled={sending || sendDisabledReason !== null} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}>
             <ArrowUpRight size={14} className="mr-1 inline" />{sending ? 'Signing & broadcasting…' : 'Send'}
           </button>
+          {sendDisabledReason && (
+            <p className="text-[10px]" data-testid="liquid-send-disabled-reason" style={{ color: 'var(--np-muted)' }}>{sendDisabledReason}</p>
+          )}
           {sendTxid && (
             <a href={liquidTestnetExplorerTxUrl(sendTxid)} target="_blank" rel="noreferrer" className="block text-[11px] underline" style={{ color: 'var(--np-success)' }}>
               Sent · view on blockstream.info
@@ -480,6 +530,38 @@ export function LiquidTestnetWalletCard({ identityHex, identityPubkey, initialTo
       )}
 
       <div className="border-t pt-3" style={{ borderColor: 'var(--np-rule)' }}>
+        {pendingAdoption && (
+          <div className="mb-3 space-y-2 rounded border p-2" style={{ borderColor: 'var(--np-accent)' }} data-testid="liquid-adopt-confirm">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-accent)' }}>
+              wallet from before sign-in
+            </p>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--np-muted)' }}>
+              A wallet was created in this tab while signed out. Adopting it saves its recovery words for this
+              identity in this browser (testnet only, no value). Without confirmation the session wallet stays
+              active and the tab-only wallet is discarded on reload.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={adoptTabWallet}
+                data-testid="liquid-adopt-confirmed"
+                className="rounded border px-3 py-1.5 text-xs"
+                style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}
+              >
+                Adopt for this identity
+              </button>
+              <button
+                type="button"
+                onClick={discardTabWallet}
+                data-testid="liquid-adopt-discard"
+                className="rounded border px-3 py-1.5 text-xs"
+                style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         {stored && (
           <div className="mb-3 space-y-2 rounded border p-2" style={{ borderColor: 'var(--np-rule)' }} data-testid="liquid-browser-wallet">
             <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-accent)' }}>

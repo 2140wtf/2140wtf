@@ -6,7 +6,7 @@
 // identity pubkey → the same kind:10002 relays + NIP-60 wallet config →
 // the same balance across apps and devices.
 //
-// NIP-60 parity note: the vendored @/baofund/cashu-wallet/lib/cashu/index keeps the original
+// NIP-60 parity note: the vendored @bao/cashu-wallet keeps the original
 // derivation info-strings (e.g. 'ditto:cashu:walletkey:v1') INTENTIONALLY -
 // changing them would derive different keys than existing 2140/bao.markets
 // wallets and break cross-app wallet recovery. The package is MIT (BAO).

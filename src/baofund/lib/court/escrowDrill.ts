@@ -16,7 +16,6 @@
 //
 // Free test mints only; never real sats (docs/ESCROW-ACCEPTANCE.md).
 
-import type { Proof } from 'cashu-ts3';
 import { parseMultisigLockSecret } from '../cashu/escrowMultisig';
 
 /** Deployed API minimum: `ORACLE_SIGN_MIN_LOCKTIME_MARGIN_SECONDS` (24h). */
@@ -33,7 +32,7 @@ export const ESCROW_DEPOSIT_LOCKTIME_SECONDS = API_ORACLE_MIN_LOCKTIME_SECONDS +
  * the mint's keyset map, so the harness decodes with keysets and passes the
  * proofs here.
  */
-export function escrowLocktimeFromProofs(proofs: Proof[]): number | null {
+export function escrowLocktimeFromProofs(proofs: ReadonlyArray<{ secret: string }>): number | null {
   let soonest: number | null = null;
   for (const proof of proofs) {
     const lock = parseMultisigLockSecret(proof.secret);

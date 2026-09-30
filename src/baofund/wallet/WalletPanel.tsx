@@ -12,6 +12,7 @@ import { QrScanDialog } from './QrScanDialog';
 import { SatsPresetPills } from './SatsPresetPills';
 import { CashuTokenQr } from './CashuTokenQr';
 import { Testnet4WalletCard } from './rails/Testnet4WalletCard';
+import { adoptEscrowPayout, listEscrowPayouts, type EscrowPayoutRecord } from '../lib/cashu/escrowPayout';
 import type { LightningPayQuote, LightningTopUpQuote } from './types';
 
 // liquidjs-lib + the zkp wasm are heavy: the Liquid card is code-split and
@@ -25,6 +26,98 @@ function parseSats(raw: string): number | undefined {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return undefined;
   return Math.floor(n);
+}
+
+/**
+ * Escrow payouts: milestone-release / refund payouts whose unblinded token
+ * only reached the per-identity journal (the wallet receive failed or the
+ * signer could not unlock the P2PK output). The token is value; this card
+ * lets the owner claim it into the wallet or copy it out. Scoped to the
+ * ACTIVE identity only.
+ */
+function EscrowPayoutsCard({ pubkey, identityHex }: { pubkey: string | null; identityHex: string | null }): React.ReactElement | null {
+  const [records, setRecords] = React.useState<EscrowPayoutRecord[]>(() => listEscrowPayouts(pubkey));
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [note, setNote] = React.useState<Record<string, string>>({});
+  const [copied, setCopied] = React.useState<string | null>(null);
+
+  // Render-time adjustment (sanctioned change guard): a new identity reads
+  // ITS journal slot, never the previous identity's.
+  const [recordsKey, setRecordsKey] = React.useState(pubkey);
+  if (recordsKey !== pubkey) {
+    setRecordsKey(pubkey);
+    setRecords(listEscrowPayouts(pubkey));
+    setNote({});
+  }
+
+  if (!pubkey || records.length === 0) return null;
+
+  const claim = async (record: EscrowPayoutRecord): Promise<void> => {
+    const id = `${record.frId}:${record.milestoneId}`;
+    setBusy(id);
+    try {
+      const ok = await adoptEscrowPayout(pubkey, record, identityHex);
+      setRecords(listEscrowPayouts(pubkey));
+      setNote((prev) => ({
+        ...prev,
+        [id]: ok
+          ? 'Claimed into your wallet.'
+          : 'Could not claim automatically - copy the token and import it in a wallet that holds this identity key.',
+      }));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section className="border p-4" style={{ borderColor: 'var(--np-rule)' }} data-testid="escrow-payouts">
+      <h3 className="mb-1 font-serif text-lg font-bold">Escrow payouts</h3>
+      <p className="mb-3 text-[10px]" style={{ color: 'var(--np-muted)', fontFamily: 'var(--np-font-mono)' }}>
+        Released and refunded escrow payouts saved for this identity. Claim one to move it into your wallet.
+      </p>
+      <ul className="space-y-2">
+        {records.map((record) => {
+          const id = `${record.frId}:${record.milestoneId}`;
+          return (
+            <li key={id} className="border p-2 text-[11px]" style={{ borderColor: 'var(--np-rule)', fontFamily: 'var(--np-font-mono)' }}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span>
+                  <b>{record.amountSats.toLocaleString()} sats</b> · {record.kind} · {record.frId} / {record.milestoneId}
+                </span>
+                <span className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void claim(record)}
+                    disabled={busy === id}
+                    data-testid={`escrow-payout-claim-${id}`}
+                    className="border px-2 py-1 text-[10px] uppercase tracking-widest disabled:opacity-50"
+                    style={{ borderColor: 'var(--np-accent)', color: 'var(--np-accent)' }}
+                  >
+                    {busy === id ? 'Claiming…' : 'Claim into wallet'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(record.token).then(() => {
+                        setCopied(id);
+                        setTimeout(() => setCopied((c) => (c === id ? null : c)), 1500);
+                      }).catch(() => undefined);
+                    }}
+                    className="border px-2 py-1 text-[10px] uppercase tracking-widest"
+                    style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}
+                  >
+                    {copied === id ? 'Copied' : 'Copy token'}
+                  </button>
+                </span>
+              </div>
+              <div className="mt-1 break-all" style={{ color: 'var(--np-muted)' }}>{record.mint}</div>
+              {note[id] && <div className="mt-1" style={{ color: 'var(--np-muted)' }} data-testid={`escrow-payout-note-${id}`}>{note[id]}</div>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 function RailBadge({ kind, children }: { kind: 'testnet' | 'real'; children: React.ReactNode }) {
@@ -104,6 +197,11 @@ export function WalletPanel(): React.ReactElement {
       </p>
 
       <PortableWalletCard portable={portable} nutzapCount={nutzapCount} setNutzapCount={setNutzapCount} auth={auth} />
+
+      <EscrowPayoutsCard
+        pubkey={authPubkey ?? null}
+        identityHex={seedIdentityHex?.() ?? null}
+      />
 
       {/* Summary */}
       <div className="grid gap-4 sm:grid-cols-3">

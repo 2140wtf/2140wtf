@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { getEncodedToken, getDecodedToken } from '@cashu/cashu-ts';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
+import { getEncodedToken, getDecodedToken } from 'cashu-ts2';
+import { hashToCurve } from 'cashu-ts2/crypto/common';
 
 import { deriveNutzapKey, isFeeWithinMaxPpm, MAX_MINT_FEE_PPM, isAllowedMintUrl, checkTokenProofsSpent, normalizeProofWitnessForEncode } from './cashu';
 

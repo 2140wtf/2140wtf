@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEncodedToken } from '@cashu/cashu-ts';
-import { hashToCurve } from '@cashu/cashu-ts/crypto/common';
+import { getEncodedToken } from 'cashu-ts2';
+import { hashToCurve } from 'cashu-ts2/crypto/common';
 
 import { verifyEvent, getPublicKey } from 'nostr-tools/pure';
 
@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
   checkProofsStates: vi.fn(),
 }));
 
-vi.mock('@cashu/cashu-ts', async (importActual) => {
-  const actual = await importActual<typeof import('@cashu/cashu-ts')>();
+vi.mock('cashu-ts2', async (importActual) => {
+  const actual = await importActual<typeof import('cashu-ts2')>();
   class MockCashuMint {
     constructor(public mintUrl: string) {}
   }

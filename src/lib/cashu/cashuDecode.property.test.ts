@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 
-import { getEncodedToken } from '@cashu/cashu-ts';
+import { getEncodedToken } from 'cashu-ts2';
 
 import { decodeCashuToken, hashDecodedToken, safeSumProofAmounts, MAX_PROOF_FIELD_LENGTH, MAX_TOKEN_LENGTH } from './cashu';
 

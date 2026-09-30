@@ -10,9 +10,17 @@ import {
   recordRailSend,
   recordTransaction,
 } from './walletHistory';
+import { setActiveIdentity } from '../lib/activeIdentity';
+
+const IDENTITY_A = 'aa'.repeat(32);
+const IDENTITY_B = 'bb'.repeat(32);
+/** The per-identity slot the writer under test uses. */
+const SCOPED_TX_KEY = `${TX_STORAGE_KEY}:${IDENTITY_A}`;
 
 beforeEach(() => {
   localStorage.clear();
+  setActiveIdentity(null);
+  setActiveIdentity(IDENTITY_A);
 });
 
 describe('walletHistory', () => {
@@ -36,9 +44,9 @@ describe('walletHistory', () => {
   });
 
   it('survives corrupt storage with an empty log', () => {
-    localStorage.setItem(TX_STORAGE_KEY, '{oops');
+    localStorage.setItem(SCOPED_TX_KEY, '{oops');
     expect(loadTransactions()).toEqual([]);
-    localStorage.setItem(TX_STORAGE_KEY, JSON.stringify([{ nope: true }, { type: 'send', mintUrl: '', amountSats: -1, id: 'x', at: 1 }]));
+    localStorage.setItem(SCOPED_TX_KEY, JSON.stringify([{ nope: true }, { type: 'send', mintUrl: '', amountSats: -1, id: 'x', at: 1 }]));
     expect(loadTransactions()).toEqual([]);
   });
 
@@ -73,7 +81,7 @@ describe('walletHistory', () => {
     expect(entry.txid).toBeUndefined();
     expect(loadTransactions()).toHaveLength(1);
 
-    localStorage.setItem(TX_STORAGE_KEY, JSON.stringify([
+    localStorage.setItem(SCOPED_TX_KEY, JSON.stringify([
       { id: 'x', type: 'send', mintUrl: 'bitcoin-testnet4', amountSats: 1, at: Date.now(), rail: 'btc' },
       { id: 'y', type: 'send', mintUrl: 'bitcoin-testnet4', amountSats: 1, at: Date.now(), rail: 'l1', txid: 'nope' },
       { id: 'z', type: 'send', mintUrl: 'liquid-testnet', amountSats: 1, at: Date.now(), rail: 'liquid', txid: 'cd'.repeat(32) },
@@ -90,5 +98,37 @@ describe('walletHistory', () => {
     clearTransactions();
     expect(listener).toHaveBeenCalledTimes(2);
     off();
+  });
+
+  it("identity B never sees identity A's history (audit run-2 topup-history-global)", () => {
+    recordTransaction({ type: 'topup', mintUrl: 'https://mint.example', amountSats: 21 });
+    expect(loadTransactions()).toHaveLength(1);
+    setActiveIdentity(IDENTITY_B);
+    expect(loadTransactions()).toEqual([]);
+    recordTransaction({ type: 'receive', mintUrl: 'https://mint.example', amountSats: 7 });
+    expect(loadTransactions().map((t) => t.amountSats)).toEqual([7]);
+    setActiveIdentity(IDENTITY_A);
+    expect(loadTransactions().map((t) => t.amountSats)).toEqual([21]);
+    // The legacy global key is never used.
+    expect(localStorage.getItem(TX_STORAGE_KEY)).toBeNull();
+  });
+
+  it('drops writes while signed out instead of writing a shared slot', () => {
+    setActiveIdentity(null);
+    recordTransaction({ type: 'topup', mintUrl: 'https://mint.example', amountSats: 21 });
+    expect(localStorage.getItem(TX_STORAGE_KEY)).toBeNull();
+    expect(loadTransactions()).toEqual([]);
+  });
+
+  it("adopts the legacy global history once, for the ACTIVE identity", () => {
+    setActiveIdentity(null);
+    localStorage.setItem(TX_STORAGE_KEY, JSON.stringify([
+      { id: 'legacy', type: 'topup', mintUrl: 'https://mint.example', amountSats: 5, at: Date.now() },
+    ]));
+    setActiveIdentity(IDENTITY_A);
+    expect(loadTransactions().map((t) => t.id)).toEqual(['legacy']);
+    expect(localStorage.getItem(TX_STORAGE_KEY)).toBeNull();
+    setActiveIdentity(IDENTITY_B);
+    expect(loadTransactions()).toEqual([]);
   });
 });

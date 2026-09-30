@@ -561,7 +561,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // NOT fire property handlers, which silently zeroed every probe
       // ("Not measured" forever). Node (tests/probes): global WebSocket
       // exists too (undici, DOM-conformant); the shim is only for
-      // @bao/community's node-style conn, never the probe.
+      // @/baofund/community/index.js's node-style conn, never the probe.
       const wsModule = globalThis.WebSocket ? null : await import('ws').catch(() => null);
       const WebSocketCtor = (globalThis.WebSocket ?? wsModule?.default) as unknown as typeof WebSocket;
       const probe = await probeRelayStorage({ relayUrl: relayUrl ?? '', WebSocketCtor, timeoutMs: 8_000 });

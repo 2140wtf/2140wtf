@@ -33,12 +33,11 @@ import { createGuestSigner, getGuestPubkeyHex } from '../../relay/guestIdentity'
 import { useAuth } from '../../auth/useAuth';
 import { sendNutzap } from '../../wallet/nip61';
 import { baoRelayUrl } from '../../lib/baoFundraising';
-import { isDemoNetwork } from '../../lib/fundNetwork';
 import { completeLightningTopUp, createLightningTopUp, loadPendingTopUp, loadStoredWallet, spendFromStoredWallet, sumProofs } from '../../wallet/cashuWallet';
-import { checkTokenProofsSpent, decodeCashuToken, normalizeProofWitnessForEncode } from '../../lib/cashu/tokenUtils';
-import { getEncodedToken } from 'cashu-ts3';
+import { checkTokenProofsSpent, decodeCashuToken } from '../../lib/cashu/tokenUtils';
 import { LightningInvoice } from '../../wallet/LightningInvoice';
 import { awaitingAddresses, confirmedPledgeFor, submitPledge, type PledgeAwaitingPayment } from './pledgeFlow';
+import { pendingDeliveryFor, removePendingDelivery, savePendingDelivery } from '../../wallet/pendingDelivery';
 import { EscrowAddressQR } from './EscrowAddressQR';
 import { MilestoneBreakdownList } from './MilestoneBreakdownList';
 import { waterfallAllocation } from './waterfall';
@@ -46,6 +45,7 @@ import type { CampaignBreakdown } from './campaignBreakdown';
 import { errorMessage } from '../../lib/errors';
 import { safeExplorerHref } from '../../lib/safeUrl';
 import { BTC_TESTNET4_RAIL, TESTNET4_NO_VALUE_BADGE } from '../../lib/testnet4Rail';
+import { isDemoNetwork } from '../../lib/fundNetwork';
 import '../../theme/newspaperTheme.css';
 
 /**
@@ -59,8 +59,9 @@ export function pledgeRailsFor(campaignRails?: readonly string[] | null): {
   rails: BaoRail[];
   unsupported: string[];
 } {
-  // Demo universe: campaigns settle instantly from demo coins through the
-  // ledger transfer, whatever rail the campaign row carries.
+  // Demo universe: campaigns settle from demo coins through the instant
+  // ledger transfer, whatever rail the campaign row carries, so the picker
+  // offers the single Demo signet rail instead of the testnet on-chain paths.
   if (isDemoNetwork()) return { rails: ['demo-signet'], unsupported: [] };
   const configured = (campaignRails ?? []).filter((r): r is string => typeof r === 'string' && r.length > 0);
   if (configured.length === 0) return { rails: ['btc-testnet4', 'liquid-testnet'], unsupported: [] };
@@ -144,6 +145,10 @@ export function PledgeModal({
   const [error, setError] = useState<string | null>(null);
   const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [deliveredAsNutzap, setDeliveredAsNutzap] = useState<string | null>(null);
+  // Whether the issued token was persisted locally. False means the textarea
+  // is the ONLY copy - the donor must copy it before closing.
+  const [tokenSaved, setTokenSaved] = useState(false);
+  const [restoredNote, setRestoredNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [awaiting, setAwaiting] = useState<PledgeAwaitingPayment | null>(null);
   const [txidInput, setTxidInput] = useState('');
@@ -165,6 +170,22 @@ export function PledgeModal({
   const [delivering, setDelivering] = useState(false);
   // Ref guard: two clicks in one tick both see the stale `delivering` state.
   const deliveringRef = useRef(false);
+
+  // Restore an issued-but-undelivered token from an earlier visit to THIS
+  // campaign. The mainnet path mints real sats out of the donor's wallet;
+  // before the journal existed, closing the modal destroyed the only copy.
+  // Render-time adjustment (sanctioned change-guard pattern, not an effect).
+  const [restoreKey, setRestoreKey] = useState<string | null>(null);
+  const pendingKey = mainnetCashu ? `${auth.pubkey ?? ''}:${fundraiserId}` : null;
+  if (pendingKey !== null && pendingKey !== restoreKey) {
+    setRestoreKey(pendingKey);
+    const pending = pendingDeliveryFor(auth.pubkey, fundraiserId);
+    if (pending && !issuedToken) {
+      setIssuedToken(pending.token);
+      setTokenSaved(true);
+      setRestoredNote('Undelivered token from an earlier visit - saved locally, deliver or copy it now.');
+    }
+  }
 
   // Resume a top-up quote that survived a reload/close (NUT-04 has no
   // auto-refund: a paid invoice whose quote id is lost strands the sats).
@@ -246,14 +267,11 @@ export function PledgeModal({
         return;
       }
       setDelivering(true);
-      // Deliver the VALIDATED entry, not the raw paste: decodeCashuToken
-      // drops malformed proofs, and the raw token would deliver them too
-      // (the mint then rejects the whole batch).
-      const token = getEncodedToken({
-        mint: entries[0].mintUrl,
-        proofs: (entries[0].proofs as never[]).map(normalizeProofWitnessForEncode),
-        unit: 'sat',
-      });
+      // Deliver the VALIDATED token: decodeCashuToken (cashu-ts 4.x) rejects
+      // the whole token when ANY proof is malformed, so the normalized token
+      // string it carried through is the safe artifact - and it keeps the
+      // library's own short-keyset-id encoding instead of a hand re-encode.
+      const token = entries[0].token;
       // Never deliver proofs that are already spent at the mint.
       const spent = await checkTokenProofsSpent(token);
       if (spent === true) {
@@ -261,6 +279,16 @@ export function PledgeModal({
         return;
       }
       setIssuedToken(token);
+      // Persist BEFORE the nutzap attempt: the token is the only copy of the
+      // donor's sats and closing the modal must never destroy it.
+      setTokenSaved(savePendingDelivery(auth.pubkey, {
+        v: 1,
+        frId: fundraiserId,
+        mint: entries[0].mintUrl,
+        amountSats: pledged,
+        token,
+        via: 'manual',
+      }));
       if (ownerPubkey && auth.signer) {
         try {
           const sent = await sendNutzap({
@@ -272,6 +300,7 @@ export function PledgeModal({
             memo: `Pledge for "${title}"`,
           });
           setDeliveredAsNutzap(sent.eventId.slice(0, 12));
+          removePendingDelivery(auth.pubkey, token);
         } catch {
           // Delivery failed - the token is still shown for manual handoff.
         }
@@ -332,6 +361,17 @@ export function PledgeModal({
         // concurrent writer's proofs during the mint round-trip.
         const { token, mintUrl } = await spendFromStoredWallet(sats);
         setIssuedToken(token);
+        // Persist BEFORE the nutzap attempt: the token is the only copy of
+        // the donor's real sats and closing the modal must never destroy it.
+        // Re-opening Fund on this campaign restores it.
+        setTokenSaved(savePendingDelivery(auth.pubkey, {
+          v: 1,
+          frId: fundraiserId,
+          mint: mintUrl,
+          amountSats: sats,
+          token,
+          via: 'nutzap',
+        }));
         // Direct NIP-61 delivery: publish the proofs as a nutzap addressed
         // to the founder so their wallet's claim loop picks it up with no
         // copy/paste. The token above remains visible as the manual fallback.
@@ -346,6 +386,7 @@ export function PledgeModal({
               memo: `Pledge for "${title}"`,
             });
             setDeliveredAsNutzap(sent.eventId.slice(0, 12));
+            removePendingDelivery(auth.pubkey, token);
           } catch {
             // Delivery failed - the token is still intact for manual handoff.
           }
@@ -489,6 +530,33 @@ export function PledgeModal({
     if (busy) return;
     onClose();
   };
+
+  /**
+   * Pay-from-wallet: open the drawer on the matching rail with one escrow
+   * output pre-filled. Split pledges have one output per funded milestone;
+   * each output is watched independently, so the built-in wallet can pay
+   * them one send at a time (an external wallet may still pay all outputs
+   * in a single transaction).
+   */
+  const openWalletFor = (to: string, sats: number): void => {
+    if (!awaiting) return;
+    window.dispatchEvent(new CustomEvent('bao-open-wallet-drawer', {
+      detail: {
+        tab: 'send',
+        rail: awaiting.rail === 'liquid-testnet' ? 'liquid' : 'l1',
+        to,
+        sats: String(sats),
+      },
+    }));
+  };
+  const walletPayLabel = `Pay from your built-in ${awaiting?.rail === 'liquid-testnet' ? 'Liquid testnet' : 'Bitcoin testnet4'} wallet`;
+  const splitOutputs = awaiting?.outputs ?? [];
+  // A split pledge with ONE output (pledge below the first milestone target)
+  // behaves like the single-address path; only multi-output pledges need a
+  // per-output wallet action.
+  const soleOutput = splitOutputs.length === 1 ? splitOutputs[0] : null;
+  const walletPayTo = soleOutput?.address ?? awaiting?.address ?? '';
+  const walletPaySats = soleOutput?.amountSats ?? awaiting?.amountSats ?? 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={requestClose}>
@@ -736,8 +804,13 @@ export function PledgeModal({
             )}
             {breakdown && breakdown.milestones.length > 0 && (() => {
               // Waterfall preview: the single escrow fills milestones in order.
+              // Split pledges allocate per milestone server-side and put any
+              // remainder past the goal on the LAST milestone's output - the
+              // preview must show that instead of clamping the excess away.
               const pledgeSats = Math.round(Number(amount));
-              const rows = waterfallAllocation(breakdown.milestones, breakdown.raisedSats, pledgeSats);
+              const rows = waterfallAllocation(breakdown.milestones, breakdown.raisedSats, pledgeSats, {
+                overfundLastRow: canSplit && splitPledge,
+              });
               return (
                 <div className="mb-3 border p-2" style={{ borderColor: 'var(--np-rule)' }} data-testid="waterfall-preview">
                   <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)' }}>This pledge fills</p>
@@ -751,6 +824,7 @@ export function PledgeModal({
                             : r.beforeSats > 0
                               ? `${r.beforeSats.toLocaleString()}/${r.targetSats.toLocaleString()} sats`
                               : 'not reached yet'}
+                        {r.overfundSats > 0 ? ` · ${r.overfundSats.toLocaleString()} sats over the goal ride on this milestone's escrow output` : ''}
                       </li>
                     ))}
                   </ul>
@@ -789,6 +863,18 @@ export function PledgeModal({
             </p>
             <textarea readOnly value={issuedToken} rows={6}
               className="w-full border p-2 text-[10px] outline-none" style={{ borderColor: 'var(--np-rule)', fontFamily: 'var(--np-font-mono)' }} />
+            {restoredNote && (
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--np-accent-2)' }} data-testid="pledge-token-restored">{restoredNote}</p>
+            )}
+            {!restoredNote && (tokenSaved ? (
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--np-success)' }} data-testid="pledge-token-saved">
+                Saved locally for this campaign - closing this window is safe; reopen Fund to get the token back.
+              </p>
+            ) : (
+              <p className="mt-1 text-[10px]" style={{ color: 'var(--np-danger, #b00)' }} data-testid="pledge-token-unsaved">
+                NOT saved locally - copy the token now. Closing this window loses the only copy.
+              </p>
+            ))}
             {error && <p className="mt-2 text-xs" style={{ color: '#b00' }}>{error}</p>}
             <div className="mt-3 flex items-center justify-end gap-2">
               <button type="button" disabled={copied}
@@ -803,7 +889,13 @@ export function PledgeModal({
                 style={{ borderColor: 'var(--np-rule)', background: 'var(--np-ink)', color: 'var(--np-bg)' }}>
                 {copied ? 'Copied ✓' : 'Copy token'}
               </button>
-              <button type="button" onClick={() => onDone('Mainnet token issued - deliver it to the founder.')}
+              <button type="button" onClick={() => onDone(
+                deliveredAsNutzap
+                  ? 'Mainnet token issued - delivered to the founder as a nutzap.'
+                  : tokenSaved
+                    ? 'Mainnet token issued and saved - deliver it to the founder (reopen Fund on this campaign to recover it).'
+                    : 'Mainnet token issued - COPY IT NOW, it is not stored anywhere else.',
+              )}
                 className="border px-3 py-1.5 text-xs uppercase tracking-widest"
                 style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}>
                 Done
@@ -818,18 +910,19 @@ export function PledgeModal({
               <b>Need testnet coins?</b>{' '}
               {awaiting.rail === 'liquid-testnet' ? (
                 <>
-                  Use the public Liquid testnet faucet{' '}
-                  <a href="https://liquidtestnet.com/faucet" target="_blank" rel="noreferrer" className="underline">liquidtestnet.com/faucet</a>{' '}
-                  - paste this address to receive free LBTC (no value). Watch the deposit
+                  Use the Liquid testnet faucet - search "Liquid testnet faucet" or visit{' '}
+                  <a href="https://blockstream.info/liquidtestnet" target="_blank" rel="noreferrer" className="underline">blockstream.info/liquidtestnet</a>{' '}
+                  for the current links - and paste this address to receive free LBTC (no value). Watch the deposit
                   land on{' '}
-                  <a href={`https://blockstream.info/liquidtestnet/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">blockstream.info/liquidtestnet</a>.
+                  <a href={`https://blockstream.info/liquidtestnet/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">the explorer</a>.
                 </>
               ) : (
                 <>
-                  Claim from the public Bitcoin testnet4 faucet{' '}
-                  <a href="https://coinfaucet.eu/en/btc-testnet4/" target="_blank" rel="noreferrer" className="underline">coinfaucet.eu/en/btc-testnet4</a>{' '}
-                  - paste this tb1p… address there and free sats arrive in seconds. Watch them land on{' '}
-                  <a href={`https://mempool.space/testnet4/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">mempool.space/testnet4</a>.
+                  Use a Bitcoin testnet4 faucet - the canonical list lives at{' '}
+                  <a href="https://mempool.space/testnet4" target="_blank" rel="noreferrer" className="underline">mempool.space/testnet4</a>{' '}
+                  (faucet links on the explorer page; e.g. the meme/coin faucet seeded from the genesis address). Paste this
+                  tb1p… address there and free sats arrive in seconds. Watch them land on{' '}
+                  <a href={`https://mempool.space/testnet4/address/${awaiting.address}`} target="_blank" rel="noreferrer" className="underline">mempool.space</a>.
                 </>
               )}
             </p>
@@ -854,6 +947,17 @@ export function PledgeModal({
                             <a href={safeExplorerHref(o.explorerUrl)!} target="_blank" rel="noreferrer" className="underline">explorer</a>
                           </>
                         ) : null}
+                        {splitOutputs.length > 1 && o.amountSats > 0 && (
+                          <button
+                            type="button"
+                            data-testid={`pledge-open-wallet-${i}`}
+                            onClick={() => openWalletFor(o.address, o.amountSats)}
+                            className="mt-1 block w-full rounded border px-2 py-1.5 text-[11px]"
+                            style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}
+                          >
+                            Pay this milestone from your built-in wallet
+                          </button>
+                        )}
                       </li>
                     );
                   })}
@@ -861,6 +965,16 @@ export function PledgeModal({
                 <p className="mt-1 text-[10px]" style={{ color: 'var(--np-muted)' }}>
                   Total <b>{awaiting.amountSats.toLocaleString()} sats</b> - pay every output in a SINGLE transaction from your wallet. We detect the payment automatically; the txid is optional.
                 </p>
+                {splitOutputs.length > 1 && (
+                  <p
+                    data-testid="split-wallet-note"
+                    className="mt-2 border p-2 text-[11px] leading-relaxed"
+                    style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}
+                  >
+                    <b style={{ color: 'var(--np-ink)' }}>Paying from the built-in wallet?</b> It pays one escrow output
+                    per send - use the button on each milestone above; every output is watched and confirms on its own.
+                  </p>
+                )}
                 {awaiting.rail === BTC_TESTNET4_RAIL && (
                   <span className="mt-1 block text-[10px] font-bold tracking-widest" data-testid="t4-badge-awaiting">
                     {TESTNET4_NO_VALUE_BADGE}
@@ -906,23 +1020,16 @@ export function PledgeModal({
               </div>
             )}
 
-            {(!awaiting.outputs || awaiting.outputs.length === 0) && (
+            {splitOutputs.length <= 1 && (
               <div className="mb-3">
                 <button
                   type="button"
                   data-testid="pledge-open-wallet"
-                  onClick={() => window.dispatchEvent(new CustomEvent('bao-open-wallet-drawer', {
-                    detail: {
-                      tab: 'send',
-                      rail: awaiting.rail === 'liquid-testnet' ? 'liquid' : 'l1',
-                      to: awaiting.address,
-                      sats: String(awaiting.amountSats),
-                    },
-                  }))}
+                  onClick={() => openWalletFor(walletPayTo, walletPaySats)}
                   className="w-full rounded border px-3 py-2 text-sm"
                   style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}
                 >
-                  Pay from your built-in {awaiting.rail === 'liquid-testnet' ? 'Liquid testnet' : 'Bitcoin testnet4'} wallet
+                  {walletPayLabel}
                 </button>
                 <p className="mt-1 text-[10px]" style={{ color: 'var(--np-muted)' }}>
                   Opens the wallet drawer with this escrow address and amount pre-filled; the pledge confirms the same

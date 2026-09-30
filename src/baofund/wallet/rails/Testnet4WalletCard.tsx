@@ -16,7 +16,6 @@ import {
 } from './testnet4Account';
 import {
   TESTNET4_EXPLORER_BASE,
-  TESTNET4_FAUCET_URL,
   TESTNET4_NO_VALUE_BADGE,
   testnet4ExplorerAddressUrl,
   testnet4ExplorerTxUrl,
@@ -99,6 +98,11 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
 
   const [receiveIndex, setReceiveIndex] = React.useState(0);
   const [changeIndex, setChangeIndex] = React.useState(0);
+  // Identity whose persisted cursors have been restored. The save effect must
+  // not run before that: on mount, `active` can already be the freshly derived
+  // session account with index 0, and saving it would clobber the stored
+  // cursor before the deferred read lands (a rotated wallet would reload at 0).
+  const cursorsRestoredFor = React.useRef<string | null>(null);
   const [reservedKeys, setReservedKeys] = React.useState<ReadonlySet<string>>(EMPTY_RESERVED);
   const [utxos, setUtxos] = React.useState<Testnet4Utxo[] | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -114,6 +118,12 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
   const [sendTxid, setSendTxid] = React.useState<string | null>(null);
   const [sendError, setSendError] = React.useState<string | null>(null);
 
+  // A tab-only wallet (created while signed out) awaiting an explicit
+  // adopt/discard decision from the newly signed-in identity.
+  const pendingAdoption = identityPubkey && browserWallet && browserWallet.pubkey === null && !browserWallet.persisted
+    ? browserWallet
+    : null;
+
   // Precedence: a wallet created/imported in this browser for the signed-in
   // identity wins over the identity-derived session account.
   const active = stored?.account ?? session.account;
@@ -127,15 +137,23 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
 
   // Per-identity cursor persistence (addresses/indexes only — never keys).
   // Helpers live in railWalletStore so the drawer can read the same cursors.
+  // A different identity (or sign-out) also drops the previous identity's
+  // transient secret display: revealed words / a just-created mnemonic must
+  // never survive an account switch.
   React.useEffect(() => {
-    if (!identityPubkey) return;
     // Deferred: a synchronous setState in an effect cascades renders (the
     // repo's react-hooks gate rejects it).
     void Promise.resolve().then(() => {
+      setNewMnemonic(null);
+      setMnemonicInput('');
+      setRevealWords(false);
+      setConfirmForget(false);
+      if (!identityPubkey) return;
       const cursors = readTestnet4Cursors(identityPubkey);
       setReceiveIndex(cursors.receiveIndex);
       setChangeIndex(cursors.changeIndex);
       setReservedKeys(EMPTY_RESERVED);
+      cursorsRestoredFor.current = identityPubkey;
     });
   }, [identityPubkey]);
 
@@ -160,17 +178,13 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
         }
         return;
       }
-      // No stored wallet for this identity: adopt a wallet created in this
-      // tab while signed out instead of dropping it silently on sign-in.
+      // No stored wallet for this identity: a wallet created in this tab
+      // while signed out is NOT adopted automatically - binding its recovery
+      // words to a newly signed-in identity is an explicit decision (hunt:
+      // guest-key-not-rotated). It stays pending in state and the render
+      // below asks for confirmation; anything else is dropped.
       const previous = browserWalletRef.current;
-      if (previous && !previous.persisted) {
-        setBrowserWallet({
-          ...previous,
-          pubkey: identityPubkey,
-          persisted: saveRailWallet(identityPubkey, 'testnet4', previous.record),
-        });
-        return;
-      }
+      if (previous && !previous.persisted && previous.pubkey === null) return;
       setBrowserWallet(null);
     });
     return () => {
@@ -179,7 +193,13 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
   }, [identityPubkey]);
 
   React.useEffect(() => {
-    if (!identityPubkey || !active || active.source !== 'session') return;
+    // Persist for EVERY active wallet, not just the session account: a
+    // created/imported browser wallet can rotate its receive chain too, and
+    // the drawer's balance scan follows these cursors. A session-only write
+    // made a rotated browser wallet under-report (and hide unspent change)
+    // after a reload, and the drawer read a stale cursor.
+    if (!identityPubkey || !active) return;
+    if (cursorsRestoredFor.current !== identityPubkey) return;
     saveTestnet4Cursors(identityPubkey, { receiveIndex, changeIndex });
   }, [identityPubkey, active, receiveIndex, changeIndex]);
 
@@ -249,6 +269,9 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
     setConfirmForget(false);
     setReceiveIndex(0);
     setChangeIndex(0);
+    // A fresh wallet starts its receive/change chains at 0 (the save effect
+    // also fires, but an explicit write keeps the drawer honest immediately).
+    if (identityPubkey) saveTestnet4Cursors(identityPubkey, { receiveIndex: 0, changeIndex: 0 });
   };
 
   const doImport = (): void => {
@@ -272,6 +295,27 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
     }
   };
 
+  /** Explicit adoption of the tab-only wallet for the signed-in identity. */
+  const adoptTabWallet = (): void => {
+    if (!identityPubkey || !pendingAdoption) return;
+    setBrowserWallet({
+      ...pendingAdoption,
+      pubkey: identityPubkey,
+      persisted: saveRailWallet(identityPubkey, 'testnet4', pendingAdoption.record),
+    });
+    setNewMnemonic(null);
+    setRevealWords(false);
+    setConfirmForget(false);
+  };
+
+  /** Drop the tab-only wallet instead of binding it to this identity. */
+  const discardTabWallet = (): void => {
+    setBrowserWallet(null);
+    setNewMnemonic(null);
+    setRevealWords(false);
+    setConfirmForget(false);
+  };
+
   const doForget = (): void => {
     if (!identityPubkey) return;
     clearRailWallet(identityPubkey, 'testnet4');
@@ -281,7 +325,23 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
     setConfirmForget(false);
     setReceiveIndex(0);
     setChangeIndex(0);
+    // Forget resets the rail's cursors too (the words are the only backup; a
+    // stale cursor must not outlive the wallet it described).
+    saveTestnet4Cursors(identityPubkey, { receiveIndex: 0, changeIndex: 0 });
   };
+
+  // Typed, visible reason when Send is unavailable. Balance is only checked
+  // once the scan has landed (utxos !== null): while scanning, an unknown
+  // balance must not masquerade as insufficient funds.
+  const sendAmount = Number(sendSats);
+  const sendAmountValid = sendSats.trim() !== '' && Number.isFinite(sendAmount) && Math.floor(sendAmount) > 0;
+  const sendDisabledReason: string | null = !sendTo.trim()
+    ? 'Enter the destination address'
+    : !sendAmountValid
+      ? 'Enter the amount in sats'
+      : utxos !== null && balance !== null && balance.confirmedAvailable < Math.floor(sendAmount)
+        ? `Insufficient confirmed balance (${balance.confirmedAvailable.toLocaleString()} sats available) - top up or send less`
+        : null;
 
   const doSend = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
@@ -401,16 +461,10 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
           </div>
           {loadError && <p className="text-[11px]" style={{ color: 'var(--np-error, #b91c1c)' }}>{loadError}</p>}
           <p className="text-[10px] leading-relaxed" style={{ color: 'var(--np-muted)' }}>
-            Need coins? Claim from the public testnet4 faucet, then send to this
-            address -{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_FAUCET_URL} target="_blank" rel="noreferrer">
-              coinfaucet.eu/en/btc-testnet4
-            </a>{' '}
-            (verify on{' '}
-            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href={TESTNET4_EXPLORER_BASE} target="_blank" rel="noreferrer">
-              mempool.space/testnet4
+            Need coins? Use a public testnet4 faucet, then send to this address -{' '}
+            <a className="underline" style={{ color: 'var(--np-accent-2)' }} href="https://mempool.space/testnet4/faucet" target="_blank" rel="noreferrer">
+              mempool.space/testnet4/faucet
             </a>
-            )
           </p>
         </div>
       )}
@@ -448,9 +502,12 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
               <option value="fastest">fastest</option>
             </select>
           </div>
-          <button type="submit" disabled={sending || !sendTo.trim() || !sendSats} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}>
+          <button type="submit" disabled={sending || sendDisabledReason !== null} className="w-full rounded border px-3 py-2 text-sm disabled:opacity-40" style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}>
             <ArrowUpRight size={14} className="mr-1 inline" />{sending ? 'Signing & broadcasting…' : 'Send'}
           </button>
+          {sendDisabledReason && (
+            <p className="text-[10px]" data-testid="testnet4-send-disabled-reason" style={{ color: 'var(--np-muted)' }}>{sendDisabledReason}</p>
+          )}
           {sendTxid && (
             <a href={testnet4ExplorerTxUrl(sendTxid)} target="_blank" rel="noreferrer" className="block text-[11px] underline" style={{ color: 'var(--np-success)' }}>
               Sent · view on mempool.space
@@ -461,6 +518,38 @@ export function Testnet4WalletCard({ identityHex, identityPubkey, initialTo, ini
       )}
 
       <div className="border-t pt-3" style={{ borderColor: 'var(--np-rule)' }}>
+        {pendingAdoption && (
+          <div className="mb-3 space-y-2 rounded border p-2" style={{ borderColor: 'var(--np-accent)' }} data-testid="testnet4-adopt-confirm">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-accent)' }}>
+              wallet from before sign-in
+            </p>
+            <p className="text-[10px] leading-relaxed" style={{ color: 'var(--np-muted)' }}>
+              A wallet was created in this tab while signed out. Adopting it saves its recovery words for this
+              identity in this browser (testnet only, no value). Without confirmation the session wallet stays
+              active and the tab-only wallet is discarded on reload.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={adoptTabWallet}
+                data-testid="testnet4-adopt-confirmed"
+                className="rounded border px-3 py-1.5 text-xs"
+                style={{ borderColor: 'var(--np-accent-2)', color: 'var(--np-accent-2)' }}
+              >
+                Adopt for this identity
+              </button>
+              <button
+                type="button"
+                onClick={discardTabWallet}
+                data-testid="testnet4-adopt-discard"
+                className="rounded border px-3 py-1.5 text-xs"
+                style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         {stored && (
           <div className="mb-3 space-y-2 rounded border p-2" style={{ borderColor: 'var(--np-rule)' }} data-testid="testnet4-browser-wallet">
             <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-accent)' }}>

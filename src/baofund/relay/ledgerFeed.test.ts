@@ -91,6 +91,40 @@ describe('summarizeLedger', () => {
     expect(summarizeLedger(events, PIN).get(CAMPAIGN)?.closed).toBe(true);
   });
 
+  it('reports the terminal disposition: refunded when the fold ended in REFUND_ALL', () => {
+    const events = signChain(SK, [
+      { type: 'CONTRIB_LOCK', milestone: 'm1', amountSats: 1000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+      { type: 'REFUND_ALL', milestone: 'm1', amountSats: 1000, externalContributors: null, window: null },
+      { type: 'CLOSE', amountSats: 0, proofSetHash: null, nullifierRoot: HASH_B, externalContributors: 1 },
+    ]);
+    const summary = summarizeLedger(events, PIN).get(CAMPAIGN);
+    expect(summary?.closed).toBe(true);
+    expect(summary?.terminal).toBe('refunded');
+  });
+
+  it('reports released on a RELEASE terminal and keeps the LAST settlement', () => {
+    const released = signChain(SK, [
+      { type: 'CONTRIB_LOCK', milestone: 'm1', amountSats: 1000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+      { type: 'RELEASE', milestone: 'm1', amountSats: 1000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+      { type: 'CLOSE', amountSats: 0, proofSetHash: null, nullifierRoot: HASH_B, externalContributors: 0 },
+    ]);
+    expect(summarizeLedger(released, PIN).get(CAMPAIGN)?.terminal).toBe('released');
+
+    const mixed = signChain(SK, [
+      { type: 'CONTRIB_LOCK', milestone: 'm1', amountSats: 2000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+      { type: 'RELEASE', milestone: 'm1', amountSats: 1000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+      { type: 'REFUND_ALL', milestone: 'm1', amountSats: 1000, externalContributors: null, window: null },
+    ]);
+    expect(summarizeLedger(mixed, PIN).get(CAMPAIGN)?.terminal).toBe('refunded');
+  });
+
+  it('leaves terminal null when no settlement entry was accepted', () => {
+    const events = signChain(SK, [
+      { type: 'CONTRIB_LOCK', milestone: 'm1', amountSats: 1000, externalContributors: 0, window: { disputeEndsUnix: TS, paused: false } },
+    ]);
+    expect(summarizeLedger(events, PIN).get(CAMPAIGN)?.terminal).toBeNull();
+  });
+
   it('omits campaigns signed by a non-pinned registrar', () => {
     const other = generateSecretKey();
     const events = signChain(other, [{ type: 'STAKE_LOCK', amountSats: 5000 }]);

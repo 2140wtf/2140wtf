@@ -114,8 +114,8 @@ export function apiRailFor(rail: BaoRail): BaoRail {
 
 /**
  * Demo universe: claim demo sats when short, then settle instantly with the
- * ledger transfer (lightning first - near-instant on the demo API). No escrow
- * artifact, no faucet URL.
+ * ledger transfer. No escrow artifact, no faucet URL - the demo API holds the
+ * coins and records the contribution in one transaction.
  */
 async function submitDemoPledge(deps: PledgeDeps, req: PledgeRequest): Promise<PledgeResult> {
   const amount = Math.round(req.amountSats);
@@ -126,15 +126,15 @@ async function submitDemoPledge(deps: PledgeDeps, req: PledgeRequest): Promise<P
   try {
     let funded = await demoFundedRail(deps.signer, amount);
     if (!funded) {
-      const claim = await claimDemoSats(deps.signer, {
-        amountSats: Math.max(amount, 1_000),
-        rails: ['lightning', 'ecash', 'cashu'],
-      });
+      // Lightning first: the demo API settles lightning fundraiser
+      // contributions through the internal ledger (near-instant), with the
+      // ecash rails as fallbacks.
+      const claim = await claimDemoSats(deps.signer, { amountSats: Math.max(amount, 1_000), rails: ['lightning', 'ecash', 'cashu'] });
       claimed = claim.status === 'completed' ? claim.claimedSats : 0;
       funded = await demoFundedRail(deps.signer, amount);
       if (!funded) {
         const why = claim.status === 'completed'
-          ? 'Demo sats claimed, but the spendable rail is not funded yet - try again in a moment.'
+          ? 'Demo sats claimed, but the ledger rail is not funded yet - try again in a moment.'
           : `Demo faucet: ${claim.message ?? claim.status}`;
         return { ok: false, claimed, message: why };
       }
@@ -147,7 +147,7 @@ async function submitDemoPledge(deps: PledgeDeps, req: PledgeRequest): Promise<P
     return {
       ok: true,
       claimed,
-      message: `Pledged ${amount.toLocaleString()} demo sats via Demo signet (${funded.rail})${sent.replayed ? ' (already recorded)' : ''}.`,
+      message: `Pledged ${amount.toLocaleString()} demo sats from ${funded.rail}${sent.replayed ? ' (already recorded)' : ''}.`,
     };
   } catch (e) {
     return { ok: false, claimed, message: errorMessage(e) };

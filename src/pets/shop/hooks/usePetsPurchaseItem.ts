@@ -13,7 +13,7 @@ import type { CashuWalletActions, CashuWalletState } from '@/hooks/useCashuWalle
 import { updateNostrPetProfile } from '@/pets/core/lib/profile-sats';
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import type { CashuWallet, MintKeyset } from '@cashu/cashu-ts';
+import type { CashuWallet, MintKeyset } from 'cashu-ts2';
 
 import type { PurchaseRequest } from '../types/shop.types';
 import type { PetsWalletMode } from '@/pets/core/hooks/usePetsWallet';

@@ -6,7 +6,7 @@
 // removed.
 
 import { describe, expect, it, vi } from 'vitest';
-import { getDecodedToken, getEncodedToken } from 'cashu-ts3';
+import { getDecodedToken, getEncodedToken } from '@cashu/cashu-ts';
 import { bytesToBase64Url } from './base64';
 import {
   MAX_MINT_FEE_PPM,
@@ -93,6 +93,18 @@ describe('isAllowedMintUrl', () => {
   it('still allows public IPv6 mints (including public v4-compatible hextets)', () => {
     expect(isAllowedMintUrl('https://[2606:4700:4700::1111]')).toBe(true);
     expect(isAllowedMintUrl('https://[::808:808]')).toBe(true);
+  });
+  it('rejects v4-transition families (NAT64 / 6to4) whose embedded address hides behind the literal', () => {
+    // 64:ff9b::/96 with 127.0.0.1 / 10.0.0.1 embedded, the RFC 8215
+    // local-use 64:ff9b:1::/48 prefix, and 6to4 2002::/16 with 127.0.0.1.
+    expect(isAllowedMintUrl('https://[64:ff9b::7f00:1]')).toBe(false);
+    expect(isAllowedMintUrl('https://[64:ff9b::a00:1]')).toBe(false);
+    expect(isAllowedMintUrl('https://[64:ff9b:1::7f00:1]')).toBe(false);
+    expect(isAllowedMintUrl('https://[2002:7f00:1::]')).toBe(false);
+    // Denied as a FAMILY (same invariant as the execution egress policy):
+    // even a public embedded target is a transition literal, never a mint.
+    expect(isAllowedMintUrl('https://[64:ff9b::808:808]')).toBe(false);
+    expect(isAllowedMintUrl('https://[2002:808:808::]')).toBe(false);
   });
   it('requires membership in the allow-list when one is provided', () => {
     expect(isAllowedMintUrl('https://mint.a.com', ['https://mint.a.com'])).toBe(true);
@@ -192,13 +204,15 @@ describe('multi-entry v3 tokens (cashu-ts 2.9.0 upstream limitation)', () => {
     // Upstream: decodeVersionA throws on >1 entry (message verbatim from
     // cashu-ts 2.9.0). Pinned so a dependency bump that starts accepting them
     // is a deliberate, reviewed change - and BAO never hand-rolls the parse.
-    expect(() => getDecodedToken(token)).toThrow('Multi entry token are not supported');
+    // cashu-ts 4.x requires the keyset-id list (empty is fine here: the v3
+    // fixture carries v0 ids, which need no mapping).
+    expect(() => getDecodedToken(token, [])).toThrow('Multi entry token are not supported');
     expect(decodeCashuToken(token)).toBeNull();
   });
 
   it('still decodes a single-entry v3 token (folded to the flat shape)', () => {
     const token = v3Token([{ mint: MINT, proofs: [proof({ secret: 'single' })] }]);
-    const decoded = getDecodedToken(token);
+    const decoded = getDecodedToken(token, []);
     expect(decoded.mint).toBe(MINT);
     expect(decodeCashuToken(token)?.[0].amount).toBe(10);
   });
@@ -206,8 +220,8 @@ describe('multi-entry v3 tokens (cashu-ts 2.9.0 upstream limitation)', () => {
 
 describe('hashDecodedToken', () => {
   it('is deterministic and stable under entry order', () => {
-    const a = [{ mintUrl: MINT, proofs: [proof({ secret: 's1' }), proof({ secret: 's2' })] as unknown[], amount: 20 }];
-    const b = [{ mintUrl: MINT, proofs: [proof({ secret: 's2' }), proof({ secret: 's1' })] as unknown[], amount: 20 }];
+    const a = [{ mintUrl: MINT, proofs: [proof({ secret: 's1' }), proof({ secret: 's2' })] as unknown[], amount: 20, token: '' }];
+    const b = [{ mintUrl: MINT, proofs: [proof({ secret: 's2' }), proof({ secret: 's1' })] as unknown[], amount: 20, token: '' }];
     expect(hashDecodedToken(a)).toBe(hashDecodedToken(b));
   });
 });
@@ -217,7 +231,7 @@ describe('checkTokenProofsSpent', () => {
     expect(await checkTokenProofsSpent('nonsense')).toBeNull();
   });
   it('returns false when at least one proof is still unspent (mock wallet)', async () => {
-    const { Wallet } = await import('cashu-ts3');
+    const { Wallet } = await import('@cashu/cashu-ts');
     const states = vi.fn(async () => [{ Y: 'y1', state: 'UNSPENT' }, { Y: 'y2', state: 'SPENT' }]);
     vi.spyOn(Wallet.prototype, 'checkProofsStates').mockImplementation(states as never);
     const entry = { mint: MINT, proofs: [proof({ secret: 's1'.repeat(16) }), proof({ secret: 's2'.repeat(16) })] };
@@ -266,6 +280,21 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+describe('isAllowedMintUrl - CGNAT parity (round 4)', () => {
+  it('rejects 100.64/10 tailnet hosts, dotted and v4-mapped', () => {
+    // The execution egress policy already denies CGNAT 100.64/10 ("incl.
+    // tailnets"); the browser mint allowlist must not be laxer.
+    expect(isAllowedMintUrl('https://100.64.0.1')).toBe(false);
+    expect(isAllowedMintUrl('https://100.64.0.1:3338')).toBe(false);
+    expect(isAllowedMintUrl('https://100.127.255.255')).toBe(false);
+    expect(isAllowedMintUrl('https://[::ffff:6440:1]')).toBe(false); // ::ffff:100.64.0.1
+    expect(isAllowedMintUrl('https://[64:ff9b::6440:1]')).toBe(false); // NAT64 family
+    // Borders: 100.63/100.128 stay public.
+    expect(isAllowedMintUrl('https://100.63.255.255')).toBe(true);
+    expect(isAllowedMintUrl('https://100.128.0.0')).toBe(true);
+  });
+});
 
 describe('isAllowedMintUrl - fuzz (WS9)', () => {
   it('never throws and always rejects private/loopback encodings', () => {

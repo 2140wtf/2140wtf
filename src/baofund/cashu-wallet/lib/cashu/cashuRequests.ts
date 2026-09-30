@@ -1,5 +1,5 @@
-import { getDecodedToken, PaymentRequest } from '@cashu/cashu-ts';
-import type { Proof } from '@cashu/cashu-ts';
+import { getDecodedToken, PaymentRequest } from 'cashu-ts2';
+import type { Proof } from 'cashu-ts2';
 
 import { devLog } from './devLog';
 
