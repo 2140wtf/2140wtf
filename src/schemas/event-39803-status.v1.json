@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bao.fund/schemas/event-39803-status.v1.json",
+  "title": "BAO Fund milestone status — kind 39803 content v1",
+  "description": "Content object of a registrar-signed kind-39803 milestone status. Addressable and APPEND-ONLY: d = '<slug>:<milestone>:<seq>' with monotonic seq; current status = highest seq. 'fundraiser' MUST be the full 39801 a-coordinate so cross-author references resolve. Reference implementation: src/lib/baoStatusPublish.ts (buildMilestoneStatusContent).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "fundraiser", "milestone", "seq", "status"],
+  "properties": {
+    "v": { "const": 1 },
+    "fundraiser": {
+      "type": "string",
+      "pattern": "^39801:[0-9a-f]{64}:[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "milestone": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["locked", "unlocked", "released", "refunded"] },
+    "ledgerHead": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "totalRaised": { "type": ["integer", "null"], "minimum": 0 },
+        "supporterCount": { "type": "integer", "minimum": 0 },
+        "anonymousSats": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

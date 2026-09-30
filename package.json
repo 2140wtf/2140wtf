@@ -210,7 +210,7 @@
     "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.9.0",
     "globals": "^15.9.0",
-    "jsdom": "^26.1.0",
+    "jsdom": "^30.0.1",
     "playwright": "^1.59.0",
     "postcss": "^8.4.47",
     "rollup-plugin-visualizer": "^7.0.1",

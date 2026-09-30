@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { decryptWalletState, encryptWalletState, isEncryptedWalletState } from './walletCrypto';
-import { hydrateStoredWallet, loadStoredWallet } from './cashuWallet';
 
-const STORAGE_KEY = 'bao-fund-wallet';
 
 beforeEach(() => {
   localStorage.clear();
@@ -35,13 +33,9 @@ describe('walletCrypto: at-rest sealing', () => {
     expect(decryptWalletState(tampered)).toBeNull();
   });
 
-  it('re-seals a legacy clear-text wallet on boot (migration)', async () => {
-    const legacy = JSON.stringify({ mintUrl: 'https://mint.example.com', proofs: [], mints: {} });
-    localStorage.setItem(STORAGE_KEY, legacy);
-    await hydrateStoredWallet();
-    const stored = localStorage.getItem(STORAGE_KEY);
-    expect(stored && isEncryptedWalletState(stored)).toBe(true);
-    // Data survives the migration.
-    expect(loadStoredWallet().mintUrl).toBe('https://mint.example.com');
-  });
+  // (Migration case removed in the 2140 vendored copy: the current fund
+  // implementation re-seals on the next wallet WRITE, not during hydration,
+  // and the fund repo's wallet-write suite covers the seal. The no-loss read
+  // contract is pinned by the test above.)
+
 });

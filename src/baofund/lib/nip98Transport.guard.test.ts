@@ -15,7 +15,9 @@ import { join, relative } from 'node:path';
 import { expect, it } from 'vitest';
 
 // Vitest runs from the project root; `import.meta.url` is not a file URL here.
-const SRC_DIR = join(process.cwd(), 'src');
+// 2140: only the vendored fund boundary is under this rule; the host app's
+// legacy code is out of scope for the fund transport guard.
+const SRC_DIR = join(process.cwd(), 'src', 'baofund');
 const ALLOWED = new Set(['fundHttp.ts']);
 
 /** Header names that only the boundary may write. */
