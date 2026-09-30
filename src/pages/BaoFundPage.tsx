@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/baofund/auth/useAuth";
+import { FundNetworkToggle } from "@/baofund/components/fund/FundNetworkToggle";
 import { FundingCampaignCard, type CampaignCardDraft } from "@/baofund/components/frames/FundingCampaignCard";
 import { CreateCampaignModal, type CreateMode } from "@/baofund/components/create/CreateCampaignModal";
 import { FundCampaignModal } from "@/baofund/components/fund/FundCampaignModal";
@@ -151,6 +152,7 @@ export function BaoFundPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <FundNetworkToggle />
             {feed.source === "offline" && !feed.loading && (
               <button
                 type="button"

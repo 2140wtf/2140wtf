@@ -54,6 +54,9 @@ jobs:
           # itself, which the API already trusts. Override via a repo Variable
           # if the host ever changes.
           VITE_BAO_FUND_API_URL: ${{ vars.VITE_BAO_FUND_API_URL || 'https://app.bao.network/fund-api' }}
+          # Default universe: demo (private signet, demo coins). The in-app
+          # toggle switches to testnet at runtime; both bases are compiled in.
+          VITE_BAO_FUND_NETWORK: ${{ vars.VITE_BAO_FUND_NETWORK || 'demo' }}
           # GitHub git deps serialize as ssh:// in package-lock.json; rewrite
           # to anonymous HTTPS so keyless CI can clone them.
           GIT_CONFIG_COUNT: 2

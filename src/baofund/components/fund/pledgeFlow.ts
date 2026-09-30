@@ -14,9 +14,12 @@
 import {
   contributeToFundraiser,
   contributionErrorHint,
+  sendFundraiserContribution,
   type BaoContribution,
   type BaoRail,
 } from '../../lib/baoFundraising';
+import { claimDemoSats, demoFundedRail } from '../../lib/demoFaucet';
+import { isDemoNetwork } from '../../lib/fundNetwork';
 import { errorMessage } from '../../lib/errors';
 import { BTC_TESTNET4_RAIL, TESTNET4_EXPLORER_BASE } from '../../lib/testnet4Rail';
 
@@ -109,7 +112,53 @@ export function apiRailFor(rail: BaoRail): BaoRail {
   return rail;
 }
 
+/**
+ * Demo universe: claim demo sats when short, then settle instantly with the
+ * ledger transfer (lightning first - near-instant on the demo API). No escrow
+ * artifact, no faucet URL.
+ */
+async function submitDemoPledge(deps: PledgeDeps, req: PledgeRequest): Promise<PledgeResult> {
+  const amount = Math.round(req.amountSats);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, claimed: 0, message: 'Enter a pledge amount above zero.' };
+  }
+  let claimed = 0;
+  try {
+    let funded = await demoFundedRail(deps.signer, amount);
+    if (!funded) {
+      const claim = await claimDemoSats(deps.signer, {
+        amountSats: Math.max(amount, 1_000),
+        rails: ['lightning', 'ecash', 'cashu'],
+      });
+      claimed = claim.status === 'completed' ? claim.claimedSats : 0;
+      funded = await demoFundedRail(deps.signer, amount);
+      if (!funded) {
+        const why = claim.status === 'completed'
+          ? 'Demo sats claimed, but the spendable rail is not funded yet - try again in a moment.'
+          : `Demo faucet: ${claim.message ?? claim.status}`;
+        return { ok: false, claimed, message: why };
+      }
+    }
+    const sent = await sendFundraiserContribution(deps.signer, req.fundraiserId, {
+      rail: funded.rail,
+      amountSats: amount,
+      idempotencyKey: req.idempotencyKey,
+    });
+    return {
+      ok: true,
+      claimed,
+      message: `Pledged ${amount.toLocaleString()} demo sats via Demo signet (${funded.rail})${sent.replayed ? ' (already recorded)' : ''}.`,
+    };
+  } catch (e) {
+    return { ok: false, claimed, message: errorMessage(e) };
+  }
+}
+
 export async function submitPledge(deps: PledgeDeps, req: PledgeRequest): Promise<PledgeResult> {
+  // The two universes have different settlement mechanics: demo settles
+  // instantly from demo coins; testnet requires external escrow artifacts.
+  if (isDemoNetwork()) return submitDemoPledge(deps, req);
+
   const claimed = 0;
 
   // Cashu lane: the escrowed token must equal the contribution amount, so the
