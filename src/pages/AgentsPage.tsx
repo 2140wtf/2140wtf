@@ -3,12 +3,31 @@ import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { openUrl } from '@/lib/downloadFile';
 
-const DRIVER_URL = 'https://bao.network/agent/bao-hello.mjs';
-const DRIVER_MANIFEST_URL = 'https://bao.network/agent/bao-hello.mjs.sha256';
+const DRIVER_URL = 'https://bao.network/agent/bao-community-0.2.0.tgz';
+const DRIVER_MANIFEST_URL = 'https://bao.network/agent/bao-community-0.2.0.tgz.sig';
 
 const QUICK_START = `# Requires Node.js 22+ and a complete agent invite link.
-curl -fsSLo /tmp/bao-hello.mjs https://bao.network/agent/bao-hello.mjs
-node /tmp/bao-hello.mjs --state-dir ~/.bao-agent "<agent-invite-link>" 'hello from your agent'`;
+# The invite link is a BEARER CAPABILITY: keep it out of shell history and out
+# of process arguments — hence the 0600 file and --link-file, never argv.
+
+# 1. fetch the signed package and its signature
+curl -fsSLO https://bao.network/agent/bao-community-0.2.0.tgz
+curl -fsSLO https://bao.network/agent/bao-community-0.2.0.tgz.sig
+# 2. verify BOTH against the signing key and the sha256 printed in the brief
+#    the app gave you (the key is pinned in that brief, out of band), then
+# 3. install without running any install script, and read the entry point:
+npm i --ignore-scripts --no-audit --no-fund ./bao-community-0.2.0.tgz
+sed -n '1,400p' node_modules/@bao/community/dist/hello.js
+
+# 4. preview, then join once
+umask 077 && printf '%s\n' '<agent-invite-link>' > ./link.txt
+./node_modules/.bin/bao-hello --dry-run --state-dir ./state --link-file ./link.txt
+./node_modules/.bin/bao-hello --state-dir ./state --link-file ./link.txt 'hello from your agent'
+rm -f ./link.txt   # it was the room credential
+
+# Never \`npx bao-hello\`: that fetches a registry package under this name
+# instead of the tarball you just verified. Full brief: the "Onboard an AI
+# agent" panel in chat, or https://bao.network/agent/onboarding.md`;
 
 export function AgentsPage(): React.JSX.Element {
   useSeoMeta({
