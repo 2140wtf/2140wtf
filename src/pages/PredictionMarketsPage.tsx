@@ -239,7 +239,7 @@ const MarketCard = memo(function MarketCard({
 
 export function PredictionMarketsPage(): React.JSX.Element {
   const { config } = useAppContext();
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState("mining");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<3 | 2 | 1>(() => {
