@@ -72,7 +72,7 @@ test.describe('smoke', () => {
     await expect(drawer.getByRole('link', { name: '₿AO', exact: true })).toBeVisible();
     await expect(drawer.getByRole('link', { name: '₿AO MARKETS' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Fund my ₿AO' })).toBeVisible();
-    await expect(drawer.getByRole('link', { name: 'Merchants' })).toBeVisible();
+    await expect(drawer.getByRole('link', { name: 'Shop' })).toBeVisible();
     await expect(drawer.getByRole('link', { name: 'Polls' })).toBeVisible();
 
     await page.keyboard.press('Escape');

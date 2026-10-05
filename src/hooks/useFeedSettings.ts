@@ -151,7 +151,7 @@ export function useFeedSettings() {
     }
   }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
-  // Migration: make sure Polls is visible in the sidebar right below Merchants.
+  // Migration: make sure Polls is visible in the sidebar right below Shop.
   // This only runs once for users whose saved order predates the Polls item.
   useEffect(() => {
     const order = config.sidebarOrder;

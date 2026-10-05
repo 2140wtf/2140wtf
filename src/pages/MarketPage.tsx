@@ -78,7 +78,7 @@ function merchantName(pubkey: string, authors?: Map<string, AuthorData>): string
 export function MarketPage(): React.JSX.Element {
   const { config } = useAppContext();
   useSeoMeta({
-    title: `Merchants | ${config.appName}`,
+    title: `Shop | ${config.appName}`,
     description: 'Bitcoin art and goods from Nostr NIP-99 classified listings.',
   });
 
@@ -240,7 +240,7 @@ export function MarketPage(): React.JSX.Element {
   return (
     <main>
       <PageHeader
-        title="Merchants"
+        title="Shop"
         icon={<ShoppingBag className="size-5" />}
         className="sticky top-mobile-bar sidebar:top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border"
       >

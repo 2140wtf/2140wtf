@@ -1,5 +1,5 @@
 // Verify the Listings/Auctions toggle now lives in the header row (same row
-// as the Merchants title + search box), not the toolbar row below.
+// as the Shop title + search box), not the toolbar row below.
 import { chromium } from 'playwright';
 
 const BASE = 'http://localhost:3501';
