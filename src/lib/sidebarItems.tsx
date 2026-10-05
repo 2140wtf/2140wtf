@@ -142,6 +142,8 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: MessageSquareMore,
   },
   { id: "prediction-markets", label: "₿AO MARKETS", path: "/bao/markets", icon: BarChart3 },
+  // The shop sits with the markets rows, not below the wallet.
+  { id: "market", label: "Shop", path: "/market", icon: ShoppingBag },
   { id: "bao-fund", label: "Fund my ₿AO", path: "/bao/fund", icon: HandCoins },
   { id: "polls", label: "Polls", path: "/polls", icon: BarChart3 },
   { id: "pets", label: "NOSTR PETS", path: "/pets", icon: Cat },
@@ -164,8 +166,6 @@ export const SIDEBAR_ITEMS: SidebarItemDef[] = [
     icon: WalletCards,
     requiresAuth: true,
   },
-  // Merchants placed directly below Wallet for all users by default.
-  { id: "market", label: "Merchants", path: "/market", icon: ShoppingBag },
   { id: "events", label: "Events", path: "/events", icon: CalendarDays },
   // Remaining navigation & system pages
   {

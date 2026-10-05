@@ -88,7 +88,12 @@ export function MarketPage(): React.JSX.Element {
   const [category, setCategory] = useState<ListingCategoryValue | 'all'>('all');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortValue>('newest');
-  const [columns, setColumns] = useState<1 | 2 | 3 | 4>(1);
+  // Two columns by default, one on phones — the same default the prediction
+  // markets grid uses.
+  const [columns, setColumns] = useState<1 | 2 | 3 | 4>(() => {
+    if (typeof window === "undefined") return 2;
+    return window.innerWidth < 768 ? 1 : 2;
+  });
   const [composeOpen, setComposeOpen] = useState(false);
   const [auctionOpen, setAuctionOpen] = useState(false);
   // 'listings' | 'auctions' — which feed the grid shows.
