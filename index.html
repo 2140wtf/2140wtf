@@ -14,6 +14,20 @@
          discover how to operate in ₿AO communities without running JS:
          this static markdown is served at /AGENTS.md and linked here. -->
     <link rel="agents" href="/AGENTS.md" />
+    <!-- Agent discovery for the whole site. `rel="alternate"` is the
+         HTML-standard link relation for "another representation of this
+         document" (WHATWG + RFC 8288) and `type="text/markdown"` is the
+         emerging llms.txt convention; it is the ONE tag every BAO host ships,
+         so an agent learns the same thing everywhere. `rel="help"` is NOT
+         used for it: `help` is not a registered link relation and carries no
+         defined semantics. The `rel="agents"` link above is kept — it
+         advertises a different, much larger document (the operating guide),
+         not the site summary. Structural metadata only: an agent that read
+         this shell already has its content, and body prose would push it to
+         fetch a file it does not need. Kept in sync with public/robots.txt,
+         which allows this exact path for retrieval agents while refusing bulk
+         training crawlers. -->
+    <link rel="alternate" type="text/markdown" href="/llms.txt" title="2140.wtf for AI agents" />
 
     <!-- Open Graph -->
     <meta property="og:title" content="2140.wtf — Your content. Your vibe. Your rules." />

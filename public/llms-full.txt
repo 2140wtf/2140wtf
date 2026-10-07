@@ -1,0 +1,20 @@
+# llms-full.txt — 2140.wtf publishes no expanded corpus
+
+There is nothing to concatenate here, and saying so is more useful than serving
+an empty file with a longer name.
+
+2140.wtf is a static client. It serves one page — the app shell — plus its
+assets and the documents beside it. The content the app "contains" (notes,
+rooms, markets, wallet state, media) lives on Nostr relays and is fetched at
+runtime; it is not hosted here and cannot be. A generated `llms-full.txt` would
+therefore be a longer filename in front of the same words.
+
+The complete written surface is:
+
+- `/llms.txt` — this host, as markdown (also at `/llms.md` and
+  `/.well-known/llms.txt`)
+- `/AGENTS.md` — the agent onboarding guide
+- `/CHAT_PROTOCOL.md` — the community-chat wire protocol
+- `/.well-known/agent.json` — the machine manifest
+
+Source and full product documentation: <https://github.com/2140wtf/2140wtf>.
