@@ -128,6 +128,8 @@ const AGENT_DOCS = [
   '/.well-known/agent.json',
   '/AGENTS.md',
   '/CHAT_PROTOCOL.md',
+  '/CHANGELOG.md',
+  '/manifest.webmanifest',
 ]
 
 describe('llms.txt exists and follows the llmstxt.org shape', () => {
@@ -160,6 +162,25 @@ describe('llms.txt exists and follows the llmstxt.org shape', () => {
     const full = read(publicDir, 'llms-full.txt')
     expect(full).toContain('/llms.txt')
     expect(full).toContain('no expanded corpus')
+  })
+
+  // The llmstxt.org layout an agent crawler expects: a lead section of the few
+  // links that matter most, and `Optional` last so the tail is skimmable.
+  it('leads with Start here and keeps Optional last', () => {
+    const sections = [...read(publicDir, 'llms.txt').matchAll(/^## (.+)$/gm)].map((m) => m[1])
+    expect(sections[0]).toBe('Start here')
+    expect(sections.at(-1)).toBe('Optional')
+    expect(sections.length).toBeGreaterThan(4)
+  })
+
+  // Every link was verified live (HTTP 200 with real content) before it was
+  // added. An absolute https URL is the cheap half of that promise: it cannot
+  // silently re-point at a 404 when the host or the build layout changes.
+  it('links only absolute https destinations', () => {
+    const llms = read(publicDir, 'llms.txt')
+    const links = [...llms.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1] ?? '')
+    expect(links.length).toBeGreaterThan(20)
+    for (const href of links) expect(href, href).toMatch(/^https:\/\/[a-z0-9.-]+\//)
   })
 })
 

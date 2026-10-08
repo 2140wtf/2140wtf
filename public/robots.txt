@@ -36,8 +36,9 @@ Allow: /
 
 # ── On-demand retrieval agents: the written surface only ──────────────────────
 # /AGENTS.md and /CHAT_PROTOCOL.md are the two documents an agent actually needs
-# to operate here; /.well-known/agent.json is the machine manifest. Everything
-# else on this host is the client shell.
+# to operate here; /.well-known/agent.json is the machine manifest and
+# /manifest.webmanifest is the app's installable identity. /CHANGELOG.md is the
+# shipped-change record. Everything else on this host is the client shell.
 
 # OpenAI: GPTBot is the bulk crawler; ChatGPT-User and OAI-SearchBot are
 # user-triggered retrieval. One narrow answer for all three.
@@ -49,6 +50,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: ChatGPT-User
@@ -59,6 +62,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: OAI-SearchBot
@@ -69,6 +74,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 # Anthropic: ClaudeBot is the bulk crawler, Claude-Web is the user-triggered
@@ -82,6 +89,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: Claude-Web
@@ -92,6 +101,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: anthropic-ai
@@ -102,6 +113,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: Claude-User
@@ -112,6 +125,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 User-agent: Claude-SearchBot
@@ -122,6 +137,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 # Perplexity: the index is built at user request, so retrieval is the product.
@@ -133,6 +150,8 @@ Allow: /.well-known/llms.txt$
 Allow: /.well-known/agent.json$
 Allow: /AGENTS.md$
 Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
 Disallow: /
 
 # ── Bulk training crawlers: refused outright ─────────────────────────────────
