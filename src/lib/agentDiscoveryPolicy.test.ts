@@ -202,7 +202,7 @@ describe('robots.txt — training refused, retrieval allowed', () => {
   })
 
   it.each(RETRIEVAL_AGENTS)('%s is refused the app shell and the assets', (agent) => {
-    for (const path of ['/', '/community', '/bao/markets', '/assets/app.js', '/llms.txt.bak']) {
+    for (const path of ['/', '/community', '/bao/markets', '/assets/app.js', '/AGENTS.md.bak']) {
       expect(canFetch(ROBOTS, agent, path), `${agent} ${path}`).toBe(false)
     }
   })
@@ -210,6 +210,19 @@ describe('robots.txt — training refused, retrieval allowed', () => {
   it.each(TRAINING_AGENTS)('%s is refused everywhere, llms.txt included', (agent) => {
     for (const path of ['/', '/llms.txt', '/AGENTS.md', '/CHAT_PROTOCOL.md']) {
       expect(canFetch(ROBOTS, agent, path), `${agent} ${path}`).toBe(false)
+    }
+  })
+
+  // The llms discovery paths must stay UNANCHORED: Python's
+  // `urllib.robotparser` percent-encodes `$` to `%24`, so an anchored rule
+  // never matches and the group reads as `Disallow: /` for every agent
+  // framework built on that parser. The prefix widening (`/llms.txt*`) is
+  // accepted because the origin publishes no such neighbour files. Verified
+  // live with urllib.robotparser as part of this change.
+  it('leaves the llms paths unanchored for non-conformant parsers', () => {
+    for (const path of ['/llms.txt', '/llms.md', '/llms-full.txt', '/.well-known/llms.txt']) {
+      expect(ROBOTS).toContain(`Allow: ${path}\n`)
+      expect(ROBOTS).not.toContain(`Allow: ${path}$`)
     }
   })
 
