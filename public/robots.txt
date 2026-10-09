@@ -1,2 +1,222 @@
+# robots.txt — 2140.wtf
+#
+# Two questions, two answers — the same split every BAO host now carries:
+#
+#   1. "May I copy this whole site to train a model?"        -> NO.
+#   2. "May I fetch /llms.txt because someone just asked me   -> YES.
+#       a question about 2140.wtf?"
+#
+# This host serves one page — the client shell — plus the static assets and the
+# agent documents beside it. The content people actually care about (notes,
+# rooms, markets, wallet state) lives on Nostr relays and is fetched at runtime,
+# so there is no corpus here to train on and nothing to crawl. What IS worth
+# fetching on demand is the written surface: the agent guide, the chat protocol
+# and the machine manifest. Those are allowed; the app shell is not, and is
+# never served to a retrieval agent.
+#
+# RFC 9309 §2.2.2: the LONGEST matching path wins and `Allow` beats `Disallow`
+# at equal length, so each group can end in `Disallow: /` and still hand over
+# the paths below. The `$` on each file path is load-bearing: without it a
+# robots.txt path is a PREFIX match and `Allow: /llms.txt` would also allow
+# /llms.txt.bak.
+#
+# Non-conformant parsers (Python's `urllib.robotparser` is one: first-match
+# prefix, no `$`, no longest-match) read these groups as a plain `Disallow: /`,
+# which is what they saw before this file changed.
+
+# ── Search engines: fully allowed ─────────────────────────────────────────────
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+# ── On-demand retrieval agents: the written surface only ──────────────────────
+# /AGENTS.md and /CHAT_PROTOCOL.md are the two documents an agent actually needs
+# to operate here; /.well-known/agent.json is the machine manifest and
+# /manifest.webmanifest is the app's installable identity. /CHANGELOG.md is the
+# shipped-change record. Everything else on this host is the client shell.
+
+# OpenAI: GPTBot is the bulk crawler; ChatGPT-User and OAI-SearchBot are
+# user-triggered retrieval. One narrow answer for all three.
+User-agent: GPTBot
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: ChatGPT-User
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: OAI-SearchBot
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+# Anthropic: ClaudeBot is the bulk crawler, Claude-Web is the user-triggered
+# fetcher, anthropic-ai is the legacy token, Claude-User and Claude-SearchBot
+# are pure retrieval.
+User-agent: ClaudeBot
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: Claude-Web
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: anthropic-ai
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: Claude-User
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+User-agent: Claude-SearchBot
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+# Perplexity: the index is built at user request, so retrieval is the product.
+User-agent: PerplexityBot
+Allow: /llms.txt$
+Allow: /llms.md$
+Allow: /llms-full.txt$
+Allow: /.well-known/llms.txt$
+Allow: /.well-known/agent.json$
+Allow: /AGENTS.md$
+Allow: /CHAT_PROTOCOL.md$
+Allow: /CHANGELOG.md$
+Allow: /manifest.webmanifest$
+Disallow: /
+
+# ── Bulk training crawlers: refused outright ─────────────────────────────────
+# These sweep a whole site into a corpus. No retrieval behaviour to carve out,
+# so the narrowest correct answer is the whole-surface refusal.
+
+# Common Crawl — the corpus itself.
+User-agent: CCBot
+Disallow: /
+
+# Google's AI-training opt-out token. Googlebot stays allowed above.
+User-agent: Google-Extended
+Disallow: /
+
+# ByteDance / TikTok bulk scraper.
+User-agent: Bytespider
+Disallow: /
+
+# Diffbot bulk knowledge-graph crawl.
+User-agent: Diffbot
+Disallow: /
+
+# ImagesiftBot bulk image crawl.
+User-agent: ImagesiftBot
+Disallow: /
+
+# Omgilibot and YouBot: bulk crawlers behind AI search/training products.
+User-agent: Omgilibot
+Disallow: /
+
+User-agent: YouBot
+Disallow: /
+
+# Amazonbot's family. Amazonbot-Shopping and Amazonbot-Image behave the same.
+User-agent: Amazonbot
+Disallow: /
+
+User-agent: Amazonbot-Shopping
+Disallow: /
+
+User-agent: Amazonbot-Image
+Disallow: /
+
+# Apple's training crawler. Applebot (search/photo) is a different token and is
+# deliberately not listed here.
+User-agent: Applebot-Extended
+Disallow: /
+
+# Cohere fetches only for model training.
+User-agent: cohere-ai
+Disallow: /
+
+# DUAL-USE, DELIBERATELY KEPT IN THE TRAINING GROUP (owner decision):
+# FacebookBot also drives link previews and meta-externalagent is Meta's
+# user-triggered agent fetcher, so both have a retrieval side. No retrieval
+# carve-out was requested for Meta surfaces, so they are refused wholesale.
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: meta-externalagent
+Disallow: /
+
+# ── Everything else ───────────────────────────────────────────────────────────
 User-agent: *
 Allow: /
+
+# No Sitemap line on purpose: this SPA publishes no sitemap.xml, and pointing
+# crawlers at a URL that 404s is worse than saying nothing.
