@@ -71,6 +71,44 @@ export function buildPositionTag(seconds: number): [string, string] {
   return [TIMED_COMMENT_POSITION_TAG, clamped.toFixed(1)];
 }
 
+/** A positioned comment plus the lane it should be drawn in. */
+export interface TimedCommentLayout {
+  comment: TimedComment;
+  /** Horizontal position, 0–100 (% of duration). */
+  position: number;
+  /** Vertical lane (0 = baseline). Comments that would overlap horizontally
+   *  are pushed into successive lanes so they stack instead of hiding. */
+  lane: number;
+}
+
+/**
+ * Lay out timed comments for a waveform: sorts by position and assigns each to
+ * the lowest lane whose previous marker is at least `minGapPct` away. Comments
+ * within the gap of each other therefore stack vertically, SoundCloud-style.
+ */
+export function layoutTimedComments(
+  comments: TimedComment[],
+  duration: number,
+  minGapPct = 1.6,
+  maxLanes = Number.POSITIVE_INFINITY,
+): TimedCommentLayout[] {
+  const sorted = [...comments].sort((a, b) => a.position - b.position);
+  const laneEnds: number[] = [];
+  return sorted.map((comment) => {
+    const pct = duration > 0 ? Math.min(100, Math.max(0, (comment.position / duration) * 100)) : 0;
+    let lane = laneEnds.findIndex((endPct) => pct - endPct >= minGapPct);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(pct);
+    } else {
+      laneEnds[lane] = pct;
+    }
+    // Cap the lane so a very hot track doesn't stack avatars off the surface.
+    return { comment, position: pct, lane: Math.min(lane, maxLanes - 1) };
+  });
+}
+
+
 /** Formats a playback position for display (`m:ss`). */
 export function formatCommentPosition(seconds: number): string {
   return formatTime(seconds);
