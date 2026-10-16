@@ -265,7 +265,7 @@ export function MusicTrackComposeDialog({ open, onOpenChange, track, onSuccess }
               onChange={(e) => { setAudioUrl(e.target.value); setAudioSize(null); setAudioName(e.target.value); }}
             />
             <p className="text-[11px] text-muted-foreground">
-              Files over 100 MB can't be uploaded here — host them elsewhere and paste the URL.
+              Files over 421 MB can't be uploaded here — host them elsewhere and paste the URL.
             </p>
           </div>
 

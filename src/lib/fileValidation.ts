@@ -13,8 +13,8 @@
  * limits: Blossom servers still enforce their own quotas.
  */
 
-/** Hard ceiling for any single upload through the shared hook (100 MB). */
-export const MAX_UPLOAD_SIZE = 100 * 1024 * 1024;
+/** Hard ceiling for any single upload through the shared hook (421 MB). */
+export const MAX_UPLOAD_SIZE = 421 * 1024 * 1024;
 
 /**
  * Lower ceiling for files read into data-URL previews (10 MB). Previews are
