@@ -151,6 +151,26 @@ export function useFeedSettings() {
     }
   }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
+  // Migration: keep Shop directly above Notifications in the main menu.
+  useEffect(() => {
+    const order = config.sidebarOrder;
+    if (order.length === 0) return;
+    const marketIdx = order.indexOf("market");
+    const notifIdx = order.indexOf("notifications");
+    if (marketIdx === -1 || notifIdx === -1) return;
+    if (marketIdx === notifIdx - 1) return; // already just above
+
+    const next = [...order];
+    next.splice(marketIdx, 1);
+    const notifPos = next.indexOf("notifications");
+    next.splice(notifPos, 0, "market");
+
+    updateConfig((current) => ({ ...current, sidebarOrder: next }));
+    if (user) {
+      updateSettings.mutateAsync({ sidebarOrder: next }).catch(() => {});
+    }
+  }, [config.sidebarOrder, updateConfig, updateSettings, user]);
+
   // Migration: make sure Polls is visible in the sidebar right below Shop.
   // This only runs once for users whose saved order predates the Polls item.
   useEffect(() => {
