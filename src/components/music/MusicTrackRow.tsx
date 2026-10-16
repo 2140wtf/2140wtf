@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Play, Pause, Music, MessageCircle, ArrowUpRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
@@ -49,6 +49,12 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   const [commentTime, setCommentTime] = useState<number | null>(null);
   const { user } = useCurrentUser();
   const navigate = useNavigate();
+  // Hover-to-comment timer (opens the composer after 2s over the waveform).
+  const hoverTimer = useRef<number | null>(null);
+  const hoverRatio = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
+  }, []);
   const isNowPlaying = player.currentTrack?.id === event.id;
   const peaks = useWaveformPeaks(parsed?.url, hovered || isNowPlaying);
   const isReal = isNostrId(event.id) && event.sig.length > 0;
@@ -108,6 +114,24 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     e.stopPropagation();
     if (!user || !isReal) return;
     setCommentTime(isNowPlaying ? Math.max(0, player.currentTime) : 0);
+  };
+
+  // Hovering the waveform for 2s opens the comment composer at the hovered
+  // point, so commenting is discoverable without a click.
+  const clearHoverTimer = () => {
+    if (hoverTimer.current !== null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+  };
+  const startHoverTimer = () => {
+    clearHoverTimer();
+    if (!user || !isReal || commentTime !== null) return;
+    hoverTimer.current = window.setTimeout(() => {
+      hoverTimer.current = null;
+      const total = parsed?.duration ?? 0;
+      const at = hoverRatio.current !== null && total > 0
+        ? hoverRatio.current * total
+        : (isNowPlaying ? player.currentTime : 0);
+      setCommentTime(Math.max(0, at));
+    }, 2000);
   };
 
   /** Open the track's page; start it in the global player so the mini player
@@ -185,7 +209,16 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
           {parsed.title}
         </p>
         <p className="text-xs text-muted-foreground truncate">{parsed.artist}</p>
-        <div className="relative mt-1.5" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="relative mt-1.5"
+          onClick={(e) => e.stopPropagation()}
+          onMouseEnter={startHoverTimer}
+          onMouseLeave={clearHoverTimer}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            hoverRatio.current = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+          }}
+        >
           <Waveform
             peaks={peaks}
             progress={progress}
