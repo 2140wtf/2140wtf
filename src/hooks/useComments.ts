@@ -27,8 +27,14 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
       } else if (NKinds.addressable(root.kind)) {
         const d = root.tags.find(([name]) => name === 'd')?.[1] ?? '';
         filters.push({ kinds: [1111, 1244], '#A': [`${root.kind}:${root.pubkey}:${d}`], ...limitFilter });
+        // BAO music interop (2140 Sessions / baocommunity/musicsessions):
+        // timed comments are kind 1 events that reference the track by its
+        // event id in an `e` tag (and/or the addressable coordinate in `a`).
+        filters.push({ kinds: [1], '#e': [root.id], ...limitFilter });
+        filters.push({ kinds: [1], '#a': [`${root.kind}:${root.pubkey}:${d}`], ...limitFilter });
       } else if (NKinds.replaceable(root.kind)) {
         filters.push({ kinds: [1111, 1244], '#A': [`${root.kind}:${root.pubkey}:`], ...limitFilter });
+        filters.push({ kinds: [1], '#e': [root.id], ...limitFilter });
       } else {
         // Non-kind-1 roots (e.g. polls) may receive NIP-22 kind 1111 comments
         // or NIP-10 kind 1 replies from other clients. Fetch both conventions.
@@ -89,9 +95,13 @@ export function useComments(root: NostrEvent | URL | `#${string}` | undefined, l
           return getTagValue(comment, 'i') === root.toString();
         } else if (NKinds.addressable(root.kind)) {
           const d = getTagValue(root, 'd') ?? '';
-          return getTagValue(comment, 'a') === `${root.kind}:${root.pubkey}:${d}`;
+          // NIP-22 comments use `a`; 2140 Sessions' kind 1 comments use `e`
+          // (the track event id). Accept both so the two clients share a thread.
+          return getTagValue(comment, 'a') === `${root.kind}:${root.pubkey}:${d}`
+            || getTagValue(comment, 'e') === root.id;
         } else if (NKinds.replaceable(root.kind)) {
-          return getTagValue(comment, 'a') === `${root.kind}:${root.pubkey}:`;
+          return getTagValue(comment, 'a') === `${root.kind}:${root.pubkey}:`
+            || getTagValue(comment, 'e') === root.id;
         } else {
           return getTagValue(comment, 'e') === root.id;
         }

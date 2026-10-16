@@ -2,37 +2,72 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { formatTime } from '@/lib/formatTime';
 
 /**
- * Tag that anchors a NIP-22 comment to a moment in an audio/video track,
- * SoundCloud-style. Value is a non-negative number of seconds (decimals
- * allowed), e.g. `["position", "185.4"]`.
+ * Tags that anchor a comment to a moment in an audio/video track,
+ * SoundCloud-style. Value is a non-negative number of seconds.
  *
- * There is no upstream NIP for timed comments, so this is a 2140.wtf
- * convention applied to `kind:1111` comments whose root is an audio or video
- * event. See NIP.md → "Timed comments".
+ * - `position` — 2140.wtf's NIP-22 (kind 1111) convention, decimals allowed
+ *   (`["position", "185.4"]`).
+ * - `timestamp` — the BAO music convention used by 2140 Sessions
+ *   (`baocommunity/musicsessions`): kind 1 comments carry a whole-second
+ *   `["timestamp", "185"]` alongside `e`/`p` tags. Read for ecosystem interop
+ *   and written alongside `position`.
+ *
+ * See NIP.md → "Timed comments".
  */
 export const TIMED_COMMENT_POSITION_TAG = 'position';
+export const TIMED_COMMENT_TIMESTAMP_TAG = 'timestamp';
+/** `t` value 2140 Sessions uses to mark a music comment (with no timestamp). */
+export const MUSIC_COMMENT_MARKER_TAG = 'music-comment';
 
 /** A comment anchored to a playback position. */
 export interface TimedComment {
-  /** The kind 1111 comment event. */
+  /** The kind 1111 (NIP-22) or kind 1 (Sessions) comment event. */
   event: NostrEvent;
   /** Playback position in seconds. */
   position: number;
 }
 
-/** Parses the `position` tag off a comment. Returns `undefined` when absent or invalid. */
+/**
+ * Parses a playback position off a comment. Reads `position` (2140.wtf) first,
+ * then `timestamp` (the 2140 Sessions / BAO music convention). Returns
+ * `undefined` when neither is a valid non-negative number.
+ */
 export function getCommentPosition(event: NostrEvent): number | undefined {
-  const raw = event.tags.find(([name]) => name === TIMED_COMMENT_POSITION_TAG)?.[1];
+  const raw = event.tags.find(([name]) => name === TIMED_COMMENT_POSITION_TAG)?.[1]
+    ?? event.tags.find(([name]) => name === TIMED_COMMENT_TIMESTAMP_TAG)?.[1];
   if (raw === undefined) return undefined;
   const seconds = Number.parseFloat(raw);
   if (!Number.isFinite(seconds) || seconds < 0) return undefined;
   return seconds;
 }
 
-/** Builds the extra NIP-22 tag that anchors a comment to a playback position. */
+/** True when a comment is a 2140 Sessions music comment (`timestamp` tag or `t=music-comment`). */
+export function isMusicComment(event: NostrEvent): boolean {
+  return event.tags.some(([n]) => n === TIMED_COMMENT_TIMESTAMP_TAG)
+    || event.tags.some(([n, v]) => n === 't' && v === MUSIC_COMMENT_MARKER_TAG);
+}
+
+/**
+ * Builds the extra tags that anchor a comment to a playback position.
+ *
+ * Emits both `position` (2140.wtf) and `timestamp` (2140 Sessions / BAO music)
+ * so the comment is readable by either client, plus the `t=music-comment`
+ * marker 2140 Sessions recognises.
+ */
+export function buildCommentPositionTags(seconds: number): [string, string][] {
+  const clamped = Math.max(0, seconds);
+  // `position` keeps one decimal (frame-accurate); `timestamp` is whole
+  // seconds to match what 2140 Sessions reads.
+  return [
+    [TIMED_COMMENT_POSITION_TAG, clamped.toFixed(1)],
+    [TIMED_COMMENT_TIMESTAMP_TAG, String(Math.floor(clamped))],
+    ['t', MUSIC_COMMENT_MARKER_TAG],
+  ];
+}
+
+/** Builds just the 2140.wtf `position` tag (kept for callers that only need it). */
 export function buildPositionTag(seconds: number): [string, string] {
   const clamped = Math.max(0, seconds);
-  // One decimal keeps the payload compact while staying frame-accurate enough.
   return [TIMED_COMMENT_POSITION_TAG, clamped.toFixed(1)];
 }
 

@@ -46,7 +46,8 @@ export function getCachedPeaks(url: string | undefined): number[] | undefined {
   try {
     const raw = localStorage.getItem(cacheKey(url));
     if (!raw) return undefined;
-    const parsed = raw.split(',').map(Number).filter((n) => Number.isFinite(n));
+    // Stored as 0–100 integers for a compact payload — scale back to 0..1.
+    const parsed = raw.split(',').map((s) => Number(s) / 100).filter((n) => Number.isFinite(n));
     if (parsed.length === 0) return undefined;
     MEMORY.set(url, parsed);
     return parsed;

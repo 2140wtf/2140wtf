@@ -1579,23 +1579,42 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 
 ## Timed comments (audio & video)
 
-A NIP-22 comment (kind 1111) whose root is an audio or video event MAY be
-anchored to a moment in the track by adding a `position` tag holding the
-playback offset in seconds. This gives SoundCloud-style timeline comments:
-commenter avatars are drawn at their moment on the waveform and hovering an
-avatar reveals the comment.
+A comment whose root is an audio or video event MAY be anchored to a moment in
+the track, giving SoundCloud-style timeline comments: commenter avatars are
+drawn at their moment on the waveform and hovering an avatar reveals the
+comment.
 
-**Tag:**
+Two interoperable conventions exist in the BAO ecosystem:
 
-| Tag        | Value                                                                                  |
-|------------|----------------------------------------------------------------------------------------|
-| `position` | Playback offset in seconds. May be decimal (e.g. `185.4`). MUST be non-negative.       |
+| Tag         | Convention | Value                                                                     |
+|-------------|------------|---------------------------------------------------------------------------|
+| `position`  | 2140.wtf   | Playback offset in seconds, decimals allowed (e.g. `185.4`). Non-negative. |
+| `timestamp` | 2140 Sessions (BAO music) | Playback offset in whole seconds (e.g. `185`).              |
 
-The `position` tag is additive to the standard NIP-22 root/parent tags. A
-client that does not understand it MUST still render the comment as a normal
-comment on the root event.
+**2140.wtf** writes the `position` tag on a **kind 1111** (NIP-22) comment
+(additive to the standard root/parent tags).
 
-**Example — a top-level comment on a music track (kind 36787) at 3:05:**
+**2140 Sessions** (`baocommunity/musicsessions`, the canonical BAO music app)
+writes the `timestamp` tag on a **kind 1** comment that references the track by
+its event id (`["e", "<track-id>", "", "root"]`) and author (`["p", …]`), plus
+a `["t", "music-comment"]` marker.
+
+For ecosystem interop, 2140.wtf:
+
+- **Reads both** conventions — a `position` tag first, then a `timestamp` tag —
+  on either kind 1111 or kind 1 comments, and (for addressable music tracks
+  such as kind 36787) fetches kind 1 comments by both `#e` (event id) and `#a`
+  (coordinate).
+- **Writes** the `position` tag everywhere, and additionally writes the
+  `timestamp` + `t=music-comment` tags. For a **kind 36787 music track** the
+  composer publishes a **kind 1** comment using 2140 Sessions' exact wiring
+  (`e`/`a`/`p` + `timestamp`) so the comment is readable in 2140 Sessions;
+  other roots stay NIP-22 (kind 1111).
+
+A client that does not understand the tags MUST still render the comment as a
+normal comment on the root event.
+
+**Example — 2140.wtf comment on a music track at 3:05:**
 
 ```json
 {
@@ -1608,21 +1627,37 @@ comment on the root event.
     ["a", "36787:<pubkey>:<d-tag>"],
     ["k", "36787"],
     ["p", "<pubkey>"],
-    ["position", "185.4"]
+    ["position", "185.4"],
+    ["timestamp", "185"],
+    ["t", "music-comment"]
+  ]
+}
+```
+
+**Example — 2140 Sessions comment on the same track (kind 1):**
+
+```json
+{
+  "kind": 1,
+  "content": "this drop is unreal",
+  "tags": [
+    ["e", "<track-id>", "", "root"],
+    ["p", "<track-author-pubkey>"],
+    ["timestamp", "185"]
   ]
 }
 ```
 
 **Client behavior:**
-- Comments carrying a valid `position` render as markers on the media timeline,
-  the avatar positioned at `position / duration`.
+- Comments carrying a valid `position`/`timestamp` render as markers on the
+  media timeline, the avatar positioned at `offset / duration`.
 - Clicking a marker seeks playback to that offset; hovering it shows the comment
   with Reply and Like actions.
-- The inline composer posts a comment at the current playback position, adding
-  the `position` tag, so a post's comments can be left "at a time".
-- Positions at or beyond the duration are clamped to the end when rendering.
-- Relays index `position` like any other tag; clients filter it locally because
-  there is no standard tag-presence filter.
+- The inline composer posts a comment at the current playback position, so a
+  post's comments can be left "at a time".
+- Offsets at or beyond the duration are clamped to the end when rendering.
+- Relays index the tags like any other; clients filter locally because there is
+  no standard tag-presence filter.
 
 
 ---
