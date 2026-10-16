@@ -89,46 +89,31 @@ export function MusicDiscoverTab({ onSwitchToTracks, onSwitchToPlaylists, onSwit
   const { data: sortedNewTracks, isLoading: isSortedLoading, isError: isSortedError } = useQuery<NostrEvent[]>({
     queryKey: ['discover-new-tracks', newTracksSort, newTracksScope, newTracksAuthors?.slice().sort().join(',') ?? '', selectedGenre ?? ''],
     queryFn: async ({ signal }) => {
-      if (!newTracksAuthors || newTracksAuthors.length === 0) return [];
-
-      const filter: Record<string, unknown> = {
-        kinds: [36787],
-        authors: newTracksAuthors,
-        limit: 20,
-      };
-      if (selectedGenre) {
-        filter['#t'] = [selectedGenre];
-      }
-
       const timeout = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
+      const authors = newTracksAuthors ?? [];
 
-      let events: NostrEvent[];
-      if (newTracksSort === 'new') {
-        events = await nostr.query(
-          [filter as { kinds: number[]; authors: string[]; limit: number; '#t'?: string[] }],
+      const run = async (withSearch: boolean, restrictAuthors: boolean): Promise<NostrEvent[]> => {
+        const filter: Record<string, unknown> = { kinds: [36787], limit: 20 };
+        if (selectedGenre) filter['#t'] = [selectedGenre];
+        if (restrictAuthors && authors.length > 0) filter.authors = authors;
+        if (withSearch) filter.search = `sort:${newTracksSort}`;
+        const target = withSearch ? nostr.group(APP_SEARCH_RELAYS) : nostr;
+        return target.query(
+          [filter as { kinds: number[]; authors?: string[]; search?: string; limit: number; '#t'?: string[] }],
           { signal: timeout },
         );
-      } else {
-        filter.search = `sort:${newTracksSort}`;
-        const appRelays = nostr.group(APP_SEARCH_RELAYS);
-        events = await appRelays.query(
-          [filter as { kinds: number[]; authors: string[]; search: string; limit: number; '#t'?: string[] }],
-          { signal: timeout },
-        );
+      };
 
-        // Fallback: if hot/top returned nothing, retry chronologically
-        if (events.length === 0) {
-          delete filter.search;
-          events = await nostr.query(
-            [filter as { kinds: number[]; authors: string[]; limit: number; '#t'?: string[] }],
-            { signal: timeout },
-          );
-        }
-      }
+      const valid = (events: NostrEvent[]) => events.filter((ev) => parseMusicTrack(ev) !== null).slice(0, 8);
+      const withSearch = newTracksSort !== 'new';
 
-      return events.filter((ev) => parseMusicTrack(ev) !== null).slice(0, 8);
+      // Preferred: NIP-50 hot/top (or chronological) restricted to the curated
+      // artists — then progressively relax so the section is never empty.
+      let result = valid(await run(withSearch, true));
+      if (result.length === 0) result = valid(await run(withSearch, false)); // drop the author gate
+      if (result.length === 0) result = valid(await run(false, false));      // chronological, global
+      return result;
     },
-    enabled: !!newTracksAuthors && newTracksAuthors.length > 0,
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
