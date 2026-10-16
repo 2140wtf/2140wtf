@@ -34,6 +34,7 @@ import { InteractionsModal, type InteractionTab } from '@/components/Interaction
 import { NoteCard } from '@/components/NoteCard';
 import { WaveformComments } from '@/components/WaveformComments';
 import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
+import { MusicPlaylistComposeDialog } from '@/components/music/MusicPlaylistComposeDialog';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { parseMusicTrack, parseMusicPlaylist, toAudioTrack } from '@/lib/musicHelpers';
 import { usePlaylistTracks } from '@/hooks/usePlaylistTracks';
@@ -376,6 +377,8 @@ function PlaylistDetail({ event }: { event: NostrEvent }) {
   const player = useAudioPlayer();
   const parsed = useMemo(() => parseMusicPlaylist(event), [event]);
   const [imgError, setImgError] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const { user } = useCurrentUser();
   const author = useAuthor(event.pubkey);
   const metadata = author.data?.metadata;
   const avatarShape = getAvatarShape(metadata);
@@ -506,6 +509,15 @@ function PlaylistDetail({ event }: { event: NostrEvent }) {
                 : <><Play className="size-4 ml-0.5" fill="currentColor" />Play All</>}
             </button>
           )}
+
+          {user && user.pubkey === event.pubkey && (
+            <button
+              onClick={() => setEditOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border border-border text-muted-foreground hover:bg-secondary/50 transition-colors mt-1"
+            >
+              <Pencil className="size-4" /> Edit
+            </button>
+          )}
         </div>
       </div>
 
@@ -548,6 +560,8 @@ function PlaylistDetail({ event }: { event: NostrEvent }) {
           )}
         </div>
       )}
+
+      <MusicPlaylistComposeDialog open={editOpen} onOpenChange={setEditOpen} playlist={event} />
     </main>
   );
 }
