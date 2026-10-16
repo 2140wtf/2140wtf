@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Pause, Music, ListMusic, Disc3, Zap, Clock, Calendar, Tag } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Music, ListMusic, Disc3, Zap, Clock, Calendar, Tag, Pencil } from 'lucide-react';
 import { RepostIcon } from '@/components/icons/RepostIcon';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
@@ -33,6 +33,7 @@ import { ZapDialog } from '@/components/ZapDialog';
 import { InteractionsModal, type InteractionTab } from '@/components/InteractionsModal';
 import { NoteCard } from '@/components/NoteCard';
 import { WaveformComments } from '@/components/WaveformComments';
+import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { parseMusicTrack, parseMusicPlaylist, toAudioTrack } from '@/lib/musicHelpers';
 import { usePlaylistTracks } from '@/hooks/usePlaylistTracks';
@@ -70,6 +71,7 @@ function TrackDetail({ event }: { event: NostrEvent }) {
 
   const [replyOpen, setReplyOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [interactionsTab, setInteractionsTab] = useState<InteractionTab | null>(null);
   const [imgError, setImgError] = useState(false);
 
@@ -217,6 +219,17 @@ function TrackDetail({ event }: { event: NostrEvent }) {
               </ZapDialog>
             )}
 
+            {user && user.pubkey === event.pubkey && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="size-11 rounded-full bg-secondary/50 text-muted-foreground hover:bg-secondary flex items-center justify-center transition-colors"
+                title="Edit track"
+                aria-label="Edit track"
+              >
+                <Pencil className="size-5" />
+              </button>
+            )}
+
             {/* Zap stats */}
             {zapAmount > 0 && (
               <button onClick={() => setInteractionsTab('zaps')} className="ml-1 text-right hover:opacity-80">
@@ -302,6 +315,7 @@ function TrackDetail({ event }: { event: NostrEvent }) {
       {/* Dialogs */}
       <NoteMoreMenu event={event} open={moreMenuOpen} onOpenChange={setMoreMenuOpen} />
       <ReplyComposeModal event={event} open={replyOpen} onOpenChange={setReplyOpen} />
+      <MusicTrackComposeDialog open={editOpen} onOpenChange={setEditOpen} track={event} />
       {interactionsTab && (
         <InteractionsModal
           target={event}
