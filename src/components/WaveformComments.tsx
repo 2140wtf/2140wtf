@@ -13,6 +13,7 @@ import { Waveform } from '@/components/Waveform';
 import { TimedCommentMarker, TimedCommentComposer } from '@/components/TimedCommentLayer';
 import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { isNostrId } from '@/lib/nostrId';
+import { layoutTimedComments } from '@/lib/timedComments';
 import { cn } from '@/lib/utils';
 import { useTimedComments } from '@/hooks/useTimedComments';
 import { useWaveformPeaks } from '@/hooks/useWaveformPeaks';
@@ -62,17 +63,23 @@ export function WaveformComments({
           onSeek={hasDuration ? (ratio) => onSeek(ratio * duration) : undefined}
           className={waveformClassName}
           ariaLabel="Track waveform — click to seek"
+          tilt
         >
-          {hasDuration && comments.map((comment, i) => (
-            <TimedCommentMarker
-              key={comment.event.id}
-              comment={comment}
-              duration={duration}
-              index={i}
-              onJump={onSeek}
-              onReply={setReplyTarget}
-            />
-          ))}
+          {hasDuration && (
+            <div className="absolute inset-x-0 bottom-0 h-6 mx-2 pointer-events-none">
+              {layoutTimedComments(comments, duration, 1.6, 4).map(({ comment, lane }) => (
+                <TimedCommentMarker
+                  key={comment.event.id}
+                  comment={comment}
+                  duration={duration}
+                  lane={lane}
+                  size="sm"
+                  onJump={onSeek}
+                  onReply={setReplyTarget}
+                />
+              ))}
+            </div>
+          )}
         </Waveform>
       </div>
 

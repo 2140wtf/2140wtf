@@ -11,6 +11,7 @@ import { parseMusicTrack, toAudioTrack } from '@/lib/musicHelpers';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { formatTime } from '@/lib/formatTime';
 import { isNostrId } from '@/lib/nostrId';
+import { layoutTimedComments } from '@/lib/timedComments';
 import { Waveform } from '@/components/Waveform';
 import { TimedCommentMarker } from '@/components/TimedCommentLayer';
 import { ReplyComposeModal } from '@/components/ReplyComposeModal';
@@ -155,13 +156,13 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
             ariaLabel={`${parsed.title} waveform`}
           >
             {parsed.duration && comments.length > 0 && (
-              <div className="absolute inset-x-0 bottom-0 h-6 mx-1">
-                {comments.map((comment, i) => (
+              <div className="absolute inset-x-0 bottom-0 h-6 mx-1 pointer-events-none">
+                {layoutTimedComments(comments, parsed.duration, 1.6, 3).map(({ comment, lane }) => (
                   <TimedCommentMarker
                     key={comment.event.id}
                     comment={comment}
                     duration={parsed.duration!}
-                    index={i}
+                    lane={lane}
                     size="sm"
                     onJump={seekTo}
                     onReply={setReplyTarget}

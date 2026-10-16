@@ -28,7 +28,7 @@ import { isNostrId } from '@/lib/nostrId';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
-import { formatCommentPosition, parseCommentPosition, buildCommentPositionTags, type TimedComment } from '@/lib/timedComments';
+import { formatCommentPosition, parseCommentPosition, buildCommentPositionTags, layoutTimedComments, type TimedComment } from '@/lib/timedComments';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePostComment } from '@/hooks/usePostComment';
@@ -80,12 +80,12 @@ export function TimedCommentLayer({ event, currentTime, duration, onSeek, classN
               {comments.length} timed comment{comments.length !== 1 ? 's' : ''}
             </p>
           )}
-          {hasDuration && comments.map((comment, i) => (
+          {hasDuration && layoutTimedComments(comments, duration, 1.6, 6).map(({ comment, lane }) => (
             <TimedCommentMarker
               key={comment.event.id}
               comment={comment}
               duration={duration}
-              index={i}
+              lane={lane}
               onJump={onSeek}
               onReply={setReplyTarget}
             />
@@ -110,14 +110,16 @@ export function TimedCommentLayer({ event, currentTime, duration, onSeek, classN
 export function TimedCommentMarker({
   comment,
   duration,
-  index,
+  lane = 0,
   onJump,
   onReply,
   size = 'md',
 }: {
   comment: TimedComment;
   duration: number;
-  index: number;
+  /** Vertical lane (0 = baseline); comments that overlap horizontally are
+   *  stacked into successive lanes. */
+  lane?: number;
   onJump: (seconds: number) => void;
   onReply: (event: NostrEvent) => void;
   /** Avatar size: `md` for the detail rail, `sm` for compact track rows. */
@@ -129,8 +131,7 @@ export function TimedCommentMarker({
   const displayName = getDisplayName(metadata, comment.event.pubkey);
 
   const leftPct = Math.min(100, Math.max(0, (comment.position / duration) * 100));
-  // Nudge later markers of identical position slightly so none is fully hidden.
-  const offset = (index % 3) * 3;
+  const step = size === 'sm' ? 22 : 30;
 
   return (
     <HoverCard openDelay={120} closeDelay={80}>
@@ -138,11 +139,11 @@ export function TimedCommentMarker({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onJump(comment.position); }}
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:z-50 hover:scale-110 transition-transform"
-          style={{ left: `calc(${leftPct}% + ${offset}px)` }}
+          className="group absolute rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary hover:z-50 pointer-events-auto"
+          style={{ left: `${leftPct}%`, bottom: `${lane * step}px`, transform: 'translateX(-50%)' }}
           aria-label={`Comment at ${formatCommentPosition(comment.position)} by ${displayName}`}
         >
-          <Avatar shape={avatarShape} className={cn(size === 'sm' ? 'size-5' : 'size-7', 'ring-2 ring-background shadow-sm')}>
+          <Avatar shape={avatarShape} className={cn(size === 'sm' ? 'size-5' : 'size-7', 'ring-2 ring-background shadow-sm transition-transform group-hover:scale-110')}>
             <AvatarImage src={sanitizeUrl(metadata?.picture)} alt={displayName} />
             <AvatarFallback className="bg-primary/20 text-primary text-[10px]">
               {displayName[0]?.toUpperCase() ?? '?'}

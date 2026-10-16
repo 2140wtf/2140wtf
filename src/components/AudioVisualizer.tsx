@@ -12,6 +12,7 @@ import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 import { useWaveformPeaks } from '@/hooks/useWaveformPeaks';
 import { useTimedComments } from '@/hooks/useTimedComments';
+import { layoutTimedComments } from '@/lib/timedComments';
 import { formatTime } from '@/lib/formatTime';
 
 interface AudioVisualizerProps {
@@ -306,15 +307,16 @@ export function AudioVisualizer({
           onSeek={duration > 0 ? handleWaveformSeek : undefined}
           className="absolute inset-0"
           ariaLabel="Audio waveform — click to seek"
+          tilt
         >
           {duration > 0 && comments.length > 0 && (
-            <div className="absolute inset-x-0 bottom-0 h-9 mx-2">
-              {comments.map((comment, i) => (
+            <div className="absolute inset-x-0 bottom-24 h-9 mx-2 z-40 pointer-events-none">
+              {layoutTimedComments(comments, duration, 1.6, 10).map(({ comment, lane }) => (
                 <TimedCommentMarker
                   key={comment.event.id}
                   comment={comment}
                   duration={duration}
-                  index={i}
+                  lane={lane}
                   size="sm"
                   onJump={seekTo}
                   onReply={setReplyTarget}
@@ -351,10 +353,12 @@ export function AudioVisualizer({
         </div>
       </div>
 
-      {/* Big centred play button before first play — identical to VideoPlayer */}
+      {/* Big centred play button before first play — identical to VideoPlayer.
+          z-30 keeps it below the comment markers (z-40) so their hover cards
+          work before playback too. */}
       {!hasStarted && (
         <div
-          className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/30 cursor-pointer"
           onClick={handleCanvasClick}
         >
           <div className="size-16 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
@@ -367,7 +371,7 @@ export function AudioVisualizer({
       {hasStarted && (
         <div
           className={cn(
-            'absolute bottom-0 left-0 right-0 transition-opacity duration-200',
+            'absolute z-10 bottom-0 left-0 right-0 transition-opacity duration-200',
             'bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-8 pb-2 px-3',
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none',
           )}

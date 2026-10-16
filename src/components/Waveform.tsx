@@ -5,9 +5,13 @@
  * with the same bars in the primary color clipped to the played fraction — so
  * progress updates are pure CSS with no redraw. Any children are rendered in
  * an absolutely positioned overlay (used for the timed-comment avatars).
+ *
+ * With `tilt`, the diagram gains a lightweight CSS-3D interaction: it parallax-
+ * tilts toward the pointer and can be dragged to rotate (360°), all in CSS —
+ * no 3D engine, and a drag is distinguished from a seek click.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 
 interface WaveformProps {
@@ -22,6 +26,8 @@ interface WaveformProps {
   children?: React.ReactNode;
   /** Accessible label. */
   ariaLabel?: string;
+  /** Enable the CSS-3D tilt/drag interaction. */
+  tilt?: boolean;
 }
 
 function drawBars(canvas: HTMLCanvasElement, peaks: number[] | undefined, color: string) {
@@ -57,9 +63,17 @@ function drawBars(canvas: HTMLCanvasElement, peaks: number[] | undefined, color:
   }
 }
 
-export function Waveform({ peaks, progress, onSeek, className, children, ariaLabel }: WaveformProps) {
+const DRAG_THRESHOLD = 8;
+const MAX_TILT = 16;
+
+export function Waveform({ peaks, progress, onSeek, className, children, ariaLabel, tilt = false }: WaveformProps) {
   const baseRef = useRef<HTMLCanvasElement>(null);
   const fgRef = useRef<HTMLCanvasElement>(null);
+
+  const [rot, setRot] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<{ x: number; y: number; rx: number; ry: number; moved: boolean } | null>(null);
+  const suppressClick = useRef(false);
 
   const draw = useCallback(() => {
     const base = baseRef.current;
@@ -82,18 +96,71 @@ export function Waveform({ peaks, progress, onSeek, className, children, ariaLab
   }, [draw]);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    if (suppressClick.current) { suppressClick.current = false; return; }
     if (!onSeek) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     onSeek(ratio);
   }, [onSeek]);
 
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!tilt || e.button !== 0) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, rx: rot.x, ry: rot.y, moved: false };
+    setDragging(true);
+  }, [tilt, rot.x, rot.y]);
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!tilt) return;
+    const d = drag.current;
+    if (d) {
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      d.moved = true;
+      suppressClick.current = true;
+      setRot({
+        x: Math.max(-MAX_TILT, Math.min(MAX_TILT, d.rx - dy * 0.35)),
+        y: d.ry + dx * 0.6, // free spin → 360°
+      });
+      return;
+    }
+    // Hover parallax.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    setRot({ x: -ny * MAX_TILT, y: nx * MAX_TILT });
+  }, [tilt]);
+
+  const endDrag = useCallback((e: React.PointerEvent) => {
+    if (!tilt) return;
+    if (drag.current) {
+      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    }
+    drag.current = null;
+    setDragging(false);
+    setRot({ x: 0, y: 0 });
+  }, [tilt]);
+
   const clamped = Math.max(0, Math.min(1, progress));
+  const tiltStyle: React.CSSProperties | undefined = tilt
+    ? {
+        transform: `perspective(900px) rotateX(${rot.x}deg) rotateY(${rot.y}deg)`,
+        transformStyle: 'preserve-3d',
+        transition: dragging ? 'none' : 'transform 220ms ease-out',
+        willChange: 'transform',
+      }
+    : undefined;
 
   return (
     <div
-      className={cn('relative select-none', onSeek && 'cursor-pointer', className)}
+      className={cn('relative select-none', onSeek && 'cursor-pointer', tilt && '[perspective:900px]', className)}
       onClick={onSeek ? handleClick : undefined}
+      onPointerDown={tilt ? onPointerDown : undefined}
+      onPointerMove={tilt ? onPointerMove : undefined}
+      onPointerUp={tilt ? endDrag : undefined}
+      onPointerCancel={tilt ? endDrag : undefined}
+      onPointerLeave={tilt ? endDrag : undefined}
       role={onSeek ? 'slider' : undefined}
       aria-label={ariaLabel}
       aria-valuemin={0}
@@ -101,13 +168,15 @@ export function Waveform({ peaks, progress, onSeek, className, children, ariaLab
       aria-valuenow={Math.round(clamped * 100)}
       tabIndex={onSeek ? 0 : undefined}
     >
-      <canvas ref={baseRef} className="absolute inset-0 w-full h-full" />
-      <canvas
-        ref={fgRef}
-        className="absolute inset-0 w-full h-full"
-        style={{ clipPath: `inset(0 ${(1 - clamped) * 100}% 0 0)` }}
-      />
-      {children}
+      <div className="absolute inset-0" style={tiltStyle}>
+        <canvas ref={baseRef} className="absolute inset-0 w-full h-full" />
+        <canvas
+          ref={fgRef}
+          className="absolute inset-0 w-full h-full"
+          style={{ clipPath: `inset(0 ${(1 - clamped) * 100}% 0 0)` }}
+        />
+        {children}
+      </div>
     </div>
   );
 }
