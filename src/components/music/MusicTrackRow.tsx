@@ -13,8 +13,9 @@ import { formatTime } from '@/lib/formatTime';
 import { isNostrId } from '@/lib/nostrId';
 import { layoutTimedComments } from '@/lib/timedComments';
 import { Waveform } from '@/components/Waveform';
-import { TimedCommentMarker } from '@/components/TimedCommentLayer';
+import { TimedCommentMarker, TimedCommentComposer } from '@/components/TimedCommentLayer';
 import { ReplyComposeModal } from '@/components/ReplyComposeModal';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -45,6 +46,8 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   // decoding downloads the audio, so doing it for every row up front is costly.
   const [hovered, setHovered] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | null>(null);
+  const [commentTime, setCommentTime] = useState<number | null>(null);
+  const { user } = useCurrentUser();
   const isNowPlaying = player.currentTrack?.id === event.id;
   const peaks = useWaveformPeaks(parsed?.url, hovered || isNowPlaying);
   const isReal = isNostrId(event.id) && event.sig.length > 0;
@@ -92,6 +95,8 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     const total = parsed.duration ?? 0;
     if (total <= 0) return;
     seekTo(ratio * total);
+    // Signed-in listeners can also drop a timed comment at the clicked point.
+    if (user && isReal) setCommentTime(ratio * total);
   };
 
   const progress = isNowPlaying && player.duration > 0
@@ -104,6 +109,15 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
       to={naddrPath}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      // Selecting a track starts it in the global player so playback continues
+      // seamlessly on the track's own page (the global player survives
+      // navigation); clicking the currently-playing track keeps its position.
+      onClick={() => {
+        if (isNowPlaying) return;
+        const track = toAudioTrack(event, parsed);
+        track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
+        player.playTrack(track);
+      }}
       className={cn(
         'flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer group',
         isNowPlaying ? 'bg-primary/5' : 'hover:bg-secondary/30',
@@ -179,6 +193,18 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">{dur}</span>
       )}
     </Link>
+    {commentTime !== null && (
+      <div className="border-b border-border bg-background">
+        <TimedCommentComposer
+          event={event}
+          currentTime={commentTime}
+          duration={parsed.duration ?? 0}
+          position={commentTime}
+          onClose={() => setCommentTime(null)}
+          autoFocus
+        />
+      </div>
+    )}
     {replyTarget && (
       <ReplyComposeModal
         event={replyTarget}

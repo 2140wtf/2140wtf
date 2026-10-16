@@ -14,7 +14,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Clock, Heart, RotateCcw, Send, MessageCircle } from 'lucide-react';
+import { Clock, Heart, RotateCcw, Send, MessageCircle, X } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNostr } from '@nostrify/react';
@@ -293,7 +293,25 @@ function TimedCommentLike({ event }: { event: NostrEvent }) {
  * never hidden (it used to live only in the input's placeholder, which
  * vanished as soon as the user started typing).
  */
-export function TimedCommentComposer({ event, currentTime, duration }: { event: NostrEvent; currentTime: number; duration: number }) {
+export function TimedCommentComposer({
+  event,
+  currentTime,
+  duration,
+  position: fixedPosition,
+  onClose,
+  autoFocus,
+}: {
+  event: NostrEvent;
+  currentTime: number;
+  duration: number;
+  /** Pin the composer to a fixed position (e.g. a clicked point on a waveform)
+   *  instead of following playback. */
+  position?: number;
+  /** Show a close button (for inline/popover usage). */
+  onClose?: () => void;
+  /** Focus the input on mount. */
+  autoFocus?: boolean;
+}) {
   const { user, metadata } = useCurrentUser();
   const avatarShape = getAvatarShape(metadata);
   const displayName = getDisplayName(metadata, user?.pubkey);
@@ -302,7 +320,7 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   // null = follow live playback; a number = a user-pinned position.
-  const [pinnedPosition, setPinnedPosition] = useState<number | null>(null);
+  const [pinnedPosition, setPinnedPosition] = useState<number | null>(fixedPosition ?? null);
   const [editingTime, setEditingTime] = useState(false);
   const [timeDraft, setTimeDraft] = useState('');
 
@@ -360,10 +378,11 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
       setPinnedPosition(null);
       notificationSuccess();
       queryClient.invalidateQueries({ queryKey: ['nostr', 'comments', event.id] });
+      onClose?.();
     } catch {
       // usePostComment / useNostrPublish surface their own toasts.
     }
-  }, [content, user, pending, postComment, publishEvent, event, position, queryClient]);
+  }, [content, user, pending, postComment, publishEvent, event, position, queryClient, onClose]);
 
   return (
     <div className="flex items-center gap-2 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -432,12 +451,24 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
           type="text"
           value={content}
           disabled={!user}
+          autoFocus={autoFocus && !editingTime}
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void submit(); } }}
           placeholder={user ? 'Add a comment…' : 'Sign in to comment'}
           className="flex-1 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         />
       </div>
+
+      {onClose && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          aria-label="Cancel comment"
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <X className="size-4" />
+        </button>
+      )}
 
       <button
         type="button"
