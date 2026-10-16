@@ -88,6 +88,8 @@ export function MusicTrackComposeDialog({ open, onOpenChange, track, onSuccess }
   const [audioSize, setAudioSize] = useState<number | null>(null);
   const [duration, setDuration] = useState<string>('');
   const [coverUrl, setCoverUrl] = useState('');
+  const [lyrics, setLyrics] = useState('');
+  const [syncedLyrics, setSyncedLyrics] = useState('');
   const [busy, setBusy] = useState(false);
 
   // Seed the form when opening (edit) or clear it (create).
@@ -106,10 +108,13 @@ export function MusicTrackComposeDialog({ open, onOpenChange, track, onSuccess }
       setAudioName(parsed.url ?? '');
       setDuration(parsed.duration ? String(Math.round(parsed.duration)) : '');
       setCoverUrl(parsed.artwork ?? '');
+      setLyrics(track?.tags.find(([n]) => n === 'lyrics')?.[1] ?? '');
+      setSyncedLyrics(track?.tags.find(([n]) => n === 'synced_lyrics')?.[1] ?? '');
       setAudioSize(track?.tags.find(([n]) => n === 'size')?.[1] ? Number(track.tags.find(([n]) => n === 'size')![1]) : null);
     } else {
       setTitle(''); setArtist(''); setAlbum(''); setGenres(''); setDescription('');
       setAudioUrl(''); setAudioName(''); setDuration(''); setCoverUrl(''); setAudioSize(null);
+      setLyrics(''); setSyncedLyrics('');
     }
   }, [open, parsed, track]);
 
@@ -194,6 +199,8 @@ export function MusicTrackComposeDialog({ open, onOpenChange, track, onSuccess }
     const dur = Number.parseInt(duration, 10);
     if (Number.isFinite(dur) && dur > 0) tags.push(['duration', String(dur)]);
     if (audioSize && audioSize > 0) tags.push(['size', String(audioSize)]);
+    if (lyrics.trim()) tags.push(['lyrics', lyrics.trim()]);
+    if (syncedLyrics.trim()) tags.push(['synced_lyrics', syncedLyrics.trim()]);
     for (const g of new Set(genreList)) tags.push(['t', g]);
     tags.push(['alt', `Song: ${title.trim()}${artist.trim() ? ` - ${artist.trim()}` : ''}`]);
 
@@ -312,6 +319,26 @@ export function MusicTrackComposeDialog({ open, onOpenChange, track, onSuccess }
               onChange={(e) => { void handleCoverFile(e.target.files?.[0]); e.target.value = ''; }}
             />
             <Input placeholder="https://…/cover.jpg" value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mt-lyrics">Lyrics</Label>
+            <Textarea id="mt-lyrics" value={lyrics} onChange={(e) => setLyrics(e.target.value)} rows={4} placeholder="Plain lyrics…" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="mt-synced">Synced lyrics (LRC, optional)</Label>
+            <Textarea
+              id="mt-synced"
+              value={syncedLyrics}
+              onChange={(e) => setSyncedLyrics(e.target.value)}
+              rows={4}
+              placeholder={'[00:12.00] first line\n[00:18.50] next line'}
+              className="font-mono text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Timed lines highlight in sync on the track page.
+            </p>
           </div>
 
           <div className="space-y-1.5">
