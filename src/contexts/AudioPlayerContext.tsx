@@ -22,6 +22,18 @@ function isHlsUrl(url: string): boolean {
   return /\.m3u8(\?|$)/i.test(url);
 }
 
+/** Seek to `track.startTime` once the media element can accept a seek. */
+function applyStartTime(media: HTMLMediaElement, track: AudioTrack): void {
+  const start = track.startTime;
+  if (!start || start <= 0) return;
+  const apply = () => {
+    try { media.currentTime = start; } catch { /* ignore */ }
+    media.removeEventListener('loadedmetadata', apply);
+  };
+  if (media.readyState >= HTMLMediaElement.HAVE_METADATA) apply();
+  else media.addEventListener('loadedmetadata', apply, { once: true });
+}
+
 function logPlayError(err: unknown): void {
   if (err instanceof Error && err.name !== 'AbortError') {
     console.error('[AudioPlayer] playback failed:', err.name, err.message);
@@ -57,6 +69,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(currentTrack.url)) {
       media.src = currentTrack.url;
     }
+    applyStartTime(media, currentTrack);
     media.play().catch(logPlayError);
     pendingPlayRef.current = null;
   }, [currentTrack]);
@@ -72,6 +85,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     if (!isHlsUrl(track.url)) {
       media.src = track.url;
     }
+    applyStartTime(media, track);
     media.play().catch(logPlayError);
   }, []);
 

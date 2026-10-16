@@ -20,6 +20,8 @@ export interface AudioTrack {
   path?: string;
   /** Media type. Defaults to audio for backward compatibility. */
   type?: 'audio' | 'video';
+  /** Optional start position (seconds) applied once the media's metadata loads. */
+  startTime?: number;
 }
 
 /** Alias for non-audio consumers. */

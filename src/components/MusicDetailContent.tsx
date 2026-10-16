@@ -110,8 +110,7 @@ function TrackDetail({ event }: { event: NostrEvent }) {
     if (isNowPlaying) {
       player.seek(seconds);
     } else {
-      player.playTrack(toAudioTrack(event, parsed));
-      window.setTimeout(() => player.seek(seconds), 350);
+      player.playTrack({ ...toAudioTrack(event, parsed), startTime: seconds });
     }
   };
 
