@@ -124,6 +124,61 @@ function getFileExtension(filename: string): string {
 }
 
 /**
+ * Probe a media file for a video track by loading its metadata. Returns `true`
+ * when it has a real video track (dimensions > 0), `false` when it is
+ * audio-only, and `true` on any failure (assume video so behaviour is
+ * unchanged when probing isn't possible).
+ */
+async function mediaHasVideoTrack(file: File): Promise<boolean> {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  const objectUrl = URL.createObjectURL(file);
+  video.src = objectUrl;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const done = () => resolve();
+      video.onloadedmetadata = done;
+      video.onerror = () => reject(new Error('load failed'));
+      // Some containers report dimensions only after the first frame.
+      window.setTimeout(done, 4000);
+    });
+    return video.videoWidth > 0 && video.videoHeight > 0;
+  } catch {
+    return true;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
+ * Pick an audio MIME type for a file whose bytes are an audio-only media
+ * container. The container family is taken from the reported type first
+ * (a `video/mp4` container that carries only audio is still an MP4), then from
+ * the filename extension.
+ */
+function audioTypeFor(file: File): string {
+  const t = file.type.toLowerCase();
+  if (t === 'video/webm') return 'audio/webm';
+  if (t === 'video/ogg') return 'audio/ogg';
+  if (t.startsWith('video/')) return 'audio/mp4';
+  switch (getFileExtension(file.name)) {
+    case '.mp3': return 'audio/mpeg';
+    case '.wav': return 'audio/wav';
+    case '.ogg':
+    case '.oga': return 'audio/ogg';
+    case '.flac': return 'audio/flac';
+    case '.m4a':
+    case '.m4b':
+    case '.mp4': return 'audio/mp4';
+    case '.aac': return 'audio/aac';
+    case '.opus': return 'audio/opus';
+    default: return 'audio/mp4';
+  }
+}
+
+/**
  * Strip metadata from an image or video file when possible.
  * Falls back to the original file for unsupported formats/browsers.
  */
@@ -133,6 +188,14 @@ export async function stripFileMetadata(file: File): Promise<File> {
       return await stripImageMetadata(file);
     }
     if (file.type.startsWith('video/')) {
+      // Audio-only files are frequently reported as `video/mp4` by the OS /
+      // browser (any `.mp4` / `.m4a` container). Probe for a video track: when
+      // there is none, retype it as audio so the app uploads and renders it as
+      // audio (waveform) instead of a blank video player — and so it is never
+      // re-encoded by the video metadata stripper.
+      if (!(await mediaHasVideoTrack(file))) {
+        return new File([file], file.name, { type: audioTypeFor(file), lastModified: file.lastModified });
+      }
       return await stripVideoMetadata(file);
     }
   } catch (err) {
