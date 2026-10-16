@@ -151,19 +151,21 @@ export function useFeedSettings() {
     }
   }, [config.sidebarOrder, updateConfig, updateSettings, user]);
 
-  // Migration: keep Shop directly above Notifications in the main menu.
+  // Migration: keep Shop and Media directly above Notifications in the main
+  // menu (order: Shop, Media, Notifications).
   useEffect(() => {
     const order = config.sidebarOrder;
     if (order.length === 0) return;
     const marketIdx = order.indexOf("market");
+    const mediaIdx = order.indexOf("media");
     const notifIdx = order.indexOf("notifications");
-    if (marketIdx === -1 || notifIdx === -1) return;
-    if (marketIdx === notifIdx - 1) return; // already just above
+    if (marketIdx === -1 || mediaIdx === -1 || notifIdx === -1) return;
+    if (marketIdx === notifIdx - 2 && mediaIdx === notifIdx - 1) return; // already arranged
 
-    const next = [...order];
-    next.splice(marketIdx, 1);
+    const next = order.filter((id) => id !== "market" && id !== "media");
     const notifPos = next.indexOf("notifications");
-    next.splice(notifPos, 0, "market");
+    next.splice(notifPos, 0, "media");
+    next.splice(next.indexOf("media"), 0, "market");
 
     updateConfig((current) => ({ ...current, sidebarOrder: next }));
     if (user) {
