@@ -28,7 +28,7 @@ import { isNostrId } from '@/lib/nostrId';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import { timeAgo } from '@/lib/timeAgo';
-import { formatCommentPosition, parseCommentPosition, buildPositionTag, type TimedComment } from '@/lib/timedComments';
+import { formatCommentPosition, parseCommentPosition, buildCommentPositionTags, type TimedComment } from '@/lib/timedComments';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePostComment } from '@/hooks/usePostComment';
@@ -297,6 +297,7 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
   const avatarShape = getAvatarShape(metadata);
   const displayName = getDisplayName(metadata, user?.pubkey);
   const { mutateAsync: postComment, isPending } = usePostComment();
+  const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
   // null = follow live playback; a number = a user-pinned position.
@@ -307,6 +308,7 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
   const livePosition = useMemo(() => Math.max(0, currentTime), [currentTime]);
   const following = pinnedPosition === null;
   const position = pinnedPosition ?? livePosition;
+  const pending = isPending || isPublishing;
   const clamp = useCallback(
     (seconds: number) => (duration > 0 && Number.isFinite(duration) ? Math.min(seconds, duration) : seconds),
     [duration],
@@ -330,21 +332,37 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
 
   const submit = useCallback(async () => {
     const text = content.trim();
-    if (!text || !user || isPending) return;
+    if (!text || !user || pending) return;
     try {
-      await postComment({
-        root: event,
-        content: text,
-        tags: [buildPositionTag(position)],
-      });
+      const positionTags = buildCommentPositionTags(position);
+      if (event.kind === 36787) {
+        // BAO music convention (2140 Sessions / baocommunity/musicsessions):
+        // a kind 1 comment referencing the track by `e` (event id) and `a`
+        // (address), with a `timestamp` tag. Publishing kind 1 here is what
+        // makes the comment readable by 2140 Sessions; the `position` tag
+        // keeps 2140.wtf's own reader working.
+        const d = event.tags.find(([n]) => n === 'd')?.[1] ?? '';
+        await publishEvent({
+          kind: 1,
+          content: text,
+          tags: [
+            ['e', event.id, '', 'root'],
+            ['a', `${event.kind}:${event.pubkey}:${d}`],
+            ['p', event.pubkey],
+            ...positionTags,
+          ],
+        });
+      } else {
+        await postComment({ root: event, content: text, tags: positionTags });
+      }
       setContent('');
       setPinnedPosition(null);
       notificationSuccess();
       queryClient.invalidateQueries({ queryKey: ['nostr', 'comments', event.id] });
     } catch {
-      // usePostComment surfaces its own toast on failure/disabled publishing.
+      // usePostComment / useNostrPublish surface their own toasts.
     }
-  }, [content, user, isPending, postComment, event, position, queryClient]);
+  }, [content, user, pending, postComment, publishEvent, event, position, queryClient]);
 
   return (
     <div className="flex items-center gap-2 px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
@@ -423,7 +441,7 @@ export function TimedCommentComposer({ event, currentTime, duration }: { event: 
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); void submit(); }}
-        disabled={!user || !content.trim() || isPending}
+        disabled={!user || !content.trim() || pending}
         aria-label="Post timed comment"
         className={cn(
           'shrink-0 size-8 rounded-full flex items-center justify-center transition-colors',
