@@ -211,16 +211,6 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     };
   }, [currentIndex, playlist]);
 
-  // beforeunload warning when playing
-  useEffect(() => {
-    if (!currentTrack) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [currentTrack]);
-
   const playTrack = useCallback((track: AudioTrack) => {
     setCurrentTrack(track);
     setPlaylist([]);
