@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Play, Pause, Music } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Play, Pause, Music, MessageCircle, ArrowUpRight } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
@@ -48,6 +48,7 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   const [replyTarget, setReplyTarget] = useState<NostrEvent | null>(null);
   const [commentTime, setCommentTime] = useState<number | null>(null);
   const { user } = useCurrentUser();
+  const navigate = useNavigate();
   const isNowPlaying = player.currentTrack?.id === event.id;
   const peaks = useWaveformPeaks(parsed?.url, hovered || isNowPlaying);
   const isReal = isNostrId(event.id) && event.sig.length > 0;
@@ -98,6 +99,28 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     seekTo(ratio * total);
     // Signed-in listeners can also drop a timed comment at the clicked point.
     if (user && isReal) setCommentTime(ratio * total);
+  };
+
+  /** Open the inline timed-comment composer (at the playback position if this
+   *  track is playing, else at 0 — the composer's time chip is editable). */
+  const openComment = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user || !isReal) return;
+    setCommentTime(isNowPlaying ? Math.max(0, player.currentTime) : 0);
+  };
+
+  /** Open the track's page; start it in the global player so the mini player
+   *  keeps playing across the navigation. */
+  const openTrack = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isNowPlaying) {
+      const track = toAudioTrack(event, parsed);
+      track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
+      player.playTrack(track);
+    }
+    navigate(naddrPath);
   };
 
   const progress = isNowPlaying && player.duration > 0
@@ -162,7 +185,7 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
           {parsed.title}
         </p>
         <p className="text-xs text-muted-foreground truncate">{parsed.artist}</p>
-        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="relative mt-1.5" onClick={(e) => e.stopPropagation()}>
           <Waveform
             peaks={peaks}
             progress={progress}
@@ -186,13 +209,45 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
               </div>
             )}
           </Waveform>
+          {user && isReal && (
+            <button
+              type="button"
+              onClick={openComment}
+              title="Comment at a time"
+              aria-label="Comment at a time"
+              className="absolute bottom-0.5 right-0 inline-flex items-center gap-1 rounded-full bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm ring-1 ring-border hover:text-foreground hover:bg-background transition-colors"
+            >
+              <MessageCircle className="size-3" />
+              comment
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Duration */}
-      {dur && (
-        <span className="text-xs text-muted-foreground tabular-nums shrink-0">{dur}</span>
-      )}
+      {/* Actions: comment-at-time + open track (playback continues), + duration */}
+      <div className="flex items-center gap-1 shrink-0">
+        {user && isReal && (
+          <button
+            onClick={openComment}
+            title="Comment at a time"
+            aria-label="Comment at a time"
+            className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            <MessageCircle className="size-4" />
+          </button>
+        )}
+        <button
+          onClick={openTrack}
+          title="Open track page"
+          aria-label="Open track page"
+          className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+        >
+          <ArrowUpRight className="size-4" />
+        </button>
+        {dur && (
+          <span className="text-xs text-muted-foreground tabular-nums">{dur}</span>
+        )}
+      </div>
     </Link>
     {commentTime !== null && (
       <div className="border-b border-border bg-background">
