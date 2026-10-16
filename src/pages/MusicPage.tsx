@@ -15,11 +15,12 @@ import { MusicDiscoverTab } from '@/components/music/MusicDiscoverTab';
 import { MusicTracksTab } from '@/components/music/MusicTracksTab';
 import { MusicPlaylistsTab } from '@/components/music/MusicPlaylistsTab';
 import { MusicArtistsTab } from '@/components/music/MusicArtistsTab';
+import { MusicLibraryTab } from '@/components/music/MusicLibraryTab';
 import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
 
 const musicDef = getExtraKindDef('music')!;
 
-type MusicTab = 'discover' | 'tracks' | 'playlists' | 'artists';
+type MusicTab = 'discover' | 'library' | 'tracks' | 'playlists' | 'artists';
 
 /**
  * Dedicated music discovery page.
@@ -67,6 +68,7 @@ export function MusicPage() {
       {/* Tabs */}
       <SubHeaderBar>
         <TabButton label="Discover" active={activeTab === 'discover'} onClick={() => setActiveTab('discover')} />
+        <TabButton label="Library" active={activeTab === 'library'} onClick={() => setActiveTab('library')} />
         <TabButton label="Tracks" active={activeTab === 'tracks'} onClick={() => setActiveTab('tracks')} />
         <TabButton label="Playlists" active={activeTab === 'playlists'} onClick={() => setActiveTab('playlists')} />
         <TabButton label="Artists" active={activeTab === 'artists'} onClick={() => setActiveTab('artists')} />
@@ -82,6 +84,7 @@ export function MusicPage() {
         />
       )}
       {activeTab === 'tracks' && <MusicTracksTab />}
+      {activeTab === 'library' && <MusicLibraryTab />}
       {activeTab === 'playlists' && <MusicPlaylistsTab />}
       {activeTab === 'artists' && <MusicArtistsTab />}
 
