@@ -15,16 +15,27 @@ interface ContentCTACardProps {
   icon?: React.ReactNode;
   /** Extra classes on the outer container. */
   className?: string;
+  /** Primary button label. Defaults to "Learn More". */
+  primaryLabel?: string;
+  /**
+   * Primary action. When provided, the primary button runs this instead of
+   * opening the external-apps dialog; the dialog is then offered as a
+   * secondary "More apps" button.
+   */
+  onPrimary?: () => void;
+  /** Label for the secondary (external apps) button when `onPrimary` is set. */
+  secondaryLabel?: string;
 }
 
 /**
  * Call-to-action card for content discovery pages.
- * Displays a gradient card with icon, title, subtitle, and a "Learn More" button
- * that opens the KindInfoButton dialog showing external apps for this content type.
  *
- * Used at the bottom of music, podcast, and other discovery tabs.
+ * By default the "Learn More" button opens the KindInfoButton dialog listing
+ * external apps for this content type. Callers can pass `onPrimary` to make the
+ * card lead with their OWN in-app feature (e.g. the music uploader) while
+ * keeping the external apps behind a secondary button.
  */
-export function ContentCTACard({ kindDef, title, subtitle, icon, className }: ContentCTACardProps) {
+export function ContentCTACard({ kindDef, title, subtitle, icon, className, primaryLabel, onPrimary, secondaryLabel = 'More apps' }: ContentCTACardProps) {
   const [infoOpen, setInfoOpen] = useState(false);
 
   return (
@@ -36,12 +47,22 @@ export function ContentCTACard({ kindDef, title, subtitle, icon, className }: Co
           </div>
           <h3 className="text-lg font-bold mt-3">{title}</h3>
           <p className="text-sm text-muted-foreground mt-2 max-w-xs mx-auto">{subtitle}</p>
-          <button
-            onClick={() => setInfoOpen(true)}
-            className="mt-4 px-6 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            Learn More
-          </button>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={() => (onPrimary ? onPrimary() : setInfoOpen(true))}
+              className="px-6 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              {primaryLabel ?? 'Learn More'}
+            </button>
+            {onPrimary && (
+              <button
+                onClick={() => setInfoOpen(true)}
+                className="px-4 py-2 rounded-full border border-border text-sm font-medium text-muted-foreground hover:bg-secondary/50 transition-colors"
+              >
+                {secondaryLabel}
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {/* Hidden KindInfoButton that we control programmatically */}

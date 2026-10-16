@@ -22,6 +22,7 @@ import { MusicHeroCard, MusicHeroCardSkeleton } from './MusicHeroCard';
 import { MusicTrackCard, MusicTrackCardSkeleton } from './MusicTrackCard';
 import { MusicTrackRow, MusicTrackRowSkeleton } from './MusicTrackRow';
 import { MusicPlaylistCard, MusicPlaylistCardSkeleton } from './MusicPlaylistCard';
+import { MusicTrackComposeDialog } from './MusicTrackComposeDialog';
 
 const musicDef = getExtraKindDef('music')!;
 
@@ -57,6 +58,7 @@ export function MusicDiscoverTab({ onSwitchToTracks, onSwitchToPlaylists, onSwit
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [newTracksSort, setNewTracksSort] = useState<MusicSort>('hot');
   const [newTracksScope, setNewTracksScope] = useState<MusicScope>('global');
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   // Curated artist list (from curator's kind 30000 Listr list)
   const { data: curatedPubkeys } = useCuratedMusicArtists();
@@ -290,8 +292,13 @@ export function MusicDiscoverTab({ onSwitchToTracks, onSwitchToPlaylists, onSwit
           title="Share Your Music on Nostr"
           subtitle="Upload tracks and reach a global audience. Earn sats directly from fans."
           icon={<Music className="size-10" />}
+          primaryLabel="Upload track"
+          onPrimary={() => setUploadOpen(true)}
+          secondaryLabel="Other music apps"
         />
       </div>
+
+      <MusicTrackComposeDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   );
 }

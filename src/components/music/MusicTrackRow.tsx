@@ -85,8 +85,9 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     } else {
       const track = toAudioTrack(event, parsed);
       track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
-      player.playTrack(track);
-      window.setTimeout(() => player.seek(target), 350);
+      // Play from the clicked point: the player applies startTime once the
+      // media metadata loads (a fixed timeout raced the load and played from 0).
+      player.playTrack({ ...track, startTime: target });
     }
   };
 

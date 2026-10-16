@@ -17,6 +17,7 @@ import { MusicPlaylistsTab } from '@/components/music/MusicPlaylistsTab';
 import { MusicArtistsTab } from '@/components/music/MusicArtistsTab';
 import { MusicLibraryTab } from '@/components/music/MusicLibraryTab';
 import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
+import { MusicMiniPlayer } from '@/components/music/MusicMiniPlayer';
 
 const musicDef = getExtraKindDef('music')!;
 
@@ -89,6 +90,7 @@ export function MusicPage() {
       {activeTab === 'artists' && <MusicArtistsTab />}
 
       <MusicTrackComposeDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <MusicMiniPlayer />
     </main>
   );
 }
