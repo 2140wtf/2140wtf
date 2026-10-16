@@ -1574,6 +1574,18 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 - Track ordering follows the order of `a` tags in the event
 - The same detail view, playback, and commenting features apply to both albums and playlists
 
+### Lyrics (convention)
+
+A kind 36787 track MAY carry lyrics as tags (there is no upstream NIP):
+
+| Tag             | Value                                                        |
+|-----------------|--------------------------------------------------------------|
+| `lyrics`        | Plain lyrics text (newlines allowed)                         |
+| `synced_lyrics` | Time-synced lyrics in LRC format (`[mm:ss.xx] line` per row) |
+
+A client that understands `synced_lyrics` highlights the active line in time
+with playback. Clients with no lyrics support ignore the tags.
+
 
 ---
 

@@ -33,6 +33,7 @@ import { ZapDialog } from '@/components/ZapDialog';
 import { InteractionsModal, type InteractionTab } from '@/components/InteractionsModal';
 import { NoteCard } from '@/components/NoteCard';
 import { WaveformComments } from '@/components/WaveformComments';
+import { TrackLyrics } from '@/components/music/TrackLyrics';
 import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
 import { MusicPlaylistComposeDialog } from '@/components/music/MusicPlaylistComposeDialog';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
@@ -259,6 +260,12 @@ function TrackDetail({ event }: { event: NostrEvent }) {
       <div className="px-4 mt-3 text-xs text-muted-foreground">
         {formatFullDate(event.created_at)}
       </div>
+
+      <TrackLyrics
+        event={event}
+        currentTime={isNowPlaying ? player.currentTime : 0}
+        isPlaying={isNowPlaying && player.isPlaying}
+      />
 
       {/* SoundCloud-style waveform with timed comments at each moment */}
       {parsed?.url && (
