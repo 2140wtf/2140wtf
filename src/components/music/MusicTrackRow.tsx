@@ -5,9 +5,15 @@ import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useWaveformPeaks } from '@/hooks/useWaveformPeaks';
+import { useTimedComments } from '@/hooks/useTimedComments';
 import { parseMusicTrack, toAudioTrack } from '@/lib/musicHelpers';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { formatTime } from '@/lib/formatTime';
+import { isNostrId } from '@/lib/nostrId';
+import { Waveform } from '@/components/Waveform';
+import { TimedCommentMarker } from '@/components/TimedCommentLayer';
+import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -34,6 +40,14 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   const parsed = useMemo(() => parseMusicTrack(event), [event]);
   const author = useAuthor(event.pubkey);
   const [imgError, setImgError] = useState(false);
+  // Decode the waveform only when the row is hovered or is the current track —
+  // decoding downloads the audio, so doing it for every row up front is costly.
+  const [hovered, setHovered] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<NostrEvent | null>(null);
+  const isNowPlaying = player.currentTrack?.id === event.id;
+  const peaks = useWaveformPeaks(parsed?.url, hovered || isNowPlaying);
+  const isReal = isNostrId(event.id) && event.sig.length > 0;
+  const { comments } = useTimedComments(isReal ? event : undefined);
 
   const naddrPath = useMemo(() => {
     const d = event.tags.find(([n]) => n === 'd')?.[1] ?? '';
@@ -42,7 +56,6 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
 
   if (!parsed) return null;
 
-  const isNowPlaying = player.currentTrack?.id === event.id;
   const dur = parsed.duration ? formatTime(parsed.duration) : undefined;
 
   const handlePlay = (e: React.MouseEvent) => {
@@ -59,9 +72,37 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     }
   };
 
+  /** Start the track (if needed) and seek to an absolute position in seconds. */
+  const seekTo = (seconds: number) => {
+    const total = parsed.duration ?? 0;
+    const target = total > 0 ? Math.min(seconds, total) : seconds;
+    if (isNowPlaying) {
+      player.seek(target);
+    } else {
+      const track = toAudioTrack(event, parsed);
+      track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
+      player.playTrack(track);
+      window.setTimeout(() => player.seek(target), 350);
+    }
+  };
+
+  /** Clicking the waveform starts the track (if needed) and seeks to the point. */
+  const handleWaveformSeek = (ratio: number) => {
+    const total = parsed.duration ?? 0;
+    if (total <= 0) return;
+    seekTo(ratio * total);
+  };
+
+  const progress = isNowPlaying && player.duration > 0
+    ? Math.max(0, Math.min(1, player.currentTime / player.duration))
+    : 0;
+
   return (
+    <>
     <Link
       to={naddrPath}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className={cn(
         'flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer group',
         isNowPlaying ? 'bg-primary/5' : 'hover:bg-secondary/30',
@@ -96,7 +137,7 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
         )}
       </div>
 
-      {/* Info */}
+      {/* Info + waveform diagram with commenter avatars */}
       <div className="flex-1 min-w-0">
         <p className={cn(
           'text-sm font-medium truncate',
@@ -105,6 +146,31 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
           {parsed.title}
         </p>
         <p className="text-xs text-muted-foreground truncate">{parsed.artist}</p>
+        <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+          <Waveform
+            peaks={peaks}
+            progress={progress}
+            onSeek={parsed.duration ? handleWaveformSeek : undefined}
+            className="h-9"
+            ariaLabel={`${parsed.title} waveform`}
+          >
+            {parsed.duration && comments.length > 0 && (
+              <div className="absolute inset-x-0 bottom-0 h-6 mx-1">
+                {comments.map((comment, i) => (
+                  <TimedCommentMarker
+                    key={comment.event.id}
+                    comment={comment}
+                    duration={parsed.duration!}
+                    index={i}
+                    size="sm"
+                    onJump={seekTo}
+                    onReply={setReplyTarget}
+                  />
+                ))}
+              </div>
+            )}
+          </Waveform>
+        </div>
       </div>
 
       {/* Duration */}
@@ -112,6 +178,14 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">{dur}</span>
       )}
     </Link>
+    {replyTarget && (
+      <ReplyComposeModal
+        event={replyTarget}
+        open
+        onOpenChange={(open) => { if (!open) setReplyTarget(null); }}
+      />
+    )}
+    </>
   );
 }
 

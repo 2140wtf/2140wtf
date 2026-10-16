@@ -32,6 +32,7 @@ import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import { ZapDialog } from '@/components/ZapDialog';
 import { InteractionsModal, type InteractionTab } from '@/components/InteractionsModal';
 import { NoteCard } from '@/components/NoteCard';
+import { WaveformComments } from '@/components/WaveformComments';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { parseMusicTrack, parseMusicPlaylist, toAudioTrack } from '@/lib/musicHelpers';
 import { usePlaylistTracks } from '@/hooks/usePlaylistTracks';
@@ -93,6 +94,21 @@ function TrackDetail({ event }: { event: NostrEvent }) {
       player.resume();
     } else {
       player.playTrack(toAudioTrack(event, parsed));
+    }
+  };
+
+  /**
+   * Seek the global player to a timed-comment position. Starts this track
+   * first when it isn't already the current one, then applies the seek once
+   * the media element has had a moment to accept a new source.
+   */
+  const handleTimedSeek = (seconds: number) => {
+    if (!parsed) return;
+    if (isNowPlaying) {
+      player.seek(seconds);
+    } else {
+      player.playTrack(toAudioTrack(event, parsed));
+      window.setTimeout(() => player.seek(seconds), 350);
     }
   };
 
@@ -230,6 +246,21 @@ function TrackDetail({ event }: { event: NostrEvent }) {
       <div className="px-4 mt-3 text-xs text-muted-foreground">
         {formatFullDate(event.created_at)}
       </div>
+
+      {/* SoundCloud-style waveform with timed comments at each moment */}
+      {parsed?.url && (
+        <div className="mx-4 mt-4 rounded-2xl border border-border overflow-hidden">
+          <WaveformComments
+            event={event}
+            src={parsed.url}
+            duration={parsed.duration ?? player.duration}
+            currentTime={isNowPlaying ? player.currentTime : 0}
+            onSeek={handleTimedSeek}
+            waveformClassName="h-16"
+            className="border-t-0"
+          />
+        </div>
+      )}
 
       {/* Interactions tabs */}
       <div className="flex border-b border-border mt-4">

@@ -1724,7 +1724,7 @@ function VideoContent({ event }: { event: NostrEvent }) {
     <div className="mt-2 space-y-2">
       {title && <p className="font-semibold text-[15px]">{title}</p>}
       <div className="relative rounded-xl overflow-hidden bg-muted">
-        <VideoPlayer src={url} poster={thumbnail} title={title ?? undefined} />
+        <VideoPlayer src={url} poster={thumbnail} title={title ?? undefined} event={event} />
         {formattedDuration && (
           <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded font-medium pointer-events-none">
             {formattedDuration}

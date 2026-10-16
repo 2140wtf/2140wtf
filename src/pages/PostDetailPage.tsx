@@ -968,6 +968,7 @@ function VideoDetailContent({ event }: { event: NostrEvent }) {
           dim={imeta.dim}
           blurhash={imeta.blurhash}
           title={title ?? undefined}
+          event={event}
         />
       )}
       {title && (
