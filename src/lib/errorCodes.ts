@@ -47,7 +47,7 @@ const MESSAGES: Record<string, { message: string; hint?: string }> = {
   },
   UPLOAD_005: {
     message: "That file is too large to upload.",
-    hint: "Choose a file of 100 MB or smaller, or compress it first.",
+    hint: "Choose a file of 421 MB or smaller, or compress it first.",
   },
   UPLOAD_006: {
     message: "That file is empty, so there was nothing to upload.",
