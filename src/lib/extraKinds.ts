@@ -218,7 +218,7 @@ export const EXTRA_KINDS: ExtraKindDef[] = [
     route: 'music',
     addressable: true,
     section: 'media',
-    blurb: 'Discover and listen to music tracks and playlists shared on Nostr. Upload music and create playlists from a dedicated music app.',
+    blurb: 'Discover, listen to and upload music tracks, and browse playlists shared on Nostr.',
     sites: [{ url: 'https://nodecast.xyz' }, { url: 'https://zaptrax.app', name: 'ZapTrax' }, { url: 'https://sunami.app', name: 'Sunami' }],
     subKinds: [
       {

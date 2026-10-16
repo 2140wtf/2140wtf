@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Music } from 'lucide-react';
+import { Music, Upload } from 'lucide-react';
 import { useSeoMeta } from '@unhead/react';
 import { KindInfoButton } from '@/components/KindInfoButton';
 import { PageHeader } from '@/components/PageHeader';
@@ -15,6 +15,7 @@ import { MusicDiscoverTab } from '@/components/music/MusicDiscoverTab';
 import { MusicTracksTab } from '@/components/music/MusicTracksTab';
 import { MusicPlaylistsTab } from '@/components/music/MusicPlaylistsTab';
 import { MusicArtistsTab } from '@/components/music/MusicArtistsTab';
+import { MusicTrackComposeDialog } from '@/components/music/MusicTrackComposeDialog';
 
 const musicDef = getExtraKindDef('music')!;
 
@@ -36,6 +37,7 @@ export function MusicPage() {
   const { config } = useAppContext();
   const { user } = useCurrentUser();
   const [activeTab, setActiveTab] = useState<MusicTab>('discover');
+  const [uploadOpen, setUploadOpen] = useState(false);
 
   useSeoMeta({
     title: `Music | ${config.appName}`,
@@ -52,6 +54,14 @@ export function MusicPage() {
     <main className="flex-1 min-w-0">
       <PageHeader title="Music" icon={sidebarItemIcon('music', 'size-5')}>
         <KindInfoButton kindDef={musicDef} icon={<Music className="size-5" />} />
+        {user && (
+          <button
+            onClick={() => setUploadOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Upload className="size-4" /> Upload
+          </button>
+        )}
       </PageHeader>
 
       {/* Tabs */}
@@ -74,6 +84,8 @@ export function MusicPage() {
       {activeTab === 'tracks' && <MusicTracksTab />}
       {activeTab === 'playlists' && <MusicPlaylistsTab />}
       {activeTab === 'artists' && <MusicArtistsTab />}
+
+      <MusicTrackComposeDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </main>
   );
 }
