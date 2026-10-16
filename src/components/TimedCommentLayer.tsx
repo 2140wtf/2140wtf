@@ -12,7 +12,7 @@
  * audio/video post), so players used in chat/profile contexts are unaffected.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Heart, RotateCcw, Send, MessageCircle, X } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -332,6 +332,12 @@ export function TimedCommentComposer({
     (seconds: number) => (duration > 0 && Number.isFinite(duration) ? Math.min(seconds, duration) : seconds),
     [duration],
   );
+
+  // Keep the pinned time in sync when the host passes a new clicked position
+  // (e.g. the user clicks a different point on the same row waveform).
+  useEffect(() => {
+    if (fixedPosition != null) setPinnedPosition(clamp(fixedPosition));
+  }, [fixedPosition, clamp]);
 
   const beginEditTime = useCallback(() => {
     setTimeDraft(formatCommentPosition(position));
