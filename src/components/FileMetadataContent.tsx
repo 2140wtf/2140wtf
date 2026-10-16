@@ -66,6 +66,7 @@ function AudioFileContent({
         avatarUrl={metadata?.picture}
         avatarFallback={displayName[0]?.toUpperCase() ?? '?'}
         avatarShape={getAvatarShape(metadata)}
+        event={event}
       />
       {description && <DescriptionCard text={description} />}
     </div>
@@ -117,7 +118,7 @@ export function FileMetadataContent({ event, compact }: FileMetadataContentProps
   if (mime.startsWith('video/')) {
     return (
       <div className="mt-3">
-        <VideoPlayer src={url} poster={thumb} dim={dim} blurhash={blurhash} title={altText} />
+        <VideoPlayer src={url} poster={thumb} dim={dim} blurhash={blurhash} title={altText} event={event} />
         {description && !compact && <DescriptionCard text={description} />}
       </div>
     );

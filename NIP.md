@@ -1577,6 +1577,56 @@ Albums are represented as kind 34139 playlist events with a `["t", "album"]` tag
 
 ---
 
+## Timed comments (audio & video)
+
+A NIP-22 comment (kind 1111) whose root is an audio or video event MAY be
+anchored to a moment in the track by adding a `position` tag holding the
+playback offset in seconds. This gives SoundCloud-style timeline comments:
+commenter avatars are drawn at their moment on the waveform and hovering an
+avatar reveals the comment.
+
+**Tag:**
+
+| Tag        | Value                                                                                  |
+|------------|----------------------------------------------------------------------------------------|
+| `position` | Playback offset in seconds. May be decimal (e.g. `185.4`). MUST be non-negative.       |
+
+The `position` tag is additive to the standard NIP-22 root/parent tags. A
+client that does not understand it MUST still render the comment as a normal
+comment on the root event.
+
+**Example — a top-level comment on a music track (kind 36787) at 3:05:**
+
+```json
+{
+  "kind": 1111,
+  "content": "this drop is unreal",
+  "tags": [
+    ["A", "36787:<pubkey>:<d-tag>"],
+    ["K", "36787"],
+    ["P", "<pubkey>"],
+    ["a", "36787:<pubkey>:<d-tag>"],
+    ["k", "36787"],
+    ["p", "<pubkey>"],
+    ["position", "185.4"]
+  ]
+}
+```
+
+**Client behavior:**
+- Comments carrying a valid `position` render as markers on the media timeline,
+  the avatar positioned at `position / duration`.
+- Clicking a marker seeks playback to that offset; hovering it shows the comment
+  with Reply and Like actions.
+- The inline composer posts a comment at the current playback position, adding
+  the `position` tag, so a post's comments can be left "at a time".
+- Positions at or beyond the duration are clamped to the end when rendering.
+- Relays index `position` like any other tag; clients filter it locally because
+  there is no standard tag-presence filter.
+
+
+---
+
 ## ₿AO Court / Juror Mode
 
 2140.wtf implements a browser-based **₿AO Court** jury system for ₿AO prediction-market disputes. Jurors register candidacy, are selected deterministically from a Bitcoin block hash, run a Pedersen distributed key generation (DKG) ceremony, commit/reveal votes, and produce a FROST threshold-signed dispute override attestation.

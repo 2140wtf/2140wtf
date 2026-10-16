@@ -1,10 +1,17 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume1, Volume2, VolumeX } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Waveform } from '@/components/Waveform';
+import { TimedCommentMarker, TimedCommentComposer } from '@/components/TimedCommentLayer';
+import { ReplyComposeModal } from '@/components/ReplyComposeModal';
 import type { AvatarShape } from '@/lib/avatarShape';
+import { isNostrId } from '@/lib/nostrId';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
+import { useWaveformPeaks } from '@/hooks/useWaveformPeaks';
+import { useTimedComments } from '@/hooks/useTimedComments';
 import { formatTime } from '@/lib/formatTime';
 
 interface AudioVisualizerProps {
@@ -17,6 +24,12 @@ interface AudioVisualizerProps {
   /** Avatar mask shape, forwarded from the author's profile metadata */
   avatarShape?: AvatarShape;
   className?: string;
+  /**
+   * When set, enables SoundCloud-style timed comments anchored to this audio
+   * post: commenter avatars are drawn along the timeline and a composer posts
+   * comments at the current playback position.
+   */
+  event?: NostrEvent;
 }
 
 
@@ -32,6 +45,7 @@ export function AudioVisualizer({
   avatarFallback = '?',
   avatarShape,
   className,
+  event,
 }: AudioVisualizerProps) {
   const safeSrc = sanitizeUrl(src) ?? '';
   const safeAvatarUrl = sanitizeUrl(avatarUrl) ?? undefined;
@@ -48,6 +62,28 @@ export function AudioVisualizer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<NostrEvent | null>(null);
+
+  // Only a real relay event can carry timed comments.
+  const isReal = !!event && isNostrId(event.id) && event.sig.length > 0;
+
+  // Decode the waveform once the player scrolls into view (decoding downloads
+  // the audio, so offscreen players don't pay for it).
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setInView(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) { setInView(true); io.disconnect(); }
+      }
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const peaks = useWaveformPeaks(safeSrc || undefined, inView && !!safeSrc);
+  const { comments } = useTimedComments(isReal ? event : undefined);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -193,6 +229,19 @@ export function AudioVisualizer({
     audio.currentTime = ratio * duration;
   };
 
+  /** Seek the audio element to an absolute position in seconds. */
+  const seekTo = useCallback((seconds: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    ensureAudioContext();
+    audio.currentTime = Math.max(0, seconds);
+  }, [ensureAudioContext]);
+
+  /** Clicking the waveform seeks to the clicked fraction. */
+  const handleWaveformSeek = useCallback((ratio: number) => {
+    if (duration > 0) seekTo(ratio * duration);
+  }, [duration, seekTo]);
+
   const handleCanvasClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasStarted) {
@@ -235,29 +284,53 @@ export function AudioVisualizer({
   }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'relative mt-3 rounded-2xl overflow-hidden border border-border bg-background group',
-        className,
-      )}
-      style={{ aspectRatio: '16 / 9' }}
-      onMouseMove={revealControls}
-      onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className={cn('mt-3 rounded-2xl overflow-hidden border border-border bg-background', className)}>
+      <div
+        ref={containerRef}
+        className="relative group w-full aspect-video"
+        onMouseMove={revealControls}
+        onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Hidden audio element */}
       <audio ref={audioRef} preload="metadata" crossOrigin="anonymous" className="hidden">
         {mime ? <source src={safeSrc} type={mime} /> : <source src={safeSrc} />}
       </audio>
 
-      {/* Sinewave canvas — fills the entire box */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-        onClick={handleCanvasClick}
-        style={{ cursor: 'pointer' }}
-      />
+      {/* Waveform diagram (SoundCloud-style) when peaks are ready, else the
+          animated sinewave placeholder. */}
+      {peaks ? (
+        <Waveform
+          peaks={peaks}
+          progress={duration > 0 ? currentTime / duration : 0}
+          onSeek={duration > 0 ? handleWaveformSeek : undefined}
+          className="absolute inset-0"
+          ariaLabel="Audio waveform — click to seek"
+        >
+          {duration > 0 && comments.length > 0 && (
+            <div className="absolute inset-x-0 bottom-0 h-9 mx-2">
+              {comments.map((comment, i) => (
+                <TimedCommentMarker
+                  key={comment.event.id}
+                  comment={comment}
+                  duration={duration}
+                  index={i}
+                  size="sm"
+                  onJump={seekTo}
+                  onReply={setReplyTarget}
+                />
+              ))}
+            </div>
+          )}
+        </Waveform>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+          onClick={handleCanvasClick}
+          style={{ cursor: 'pointer' }}
+        />
+      )}
 
       {/* Avatar — centred over the canvas */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -360,6 +433,18 @@ export function AudioVisualizer({
 
             <div className="flex-1" />
           </div>
+        </div>
+      )}
+      </div>
+
+      {isReal && event && (
+        <div className="border-t border-border bg-background">
+          <TimedCommentComposer event={event} currentTime={currentTime} duration={duration} />
+          <ReplyComposeModal
+            event={replyTarget ?? undefined}
+            open={!!replyTarget}
+            onOpenChange={(open) => { if (!open) setReplyTarget(null); }}
+          />
         </div>
       )}
     </div>

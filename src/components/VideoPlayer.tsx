@@ -1,6 +1,7 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 
 import { Play, Pause, Volume1, Volume2, VolumeX, Expand, PictureInPicture2 } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { Blurhash } from 'react-blurhash';
 import { cn } from '@/lib/utils';
 import { isValidBlurhash } from '@/lib/blurhash';
@@ -13,6 +14,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useAudioPlayer } from '@/contexts/audioPlayerContextDef';
 import { formatTime } from '@/lib/formatTime';
 import { BLANK_POSTER } from '@/lib/blankPoster';
+import { TimedCommentLayer } from '@/components/TimedCommentLayer';
 
 interface VideoPlayerProps {
   src: string;
@@ -32,6 +34,12 @@ interface VideoPlayerProps {
   startTime?: number;
   /** Optional unique identifier for the video track (used for background playback). */
   trackId?: string;
+  /**
+   * When set, enables SoundCloud-style timed comments anchored to this video
+   * post: commenter avatars are drawn along the timeline and a composer posts
+   * comments at the current playback position.
+   */
+  event?: NostrEvent;
 }
 
 /** Parses a NIP-94 `dim` string like "1280x720" into `{ width, height }`. */
@@ -43,7 +51,7 @@ function parseDim(dim: string | undefined): { width: number; height: number } | 
 }
 
 
-export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, autoPlay, startTime, trackId }: VideoPlayerProps) {
+export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, autoPlay, startTime, trackId, event }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const startTimeApplied = useRef(false);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -235,6 +243,13 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     video.currentTime = ratio * duration;
   };
 
+  /** Seek the video element to an absolute position in seconds. */
+  const seekTo = useCallback((seconds: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = Math.max(0, seconds);
+  }, []);
+
   const handleVideoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasStarted) {
@@ -247,17 +262,15 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
   };
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        'relative mt-3 rounded-2xl overflow-hidden border border-border bg-black group',
-        className,
-      )}
-      style={{ aspectRatio }}
-      onMouseMove={revealControls}
-      onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className={cn('mt-3 rounded-2xl overflow-hidden border border-border bg-black', className)}>
+      <div
+        ref={containerRef}
+        className="relative group w-full"
+        style={{ aspectRatio }}
+        onMouseMove={revealControls}
+        onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Blurhash placeholder — shown until a thumbnail or playback frame appears */}
       {isValidBlurhash(blurhash) && !hasStarted && !(generatedPoster && posterLoaded) && (
         <Blurhash
@@ -444,6 +457,16 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
             </button>
           </div>
         </div>
+      )}
+      </div>
+
+      {event && (
+        <TimedCommentLayer
+          event={event}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={seekTo}
+        />
       )}
     </div>
   );

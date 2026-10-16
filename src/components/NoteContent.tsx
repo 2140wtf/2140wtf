@@ -763,6 +763,7 @@ export function NoteContent({
                   avatarUrl={authorMetadata?.picture}
                   avatarFallback={authorDisplayName[0]?.toUpperCase() ?? '?'}
                   avatarShape={getAvatarShape(authorMetadata)}
+                  event={event}
                 />
               );
             }
@@ -775,6 +776,7 @@ export function NoteContent({
                 dim={imeta?.dim}
                 blurhash={imeta?.blurhash}
                 artist={authorDisplayName}
+                event={event}
               />
             );
           }
