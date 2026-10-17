@@ -73,15 +73,15 @@ jobs:
           GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
           GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
 
+      # npm 10 ignores --omit/--production here: every invocation reported the
+      # full lockfile, so this job failed on dev-only build tooling (tailwindcss
+      # 3 -> chokidar/micromatch -> braces, which has no patched release) while
+      # claiming to audit production. The script filters by the lockfile's own
+      # production reachability, fails on production findings, and still prints
+      # every dev-only finding instead of hiding it.
       - name: Audit production dependencies
         shell: bash
-        run: |
-          set +e
-          npm audit --omit=dev --audit-level=high --json > audit-results.json
-          STATUS=$?
-          set -e
-          node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('audit-results.json','utf8')); const v=data.metadata?.vulnerabilities ?? {}; fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Dependency Audit\\n\\n- Critical: '+(v.critical ?? 0)+'\\n- High: '+(v.high ?? 0)+'\\n- Moderate: '+(v.moderate ?? 0)+'\\n');"
-          exit "$STATUS"
+        run: node scripts/audit-production.mjs --level=high
 
       - name: Upload dependency audit
         if: always()
