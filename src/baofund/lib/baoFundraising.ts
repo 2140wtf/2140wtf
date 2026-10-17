@@ -46,9 +46,12 @@ export interface BaoFundraiser {
   stream_vested_sats?: number;
   stream_claimable_sats?: number;
   /**
-   * Set when the campaign was created relay-first: the id of the ingested
-   * kind-38003 intent event. Clients poll the list endpoint for their intent
-   * id to learn the campaign id.
+   * The campaign's published Nostr discovery-card event id, when one has been
+   * attached. The API mints the campaign; the card is signed by the OWNER's
+   * key and published to the fund relay, then reported back via
+   * `attachCampaignCard`. `null` means the card has not been attached yet
+   * (not that publishing failed), so treat it as "no relay-native provenance
+   * recorded" rather than an error.
    */
   nostr_event_id?: string | null;
   /** Campaign discussion room link - withheld from non-contributors on
@@ -293,6 +296,27 @@ export async function createFundraiser(
     signer,
   });
   return res.data;
+}
+
+/**
+ * Attach the published kind-39801 discovery card's event id to the campaign
+ * (owner only). The Fund API mints the campaign row but cannot sign the
+ * owner's discovery card, so it cannot know the card id: the publisher must
+ * report it. Until this runs, the campaign response carries
+ * `nostr_event_id: null` - which is exactly why the field must be populated
+ * rather than left as a mysterious always-null. Idempotent; a relay
+ * republish (new replaceable card) re-points the row.
+ */
+export async function attachCampaignCard(
+  signer: SignerLike,
+  fundraiserId: string,
+  eventId: string,
+): Promise<BaoFundraiser> {
+  const res = await fundFetch<{ data: { fundraiser: BaoFundraiser } }>(
+    `/v1/fundraisers/${encodeURIComponent(fundraiserId)}/discovery-card`,
+    { method: 'POST', body: { event_id: eventId }, signer },
+  );
+  return res.data.fundraiser;
 }
 
 /** Historical shared-bridge intent kind; no creation publisher remains here. */

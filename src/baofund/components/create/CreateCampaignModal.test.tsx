@@ -62,6 +62,12 @@ async function submit() {
   });
 }
 
+async function tickTestnetAck() {
+  await act(async () => {
+    container.querySelector<HTMLInputElement>('[data-testid=testnet-ack]')?.click();
+  });
+}
+
 it('refuses to silently drop a milestone row that has content but no amount', async () => {
   await render();
   await act(async () => {
@@ -80,7 +86,7 @@ it('locks the discussion room on and explains every gate', async () => {
   expect(room.checked).toBe(true);
   expect(room.disabled).toBe(true);
   const gate = container.querySelector<HTMLSelectElement>('[data-testid=discussion-room-gate]')!;
-  expect(Array.from(gate.options).map((o) => o.value)).toEqual(['open', 'invite', 'follows', 'donors']);
+  expect(Array.from(gate.options).map((o) => o.value)).toEqual(['open', 'invite', 'follows', 'donors', 'earned']);
   const help = () => container.querySelector('[data-testid=discussion-room-help]')!.textContent ?? '';
   expect(help()).toMatch(/anyone/i);
   await act(async () => {
@@ -98,6 +104,33 @@ it('locks the discussion room on and explains every gate', async () => {
     gate.dispatchEvent(new Event('change', { bubbles: true }));
   });
   expect(help()).toMatch(/not live yet/i);
+  await act(async () => {
+    gate.value = 'earned';
+    gate.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  expect(help()).toMatch(/necessary but not sufficient/i);
+  expect(help()).toMatch(/credential issued for THIS campaign/i);
+  expect(help()).toMatch(/not live yet/i);
+});
+
+it('sends the earned gate through the creation call path', async () => {
+  await render();
+  const gate = container.querySelector<HTMLSelectElement>('[data-testid=discussion-room-gate]')!;
+  await act(async () => {
+    gate.value = 'earned';
+    gate.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => {
+    setValue(container.querySelectorAll<HTMLInputElement>('input')[0], 'Earned room campaign');
+    setValue(container.querySelector<HTMLTextAreaElement>('textarea')!, 'This is a long enough campaign description to pass the server-side rule.');
+  });
+  await tickTestnetAck();
+  await submit();
+  const body = mocks.create.mock.calls[0][1] as { discussion_room: { enabled: boolean; gate: string } };
+  expect(body.discussion_room).toEqual({ enabled: true, gate: 'earned' });
+  const room = container.querySelector<HTMLInputElement>('[data-testid=discussion-room-enabled]')!;
+  expect(room.checked).toBe(true);
+  expect(room.disabled).toBe(true);
 });
 
 it('shows both testnet rails as visible radios and sends the chosen one', async () => {
@@ -113,6 +146,7 @@ it('shows both testnet rails as visible radios and sends the chosen one', async 
     setValue(container.querySelectorAll<HTMLInputElement>('input')[0], 'Liquid rail campaign');
     setValue(container.querySelector<HTMLTextAreaElement>('textarea')!, 'This is a long enough campaign description to pass the server-side rule.');
   });
+  await tickTestnetAck();
   await submit();
   const body = mocks.create.mock.calls[0][1] as {
     settlement_rail: string;
@@ -128,11 +162,27 @@ it('still creates from the description when every milestone row is completely em
     setValue(container.querySelectorAll<HTMLInputElement>('input')[0], 'A single-milestone campaign');
     setValue(container.querySelector<HTMLTextAreaElement>('textarea')!, 'This is a long enough campaign description to pass the server-side rule.');
   });
+  await tickTestnetAck();
   await submit();
   expect(mocks.create).toHaveBeenCalledTimes(1);
   const body = mocks.create.mock.calls[0][1] as { runner_type: string; milestones: Array<{ amount_sats: number; description: string }> };
-  expect(body.runner_type).toBe('human');
+  expect(body.runner_type).toBe('agent');
   expect(body.milestones).toHaveLength(1);
   expect(body.milestones[0].amount_sats).toBe(21400);
   expect(onDone).toHaveBeenCalled();
+});
+
+it('refuses a testnet campaign until the no-value acknowledgement is ticked', async () => {
+  await render();
+  await act(async () => {
+    setValue(container.querySelectorAll<HTMLInputElement>('input')[0], 'Unacknowledged testnet campaign');
+    setValue(container.querySelector<HTMLTextAreaElement>('textarea')!, 'This is a long enough campaign description to pass the server-side rule.');
+  });
+  expect(container.querySelector('[data-testid=testnet-ack]')).toBeTruthy();
+  await submit();
+  expect(mocks.create).not.toHaveBeenCalled();
+  expect(container.textContent).toMatch(/acknowledge|no monetary value/i);
+  await tickTestnetAck();
+  await submit();
+  expect(mocks.create).toHaveBeenCalledTimes(1);
 });
