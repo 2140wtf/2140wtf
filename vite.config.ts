@@ -377,11 +377,6 @@ export default defineConfig(({ mode }) => {
       // stack through the browser-safe wrapper over the vendored UMD dist.
       "blake3-bao/dist/blake3-bao.min.js": path.resolve(__dirname, "./node_modules/blake3-bao/dist/blake3-bao.min.js"),
       "blake3-bao": path.resolve(__dirname, "./src/baofund/lib/evidence/blake3BaoBrowser.ts"),
-      // kokoro-js (HD voice, lazily imported by the chat) statically imports
-      // `fs/promises` for its Node-only voice-file branch. The polyfill plugin
-      // maps `fs` to a file mock, so the subpath becomes `empty.js/promises`
-      // and the build fails. An empty module keeps the browser branch taken.
-      "fs/promises": path.resolve(__dirname, "./src/lib/nodeEmptyStub.ts"),
     },
     dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },

@@ -22,12 +22,6 @@ const fund = vi.hoisted(() => ({
   fetch: vi.fn(async (_path: string, _opts?: unknown) => ({ data: { admin: false } })),
 }));
 
-const hd = vi.hoisted(() => ({
-  speakHd: vi.fn(async () => true),
-  stopHd: vi.fn(),
-  setEnabled: vi.fn(),
-}));
-
 vi.mock('../lib/fundHttp', () => ({
   fundFetch: (...args: unknown[]) => fund.fetch(args[0] as string, args[1]),
 }));
@@ -82,13 +76,6 @@ vi.mock('./ChatContext', () => ({
     roleGrants: () => new Map(),
     roomFounder: () => null,
   }),
-}));
-
-vi.mock('./hdVoice', () => ({
-  hdVoiceEnabled: () => false,
-  setHdVoiceEnabled: hd.setEnabled,
-  speakHd: hd.speakHd,
-  stopHd: hd.stopHd,
 }));
 
 import { ChatPanel } from './ChatPanel';

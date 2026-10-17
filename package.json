@@ -146,7 +146,6 @@
     "idb": "^8.0.3",
     "input-otp": "^1.2.4",
     "jsqr": "^1.4.0",
-    "kokoro-js": "^1.2.1",
     "leaflet": "1.9.4",
     "leaflet.markercluster": "^1.5.3",
     "light-bolt11-decoder": "^3.2.0",

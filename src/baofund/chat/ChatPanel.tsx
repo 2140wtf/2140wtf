@@ -1,9 +1,8 @@
 import React from 'react';
-import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Trash2, Reply, RotateCcw, AtSign, HardDrive, Loader2, Settings, UserPlus, Ban, Maximize2, Minimize2, LogOut, Info, HandCoins, Volume2, Square, AudioWaveform, KeyRound } from 'lucide-react';
+import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Trash2, Reply, RotateCcw, AtSign, HardDrive, Loader2, Settings, UserPlus, Ban, Maximize2, Minimize2, LogOut, Info, HandCoins, Volume2, Square, KeyRound } from 'lucide-react';
 import { useChatContext, type ChatItem } from './ChatContext';
 import { agentShareText, fetchAgentHelloSha, sanitizeRoomName } from './agentPrompt';
 import { speechSupported, sanitizeForSpeech, speakText, stopSpeech, speechVoiceCount, primeSpeechVoices } from './messageSpeech';
-import { hdVoiceEnabled, setHdVoiceEnabled, speakHd, stopHd } from './hdVoice';
 import { useIsChatAdmin } from './useIsChatAdmin';
 import { fundFetch } from '../lib/fundHttp';
 import { isAuthorBanned as isAuthorBannedByIdentity } from './memberIdentity';
@@ -229,8 +228,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   const [speakingId, setSpeakingId] = React.useState<string | null>(null);
   /** Honest feedback when the device simply has no TTS engine. */
   const [speechHint, setSpeechHint] = React.useState<string | null>(null);
-  /** HD voice: on-device neural TTS (Kokoro) instead of the system voice. */
-  const [hdVoice, setHdVoice] = React.useState(() => hdVoiceEnabled());
+
   /** Operator action feedback (voice kick results). */
   const [voiceActionHint, setVoiceActionHint] = React.useState<string | null>(null);
   // Rekey is immediate + disruptive (rotates the call keys), so gate it behind
@@ -453,39 +451,21 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     return () => synth?.removeEventListener?.('voiceschanged', onVoices);
   }, []);
 
-  // Local TTS (phase-2 groundwork): read a message aloud / stop. One at a
-  // time; leaving the room or unmounting stops playback. System voice by
-  // default; HD voice (on-device Kokoro) when enabled - it works even on
-  // devices whose system voice is missing or robotic.
+  // Local TTS: read a message aloud / stop. One at a time; leaving the room or
+  // unmounting stops playback. The on-device HD voice (Kokoro) upstream path is
+  // withheld here: kokoro-js pulls @huggingface/transformers -> sharp /
+  // onnxruntime-node with high-severity advisories that have no fix, and this
+  // repo gates on `npm audit --audit-level=high`. System voice only.
   const toggleSpeak = (msg: ChatItem) => {
     if (speakingId === msg.id) {
       stopSpeech();
-      stopHd();
       setSpeakingId(null);
       return;
     }
     const text = sanitizeForSpeech(msg.text);
-    if (hdVoice) {
-      setSpeakingId(msg.id);
-      void speakHd(text, {
-        onStatus: (status) => setSpeechHint(status === '' ? null : status),
-        onEnd: () => setSpeakingId((cur) => (cur === msg.id ? null : cur)),
-      }).then((ok) => {
-        if (ok) return;
-        setSpeechHint('HD voice unavailable here - using the system voice.');
-        if (speakText(text, () => {
-          setSpeakingId((cur) => (cur === msg.id ? null : cur));
-        })) {
-          setSpeakingId(msg.id);
-        } else {
-          setSpeakingId(null);
-        }
-      });
-      return;
-    }
     if (speechVoiceCount() === 0) {
       // Still attempt (Chrome may populate voices late), but say the truth.
-      setSpeechHint('No system voices found on this device - enable HD voice in the chat header, or on Linux install espeak-ng and restart the browser.');
+      setSpeechHint('No system voices found on this device - on Linux install espeak-ng and restart the browser.');
     } else {
       setSpeechHint(null);
     }
@@ -499,12 +479,10 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   React.useEffect(() => {
     // Room switch: stop playback (state clears via the utterance onend).
     stopSpeech();
-    stopHd();
   }, [selectedRoom?.roomId]);
 
   React.useEffect(() => () => {
     stopSpeech();
-    stopHd();
   }, []);
 
   // Voice moderation (owner decision 2026-10-11: the ROOM CREATOR — or a BAO
@@ -889,31 +867,6 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
                     <Trash2 size={12} />
                   </button>
                 )}
-                {/* HD voice toggle (phase-2): on-device neural TTS (Kokoro)
-                    for the read-aloud buttons - modern voice even where the
-                    system voice is missing or robotic (e.g. Linux eSpeak).
-                    First use downloads the model once (~90 MB, cached). */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !hdVoice;
-                    setHdVoice(next);
-                    setHdVoiceEnabled(next);
-                    if (!next) {
-                      stopHd();
-                      setSpeechHint(null);
-                    }
-                  }}
-                  className="text-[10px]"
-                  style={{ color: hdVoice ? 'var(--np-accent)' : 'var(--np-muted)' }}
-                  title={hdVoice
-                    ? 'HD voice is ON (on-device neural TTS) - click for the system voice'
-                    : 'Use HD voice (on-device neural TTS; first use downloads ~90 MB, then works offline)'}
-                  aria-pressed={hdVoice}
-                  aria-label="Toggle HD voice"
-                >
-                  <AudioWaveform size={12} />
-                </button>
                 {/* Fullscreen toggle on EVERY surface (owner rule 2026-09-21:
                     all chats have the same features) - embedded included. */}
                 <button onClick={() => setFullscreen((v) => !v)} className="text-[10px]" style={{ color: fullscreen ? 'var(--np-accent)' : 'var(--np-muted)' }} title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen chat'} aria-label="Toggle fullscreen chat">
@@ -1162,7 +1115,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
                           </div>
                         </>
                       )}
-                      {(speechSupported() || hdVoice) && (
+                      {speechSupported() && (
                         <button
                           type="button"
                           onClick={() => toggleSpeak(msg)}
