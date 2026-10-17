@@ -270,7 +270,7 @@ export interface CreateFundraiserInput {
   /** BAO Community: optional encrypted discussion room for the campaign
    *  (provisioned by the operator API - rule 8; the fund never touches
    *  chat correctness). */
-  discussion_room?: { enabled: boolean; gate?: 'open' | 'invite' | 'follows' | 'donors' };
+  discussion_room?: { enabled: boolean; gate?: 'open' | 'invite' | 'follows' | 'donors' | 'earned' };
   /** Stream format: vesting window in unix seconds (required iff format='stream'). */
   stream_start_at?: number;
   stream_end_at?: number;

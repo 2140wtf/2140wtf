@@ -16,12 +16,14 @@
  * Deep links from the fund page: `{ defaultRoomName }` lands on a public
  * room; `{ campaignRoomId, title }` imports + opens that campaign's room.
  */
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSeoMeta } from "@unhead/react";
 
 import { ChatProvider, useChatContext } from "@/baofund/chat/ChatContext";
 import { ChatPanel } from "@/baofund/chat/ChatPanel";
+import { DmEntry } from "@/baofund/dm/DmEntry";
+import LoginDialog from "@/components/auth/LoginDialog";
 import { useAuth } from "@/baofund/auth/useAuth";
 import { createGuestSigner } from "@/baofund/relay/guestIdentity";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
@@ -64,6 +66,9 @@ function CampaignRoomOpener({ fundraiserId, title }: { fundraiserId: string; tit
 export function BaoFundChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  // This surface has no in-page `#bao-signin` block, so the chat's guest
+  // affordances (and the DM launcher) open the app's login dialog instead.
+  const [loginOpen, setLoginOpen] = useState(false);
   const navState = (location.state ?? null) as ChatNavState | null;
 
   // The shared ₿AO community chat (relay.bao.fund). The title is read by
@@ -109,11 +114,20 @@ export function BaoFundChatPage() {
           {navState?.campaignRoomId && (
             <CampaignRoomOpener fundraiserId={navState.campaignRoomId} title={navState.title} />
           )}
+          {/* Direct messages (NIP-17 text lane + E2EE voice calls): its own
+              element beside the canonical chat, guests get the sign-in path. */}
+          <DmEntry onSignIn={() => setLoginOpen(true)} />
           <ChatPanel
             defaultRoomName={navState?.defaultRoomName ?? null}
             onFundCampaign={handleFundCampaign}
+            onSignIn={() => setLoginOpen(true)}
           />
         </ChatProvider>
+        <LoginDialog
+          isOpen={loginOpen}
+          onClose={() => setLoginOpen(false)}
+          onLogin={() => setLoginOpen(false)}
+        />
       </div>
     </div>
   );

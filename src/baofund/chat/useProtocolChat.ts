@@ -22,6 +22,7 @@ import type { TypingEvent } from '@/baofund/community/typing.js';
 import type { Mention } from '@/baofund/community/mention.js';
 import { aggregateScroll, type ScrollViews } from '@/baofund/community/aggregate.js';
 import type { MergedMessage } from '@/baofund/community/merge.js';
+import { parseVoicePresence, type VoicePresence } from '@/baofund/community/voicePresence.js';
 import type { RosterEntry } from '@/baofund/community/presence.js';
 import { deriveScrollWrapperKey, getPublicKey, scrollScope } from '@/baofund/community/crypto.js';
 import { REDACTION_LIST, redactDTag } from '@/baofund/community/kinds.js';
@@ -127,6 +128,14 @@ export interface UseProtocolChatReturn {
    *  Message unread counts are deliberately not produced (WS3 option C -
    *  single live session; see the state comment). */
   mentionUnread: Map<string, number>;
+  /** Voice capability (ADR-voice-invisible-rooms v10.2): rooms whose wrap
+   *  delivered a voiceRoot, as hex + generation. Absent = text-only. */
+  voiceMaterial: Map<string, { voiceRoot: string; voiceGeneration: number }>;
+  /** Post a voice-presence payload into a JOINED room (encrypted text lane). */
+  postVoicePresence(roomId: string, payload: unknown): Promise<boolean>;
+  /** Subscribe to voice-presence for a room. Fed by the SAME single live
+   *  subscription the room already uses - never an extra REQ/socket. */
+  subscribeVoicePresence(roomId: string, listener: (presence: VoicePresence) => void): () => void;
   /** Toggle this author's reaction on a message. */
   toggleReaction(msgId: string, emoji: string): Promise<void>;
   /** Retract one of this author's own messages. */
@@ -139,6 +148,9 @@ export interface UseProtocolChatReturn {
   selfAuthor: string | null;
   isSending: boolean;
   error: string | null;
+  /** The selected room's join + first scroll read is in flight; the message
+   *  area shows a load progress instead of a premature empty state. */
+  roomLoading: boolean;
   importLink(link: string, name?: string): Promise<void>;
   /** Resolve + join a campaign's room. Returns the persisted room metadata
    *  so callers can select it by its real (link-derived) roomId; null when
@@ -279,9 +291,15 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
    *  payloads never render as chat text. */
   const [botAuthors, setBotAuthors] = React.useState<Set<string>>(new Set());
   const [selectedRoomId, setSelectedRoomId] = React.useState<string | null>(null);
+  /** The selected room's join + first scroll read is in flight (loading UX:
+   *  the message area shows a progress bar instead of a premature empty
+   *  state - a room with history took seconds to prove "empty"). */
+  const [roomLoading, setRoomLoading] = React.useState(false);
   const [isSending, setIsSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const liveRef = React.useRef<Map<string, LiveRoom>>(new Map());
+  const [voiceMaterial, setVoiceMaterial] = React.useState<Map<string, { voiceRoot: string; voiceGeneration: number }>>(new Map());
+  const voicePresenceListenersRef = React.useRef<Map<string, Set<(presence: VoicePresence) => void>>>(new Map());
   const selectionRef = React.useRef({ generation: 0, roomId: null as string | null });
   const isCurrent = React.useCallback((live: LiveRoom) => live.generation === selectionRef.current.generation, []);
   // Author pubkey of THIS session (throwaway per-room key) for reactions/retract.
@@ -397,6 +415,13 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     live.typingSignal?.dispose();
     live.conn.close();
     liveRef.current.delete(roomId);
+    setVoiceMaterial((prev) => {
+      if (!prev.has(roomId)) return prev;
+      const next = new Map(prev);
+      next.delete(roomId);
+      return next;
+    });
+    voicePresenceListenersRef.current.delete(roomId);
     // Control state is authority: a closed room must not keep folded role or
     // ban grants that a later rejoin (whose control query can fail) would
     // otherwise inherit and gate publish actions on.
@@ -561,7 +586,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // NOT fire property handlers, which silently zeroed every probe
       // ("Not measured" forever). Node (tests/probes): global WebSocket
       // exists too (undici, DOM-conformant); the shim is only for
-      // @/baofund/community/index.js's node-style conn, never the probe.
+      // @bao/community's node-style conn, never the probe.
       const wsModule = globalThis.WebSocket ? null : await import('ws').catch(() => null);
       const WebSocketCtor = (globalThis.WebSocket ?? wsModule?.default) as unknown as typeof WebSocket;
       const probe = await probeRelayStorage({ relayUrl: relayUrl ?? '', WebSocketCtor, timeoutMs: 8_000 });
@@ -603,6 +628,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     for (const roomId of [...liveRef.current.keys()]) closeRoom(roomId);
     setSelectedRoomId(meta.roomId);
     setMessages([]);
+    setRoomLoading(true);
     setTyping({ authors: [] });
     setRoster(new Map());
     setMentions([]);
@@ -635,6 +661,12 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       }
       const live: LiveRoom = { generation, abort: new AbortController(), conn, session, reactionSubs: new Map(), authorSecretKey: joined.authorSecretKey };
       liveRef.current.set(meta.roomId, live);
+      // Voice capability (ADR v10.2): the wrap delivers the hidden-room root
+      // for rooms provisioned with voice. Absent => text-only, no UI.
+      if (joined.voiceRoot && joined.voiceGeneration !== undefined) {
+        const voiceRoot = Array.from(joined.voiceRoot, (b) => b.toString(16).padStart(2, '0')).join('');
+        setVoiceMaterial((prev) => new Map(prev).set(meta.roomId, { voiceRoot, voiceGeneration: joined.voiceGeneration as number }));
+      }
       selfAuthorRef.current = getPublicKey(joined.authorSecretKey);
       setSelfAuthor(selfAuthorRef.current);
       // A live echo proves delivery, not scribe storage. Keep it pending
@@ -667,6 +699,13 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
             }
             return changed ? next : prev;
           });
+          return;
+        }
+        // Voice presence is roster traffic, never chat text: dispatch to the
+        // room's listeners (the voice bar) and keep it out of the timeline.
+        const voicePresence = parseVoicePresence(env.payload);
+        if (voicePresence) {
+          for (const listener of voicePresenceListenersRef.current.get(meta.roomId) ?? []) listener(voicePresence);
           return;
         }
         const text = decodeTextPayload(env.payload);
@@ -880,6 +919,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // message via ensureReactionSubs (driven by refreshScroll).
       // Read the scroll (receipts + history + views + reaction subs).
       await refreshScroll(live);
+      if (generation === selectionRef.current.generation) setRoomLoading(false);
       return true;
     } catch (err) {
       if (generation === selectionRef.current.generation) {
@@ -889,6 +929,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
         // is not joined - and, for an unpersisted invite, not even listed).
         selectionRef.current.roomId = null;
         setSelectedRoomId(null);
+        setRoomLoading(false);
         // Live envelopes that raced the admission check (they can land while
         // the control query is awaited) must not remain rendered after a
         // rejected join.
@@ -1129,10 +1170,11 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
 
   const importCampaign = React.useCallback(async (fundraiserId: string, title: string, signer: SignerLike) => {
     setError(null);
-    // Donor-gated campaign rooms: the API only reveals the link to an
-    // authenticated contributor identity, and entry additionally requires a
-    // one-use blind credential (issued against the same contribution record,
-    // so a returning investor is recognized by pubkey alone).
+    // Credential-gated campaign rooms (donors; earned = ADR-earned-rooms):
+    // the API only reveals the link to an authenticated contributor
+    // identity, and entry additionally requires a one-use blind credential
+    // (issued against the same contribution record, so a returning investor
+    // is recognized by pubkey alone).
     const status = await fetchCampaignRoomStatus(fundraiserId, signer);
     if (!status) {
       setError('could not check this campaign room - try again');
@@ -1147,7 +1189,10 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       return null;
     }
     let proofs: AdmissionProofs | undefined;
-    if (status.gate === 'donors' && status.roomId && status.issuerPub) {
+    // `donors` (link-distribution gate) and `earned` (ADR-earned-rooms
+    // donation gate, welcomer-enforced) share the same one-use blind
+    // credential flow; the API supplies the per-campaign issuer key.
+    if ((status.gate === 'donors' || status.gate === 'earned') && status.roomId && status.issuerPub) {
       try {
         const expiry = Math.floor(Date.now() / 1000) + 7 * 86_400;
         const request = createCredentialRequest(status.roomId, status.issuerPub, { expiry });
@@ -1214,6 +1259,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       ++selectionRef.current.generation;
       selectionRef.current.roomId = null;
       setSelectedRoomId(null);
+      setRoomLoading(false);
       setMessages([]);
       setMentions([]);
       setTyping({ authors: [] });
@@ -1550,6 +1596,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     selectionRef.current.roomId = null;
     for (const roomId of [...liveRef.current.keys()]) closeRoom(roomId);
     setSelectedRoomId(null);
+    setRoomLoading(false);
     setMessages([]);
     setTyping({ authors: [] });
     setRoster(new Map());
@@ -1566,6 +1613,10 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     setError(null);
     // Account-scoped room state must not survive a sign-out on a shared
     // browser (badges, bans, roles, claims, bot announcements, probes).
+    // Voice capability + listeners are session state: never leak across an
+    // identity switch.
+    setVoiceMaterial(new Map());
+    voicePresenceListenersRef.current.clear();
     setMentionUnread(new Map());
     setMemberClaims(new Map());
     setBotAuthors(new Set());
@@ -1594,14 +1645,46 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     setRooms(loadFundRooms(localStorage, roomsScope));
   }, [roomsScope, resetSessions]);
 
+  /** Post a voice-presence payload into a JOINED room (best-effort, fail
+   *  closed: false when the room is not joined or the post fails). */
+  const postVoicePresence = React.useCallback(async (roomId: string, payload: unknown): Promise<boolean> => {
+    const live = liveRef.current.get(roomId);
+    if (!live) return false;
+    try {
+      await live.session.post(payload);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  /** Register a voice-presence listener for a room. Delivered by the room's
+   *  existing single live subscription (no extra REQ, no extra socket). */
+  const subscribeVoicePresence = React.useCallback((roomId: string, listener: (presence: VoicePresence) => void): (() => void) => {
+    const registry = voicePresenceListenersRef.current;
+    const listeners = registry.get(roomId) ?? new Set<(presence: VoicePresence) => void>();
+    listeners.add(listener);
+    registry.set(roomId, listeners);
+    return () => {
+      const current = registry.get(roomId);
+      if (!current) return;
+      current.delete(listener);
+      if (current.size === 0) registry.delete(roomId);
+    };
+  }, []);
+
   return {
     rooms, messages, typing, roster, mentions, selectedRoomId,
     /** Notifications (owner spec): mention badges per room. */
     mentionUnread,
+    /** Voice capability + presence lane (ADR v10.2). */
+    voiceMaterial,
+    postVoicePresence,
+    subscribeVoicePresence,
     /** Owner spec: author keys that announced as bots - render 🤖. */
     botAuthors,
     selectRoom, resetSessions, sendMessage, postToRoom, notifyTyping, toggleReaction, retractMessage, replyToMessage,
-    selfAuthor, isSending, error,
+    selfAuthor, isSending, error, roomLoading,
     importLink, importCampaign, createRoom, removeRoom,
     ensureDefaultRooms,
     syncExternalRooms,
