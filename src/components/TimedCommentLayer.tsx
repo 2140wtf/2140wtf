@@ -12,7 +12,7 @@
  * audio/video post), so players used in chat/profile contexts are unaffected.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Heart, RotateCcw, Send, MessageCircle, X } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -300,6 +300,7 @@ export function TimedCommentComposer({
   position: fixedPosition,
   onClose,
   autoFocus,
+  focusToken,
 }: {
   event: NostrEvent;
   currentTime: number;
@@ -311,6 +312,10 @@ export function TimedCommentComposer({
   onClose?: () => void;
   /** Focus the input on mount. */
   autoFocus?: boolean;
+  /** Bump this number to focus the input, for hosts where the composer is
+   *  already mounted and a gesture (e.g. a 2s hover over the diagram) should
+   *  bring it forward. Falsy values never focus. */
+  focusToken?: number;
 }) {
   const { user, metadata } = useCurrentUser();
   const avatarShape = getAvatarShape(metadata);
@@ -319,6 +324,7 @@ export function TimedCommentComposer({
   const { mutateAsync: publishEvent, isPending: isPublishing } = useNostrPublish();
   const queryClient = useQueryClient();
   const [content, setContent] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
   // null = follow live playback; a number = a user-pinned position.
   const [pinnedPosition, setPinnedPosition] = useState<number | null>(fixedPosition ?? null);
   const [editingTime, setEditingTime] = useState(false);
@@ -338,6 +344,13 @@ export function TimedCommentComposer({
   useEffect(() => {
     if (fixedPosition != null) setPinnedPosition(clamp(fixedPosition));
   }, [fixedPosition, clamp]);
+
+  // Focus on demand. Only a truthy token focuses, so mounting (token 0) never
+  // steals focus and unrelated re-renders leave it alone.
+  useEffect(() => {
+    if (!focusToken) return;
+    inputRef.current?.focus();
+  }, [focusToken]);
 
   const beginEditTime = useCallback(() => {
     setTimeDraft(formatCommentPosition(position));
@@ -454,6 +467,7 @@ export function TimedCommentComposer({
         )}
 
         <input
+          ref={inputRef}
           type="text"
           value={content}
           disabled={!user}
