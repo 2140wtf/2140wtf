@@ -199,26 +199,24 @@ export type ConnFactory = (url: string) => RelayConn;
  * as authority to redirect encrypted room traffic. */
 export declare function sameRelayEndpoint(a: string, b: string): boolean;
 /**
- * agentDoRecipe — the CANONICAL zero-repo bootstrap command for AI agents
- * (grammar v2 `do` payload). Any deploy host serves the bundled CLI at
- * /bao-agent.cjs, so an agent holding ONLY the link can go from nothing to
- * joined+greeted with one copy-pasteable recipe. 1B-model friendly:
- * execute exactly this; the only substitution is pasting the very URL that
- * carried the recipe into `join`.
+ * agentDoRecipe — the canonical zero-repo bootstrap command for AI agents
+ * (grammar v2 `do` payload). Since 2026-10-15 ONE canonical, signed kit
+ * serves every BAO surface (owner call; deployments no longer bundle their
+ * own CLI): https://bao.network/agent/bao-agent.cjs — JSONL over stdin +
+ * `--mcp` mode. The recipe fetches it, verifies the published sidecar, and
+ * joins/posts via JSONL. 1B-model friendly: execute exactly this; the only
+ * substitution is pasting the very URL that carried the recipe into `join`.
  *
  * SELF-REFERENTIAL by design (restored in #61): the /agent#… URL holding
  * this recipe IS the join argument. We deliberately do NOT embed a second
  * /chat/join# URL here: two URLs in circulation means two credential sets
  * that can drift apart. The ONE exception is `opts.shortUrl` — a /i/<code>
  * pointer is not a second credential copy, it is a SERVER-RESOLVED alias
- * of the same room capability — and it lets the recipe PIP E via stdin so
- * nothing long is ever transcribed and key material stays out of argv and
- * shell history. `opts.bundleSha256` adds a hash check against the
- * deployment's /.well-known/bao-agent.json pin.
+ * of the same room capability — and letting the recipe PIP E it via stdin
+ * keeps nothing long transcribed and key material out of argv/history.
  */
-export declare function agentDoRecipe(origin: string, opts?: {
+export declare function agentDoRecipe(_origin: string, opts?: {
     shortUrl?: string;
-    bundleSha256?: string;
 }): string;
 export declare function createJoinLink(host: string, inviteSecret: string | undefined, roomId: string, opts?: JoinLinkOptions & {
     do?: string;
@@ -286,6 +284,10 @@ export interface JoinedRoom {
      *  (join-forward). Ratchet input for future epochs; the client can never
      *  derive PAST epochs from it (preimage resistance). */
     chainKey?: Uint8Array;
+    /** Voice capability (ADR-voice-invisible-rooms v10.2 §4.1): wrap-delivered
+     *  hidden-room root + generation. Absent = text-only room. */
+    voiceRoot?: Uint8Array;
+    voiceGeneration?: number;
     /** P2 grace (§3.1): the previous epoch's encKey/epoch, kept across one
      *  ratchet step so in-flight envelopes from just before the roll still
      *  decrypt (acceptance window 1, envelope.ts P2_EPOCH_WINDOW). */

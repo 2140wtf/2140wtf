@@ -175,6 +175,14 @@ export declare class Scribe {
      * deletion publish must never lose the addresses (post-audit H1).
      */
     roll(flush: FlushReason): RollResult;
+    /**
+     * Deliberately NO `expiration` — segments must never carry a NIP-40 tag.
+     * The relay write policy rejects it on kind 31145 (strfry 0.9.6 expiry
+     * cron mis-deletes large padded tagged events; incident 2026-09-09).
+     * Time-window retention stays intact: expiredSegments() plus
+     * buildRetentionDeletion() (kind-5 to the scribe's own segment ids) prune
+     * on roll time regardless of the tag — see the retention section above.
+     */
     private segmentCtx;
     pendingCount(): number;
     /**

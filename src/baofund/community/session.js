@@ -37,6 +37,9 @@ export function serializeJoinedRoom(joined) {
         governance: joined.governance,
         authorSecretKey: bytesToHex(joined.authorSecretKey),
         ...(joined.chainKey ? { chainKey: bytesToHex(joined.chainKey) } : {}),
+        ...(joined.voiceRoot && joined.voiceGeneration !== undefined
+            ? { voiceRoot: bytesToHex(joined.voiceRoot), voiceGeneration: joined.voiceGeneration }
+            : {}),
         ...(joined.shieldPub ? { shieldPub: joined.shieldPub } : {}),
         ...(joined.previousEncKey && joined.previousEpoch !== undefined
             ? { previousEncKey: bytesToHex(joined.previousEncKey), previousEpoch: joined.previousEpoch }
@@ -77,6 +80,8 @@ export function zeroizeJoinedRoom(joined) {
     joined.encKey.fill(0);
     if (joined.chainKey)
         joined.chainKey.fill(0);
+    if (joined.voiceRoot)
+        joined.voiceRoot.fill(0);
     joined.authorSecretKey.fill(0);
     if (joined.previousEncKey)
         joined.previousEncKey.fill(0);
@@ -140,6 +145,15 @@ export function restoreJoinedRoom(input, opts = {}) {
         throw new Error('serialized session: bad retiredAuthorSecretKeys');
     const encKey = requireHex(s.encKey, 'encKey');
     const chainKey = s.chainKey !== undefined ? requireHex(s.chainKey, 'chainKey') : undefined;
+    // Voice capability (ADR v10.2 §4.1) is optional and additive: root and
+    // generation must appear together and the generation must be a safe int.
+    const voiceRoot = s.voiceRoot !== undefined ? requireHex(s.voiceRoot, 'voiceRoot') : undefined;
+    if ((voiceRoot === undefined) !== (s.voiceGeneration === undefined)) {
+        throw new Error('serialized session: voiceRoot and voiceGeneration must appear together');
+    }
+    if (s.voiceGeneration !== undefined && (!Number.isSafeInteger(s.voiceGeneration) || s.voiceGeneration < 0)) {
+        throw new Error('serialized session: bad voiceGeneration');
+    }
     // CRYPTO-02: the snapshot's encKey must be EXACTLY what the chainKey ratchet
     // derives for this epoch, else the object mixes states (e.g. a chainKey from
     // epoch n with an encKey from epoch m) and would decrypt a confusing subset.
@@ -169,6 +183,9 @@ export function restoreJoinedRoom(input, opts = {}) {
         governance: s.governance,
         authorSecretKey: requireHex(s.authorSecretKey, 'authorSecretKey'),
         ...(chainKey !== undefined ? { chainKey } : {}),
+        ...(voiceRoot !== undefined && s.voiceGeneration !== undefined
+            ? { voiceRoot, voiceGeneration: s.voiceGeneration }
+            : {}),
         ...(s.shieldPub !== undefined && (typeof s.shieldPub !== 'string' || !HEX64.test(s.shieldPub)
             ? (() => { throw new Error('serialized session: bad shieldPub'); })()
             : { shieldPub: s.shieldPub })),

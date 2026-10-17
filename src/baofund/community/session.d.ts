@@ -46,6 +46,11 @@ export interface SerializedSession {
      *  SENSITIVE: whoever holds it can derive every subsequent epoch's
      *  encKey, so it must be treated as full key material in custody. */
     chainKey?: string;
+    /** Hex voice hidden-room root (ADR v10.2 §4.1). SENSITIVE: it derives the
+     *  voice room name and media keys — full key material in custody. */
+    voiceRoot?: string;
+    /** Monotonic voice generation (0 at mint, +1 per rekey). */
+    voiceGeneration?: number;
     shieldPub?: string;
     /** hex encKey of the previous epoch (grace window, §3.1). SENSITIVE. */
     previousEncKey?: string;

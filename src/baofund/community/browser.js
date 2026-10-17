@@ -42,5 +42,10 @@ export { buildPresence, parsePresence, foldRoster, resolveMentions, segmentMenti
 export { buildCreditRequest, buildCreditFulfill, buildCreditReceipt, parseCredit, foldCredits, corroboratedFunders, newCreditId, sealTo, unseal } from './credits.js';
 export { parseAuthTag, authPreimageHash, verifyOwnerAttestation, parseConditions, evaluateConditions, verifyAuthTag, buildAgentJoinProof, verifyAgentJoinProof, verifyAgentAdmission } from './nipOa.js';
 export { buildTyping, parseTyping, TypingSignal } from './typing.js';
+export { buildVoicePresence, parseVoicePresence, VOICE_PRESENCE_TYPE, VOICE_PRESENCE_OPS, } from './voicePresence.js';
+export { sealVoiceRootForRoom, unsealVoiceRootForRoom, voiceSealerPubkey, rootHexToBytes, } from './voiceSealCore.js';
+export { deriveVoiceChannelId, deriveVoiceKeys, deriveSenderKey, parseVoiceGeneration, serializeVoiceGeneration, assertRoomId, assertVoiceRoot, assertVoiceGeneration, assertVoiceIdentity, VOICE_CHANNEL_ID_LABEL, } from './voiceKeys.js';
+export { requestVoiceToken, buildVoiceGrantEvent, voiceBrokerPath, VoiceTokenError, } from './voiceToken.js';
+export { prepareVoiceJoin, VoiceCall, VoiceCallError, } from './voiceCall.js';
 export { buildRetract, parseRetract, foldRetractions } from './retract.js';
 export { UnreadTracker } from './unread.js';

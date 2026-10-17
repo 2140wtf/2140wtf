@@ -159,8 +159,10 @@ export class AdmissionLog {
         return [...this.chainRecords];
     }
     /** Nullifier burns recorded in this log (newest last) — feed these into a
-     *  NullifierCache on boot (ttlWithGraceSec = now - ts + grace) so a spent
-     *  credential stays spent across a daemon restart (CRED-09). */
+     *  NullifierCache on boot so a spent credential stays spent across a daemon
+     *  restart (CRED-09). The `ttl` recorded at burn time gives the entry's
+     *  remaining lifetime (`ttl - (now - ts)`); a record without one is
+     *  hydrated with a conservative fallback window. */
     drainNullifierRecords() {
         return this.chainRecords.filter((r) => r.kind === 'nullifier');
     }
