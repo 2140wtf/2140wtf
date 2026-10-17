@@ -1,7 +1,8 @@
 import React from 'react';
-import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Trash2, Reply, RotateCcw, AtSign, HardDrive, Loader2, Settings, UserPlus, Ban, Maximize2, Minimize2, LogOut, Info, HandCoins } from 'lucide-react';
+import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Trash2, Reply, RotateCcw, AtSign, HardDrive, Loader2, Settings, UserPlus, Ban, Maximize2, Minimize2, LogOut, Info, HandCoins, Volume2, Square, KeyRound } from 'lucide-react';
 import { useChatContext, type ChatItem } from './ChatContext';
 import { agentShareText, fetchAgentHelloSha, sanitizeRoomName } from './agentPrompt';
+import { speechSupported, sanitizeForSpeech, speakText, stopSpeech, speechVoiceCount, primeSpeechVoices } from './messageSpeech';
 import { useIsChatAdmin } from './useIsChatAdmin';
 import { fundFetch } from '../lib/fundHttp';
 import { isAuthorBanned as isAuthorBannedByIdentity } from './memberIdentity';
@@ -10,6 +11,9 @@ import { createGuestSigner } from '../relay/guestIdentity';
 import { DEFAULT_LANDING_ROOM } from '../lib/baoCommunity';
 import { roomLinkPrivacy } from '@/baofund/community/agents.js';
 import { storageVerdictAdvisory } from '../lib/roomCapabilities';
+import { VoiceCallBar } from '../voice/VoiceCallBar';
+import { deriveVoiceKeys } from '../voice/keys';
+import { hexToBytes } from '@noble/hashes/utils.js';
 
 export interface ChatPanelProps {
   defaultRoomId?: string | null;
@@ -29,6 +33,11 @@ export interface ChatPanelProps {
    *  2026-09-22). Called with the room's `fundraiserId` and name; the app
    *  opens the pledge flow, whose built-in-wallet step pre-fills the escrow. */
   onFundCampaign?: (fundraiserId: string, title: string) => void;
+  /** App-level sign-in trigger for surfaces WITHOUT an in-page #bao-signin
+   *  block (bao.markets opens its Nostr auth modal on the app-wide
+   *  `bao-open-auth` event). When provided, every guest sign-in affordance
+   *  calls this; fund surfaces omit it and keep the #bao-signin scroll. */
+  onSignIn?: () => void;
 }
 
 /** Quick reactions (module-level: never re-created per render). */
@@ -42,7 +51,56 @@ const REACTIONS = ['⚡', '🤙', '😂', '🔥'] as const;
 const CHAT_CREATE_ENABLED =
   (import.meta.env as Record<string, string | undefined>).VITE_BAO_CHAT_CREATE_ENABLED === '1';
 
-export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = false, embedded = false, onFundCampaign }: ChatPanelProps): React.ReactElement {
+/**
+ * RoomLoadProgress - themed first-load indicator. A room join + scroll read
+ * takes seconds (welcomer wrap, relay history); the old UI showed "No messages
+ * yet" while still loading, which read as "empty room". This shows a progress
+ * bar with a ~10 s countdown instead, then hands over to real content (or the
+ * true empty state).
+ */
+function RoomLoadProgress({ label }: { label: string }): React.ReactElement {
+  const ESTIMATE_SEC = 10;
+  const [elapsedSec, setElapsedSec] = React.useState(0);
+  React.useEffect(() => {
+    const startedAt = Date.now();
+    const timer = setInterval(() => setElapsedSec((Date.now() - startedAt) / 1000), 250);
+    return () => clearInterval(timer);
+  }, []);
+  const pct = Math.min(100, (elapsedSec / ESTIMATE_SEC) * 100);
+  const remaining = Math.max(0, Math.ceil(ESTIMATE_SEC - elapsedSec));
+  const pastEstimate = remaining === 0;
+  return (
+    <div
+      className="mx-auto mt-6 w-full max-w-sm px-4"
+      role="status"
+      aria-live="polite"
+      data-testid="room-load-progress"
+    >
+      <p className="mb-2 text-center text-xs" style={{ color: 'var(--np-ink)' }}>
+        {pastEstimate ? `${label} almost there…` : `${label} ~${remaining}s`}
+      </p>
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: 'var(--np-rule)' }}
+      >
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${pct}%`,
+            background: 'var(--np-accent)',
+            opacity: pastEstimate ? 0.6 : 1,
+            transition: 'width 250ms linear',
+          }}
+        />
+      </div>
+      <p className="mt-2 text-center text-[10px] leading-snug" style={{ color: 'var(--np-muted)' }}>
+        First load reads this room's history from the relay — a few seconds is normal.
+      </p>
+    </div>
+  );
+}
+
+export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = false, embedded = false, onFundCampaign, onSignIn }: ChatPanelProps): React.ReactElement {
   const {
     rooms,
     messages,
@@ -59,7 +117,11 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     selfAuthor,
     isSending,
     error,
+    roomLoading = false,
     mentionUnread,
+    voiceMaterial = new Map(),
+    postVoicePresence = async () => false,
+    subscribeVoicePresence = () => () => {},
     importLink,
     createRoom,
     removeRoom,
@@ -162,6 +224,16 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   const [showSettings, setShowSettings] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<ChatItem | null>(null);
+  /** Message currently being read aloud (local TTS; one at a time). */
+  const [speakingId, setSpeakingId] = React.useState<string | null>(null);
+  /** Honest feedback when the device simply has no TTS engine. */
+  const [speechHint, setSpeechHint] = React.useState<string | null>(null);
+
+  /** Operator action feedback (voice kick results). */
+  const [voiceActionHint, setVoiceActionHint] = React.useState<string | null>(null);
+  // Rekey is immediate + disruptive (rotates the call keys), so gate it behind
+  // an inline confirmation instead of firing on the first click (field report).
+  const [rekeyConfirm, setRekeyConfirm] = React.useState(false);
   // Fullscreen/zoom chat (Discord-like): fixed overlay over the whole app;
   // Escape exits. The panel keeps its own sidebar + message columns.
   // Embedded (hub) mode STARTS inline but can expand like every other surface
@@ -282,7 +354,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     // criteria at the top. The surface context and the campaign lane follow it
     // as clearly-labelled notes, never as a preamble that buries the brief.
     const note = `WHAT YOU ARE JOINING: the BAO community chat ("${roomName}"), open chat on Nostr - one identity across every BAO app (bao.network, app.bao.network, bao.fund). The full BAO Fund app - campaigns, wallet, donations - is public at https://app.bao.network/index.html; the app-host root is the chat, and fund.bao.network is the password-gated testnet mirror.`;
-    const campaign = `IF YOUR OPERATOR ASKED YOU TO CREATE A CAMPAIGN (do this instead of the hello-only path above): the ONLY supported way is the Fund API - POST /v1/fundraisers with a NIP-98 signature from your identity. NEVER publish relay events (kind 39801 cards, 49305 ledgers, 38003 rooms) yourself - hand-made cards show up as broken campaigns with no owner record and have to be deleted by an operator. Rails are l1 (Bitcoin testnet4) or liquid (Liquid testnet) only; cashu is gone. Inside this repo, one command does it all: npx tsx scripts/agent-create-campaign.mts --state-dir ~/.bao-agent --title "Your campaign" --goal 21000 --rail l1. The API mints the record, publishes the card, provisions the campaign room and returns its link - keep that link private (bearer capability) and join with the same identity. Full step-by-step guide, including the raw HTTP + NIP-98 contract for agents without the repo: docs/AGENT-CAMPAIGN-GUIDE.md.`;
+    const campaign = `IF YOUR OPERATOR ASKED YOU TO CREATE A CAMPAIGN (do this instead of the hello-only path above): the ONLY supported way is the Fund API - POST /v1/fundraisers with a NIP-98 signature from your identity. NEVER publish relay events (kind 39801 cards, 49305 ledgers, 38003 rooms) yourself - hand-made cards show up as broken campaigns with no owner record and have to be deleted by an operator. Rails are l1 (Bitcoin testnet4), liquid (Liquid testnet) or cashu (Cashu ecash). The API mints the record, publishes the card, provisions the campaign room and returns its link - keep that link private (bearer capability) and join with the same identity. Full step-by-step guide, including the raw HTTP + NIP-98 contract: https://bao.network/agent/CAMPAIGN-GUIDE.md.`;
     return `${agentShareText(laneLink ?? '', agentHelloSha, {
       roomName,
       agentLink: laneLink,
@@ -366,8 +438,104 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     return () => { document.title = base; };
   }, [totalMentionUnread, embedded]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Warm up the voice list (browsers populate it asynchronously) and clear
+  // the no-voices hint as soon as an engine appears.
+  React.useEffect(() => {
+    if (!speechSupported()) return undefined;
+    primeSpeechVoices();
+    const synth = window.speechSynthesis;
+    const onVoices = (): void => {
+      if (speechVoiceCount() > 0) setSpeechHint(null);
+    };
+    synth?.addEventListener?.('voiceschanged', onVoices);
+    return () => synth?.removeEventListener?.('voiceschanged', onVoices);
+  }, []);
+
+  // Local TTS: read a message aloud / stop. One at a time; leaving the room or
+  // unmounting stops playback. The on-device HD voice (Kokoro) upstream path is
+  // withheld here: kokoro-js pulls @huggingface/transformers -> sharp /
+  // onnxruntime-node with high-severity advisories that have no fix, and this
+  // repo gates on `npm audit --audit-level=high`. System voice only.
+  const toggleSpeak = (msg: ChatItem) => {
+    if (speakingId === msg.id) {
+      stopSpeech();
+      setSpeakingId(null);
+      return;
+    }
+    const text = sanitizeForSpeech(msg.text);
+    if (speechVoiceCount() === 0) {
+      // Still attempt (Chrome may populate voices late), but say the truth.
+      setSpeechHint('No system voices found on this device - on Linux install espeak-ng and restart the browser.');
+    } else {
+      setSpeechHint(null);
+    }
+    if (speakText(text, () => {
+      setSpeakingId((cur) => (cur === msg.id ? null : cur));
+    })) {
+      setSpeakingId(msg.id);
+    }
+  };
+
+  React.useEffect(() => {
+    // Room switch: stop playback (state clears via the utterance onend).
+    stopSpeech();
+  }, [selectedRoom?.roomId]);
+
+  React.useEffect(() => () => {
+    stopSpeech();
+  }, []);
+
+  // Voice moderation (owner decision 2026-10-11: the ROOM CREATOR — or a BAO
+  // admin — is the call operator): remove the SFU identity behind a
+  // participant chip. The API re-verifies creator-or-admin server-side (fail
+  // closed); the voiceRoom is derived from this room's own material so the
+  // client cannot invent one.
+  const handleKickParticipant = React.useCallback(async (identity: string) => {
+    if (!selectedRoom) return;
+    const material = voiceMaterial.get(selectedRoom.roomId);
+    if (!material) return;
+    try {
+      const keys = deriveVoiceKeys({
+        voiceRoot: hexToBytes(material.voiceRoot),
+        roomId: selectedRoom.roomId,
+        voiceGeneration: material.voiceGeneration,
+      });
+      await fundFetch(`/v1/chat/rooms/${selectedRoom.roomId}/voice/kick`, {
+        method: 'POST',
+        body: { voiceRoom: keys.voiceRoom, identity },
+        ...(signer ? { signer } : {}),
+      });
+      setVoiceActionHint('Removed from the call.');
+      window.setTimeout(() => setVoiceActionHint(null), 4000);
+    } catch (err) {
+      setVoiceActionHint(err instanceof Error ? err.message : 'Could not remove that participant.');
+    }
+  }, [selectedRoom, voiceMaterial, signer]);
+
+  // Rekey (ADR-voice-invisible-rooms v10.2, section 11.5): rotate the room's voice
+  // generation — the seal side bumps the generation and rewrites the
+  // registry; new joins derive the new call key. The API re-verifies
+  // creator-or-admin server-side and 403s everyone else (typed
+  // NOT_ROOM_OPERATOR), so the button is shown to signed-in members and the
+  // server decides — the same posture as the kick chip. Honest copy: this
+  // does NOT evict anyone already in a call; pair it with kick to remove a
+  // participant, then rekey to lock them out of the new generation.
+  const handleRekeyRoom = React.useCallback(async () => {
+    if (!selectedRoom) return;
+    try {
+      await fundFetch(`/v1/chat/rooms/${selectedRoom.roomId}/rekey`, {
+        method: 'POST',
+        ...(signer ? { signer } : {}),
+      });
+      setVoiceActionHint('Room keys rotated. New joins use the new call key; members already in a call stay until they rejoin.');
+      window.setTimeout(() => setVoiceActionHint(null), 6000);
+      void selectRoom(selectedRoom.roomId, { force: true }).catch(() => {});
+    } catch (err) {
+      setVoiceActionHint(err instanceof Error ? err.message : 'Could not rotate this room\'s keys.');
+    }
+  }, [selectedRoom, signer, selectRoom]);
+
+  const handleSend = async (e: React.FormEvent) => {    e.preventDefault();
     if (!input.trim()) return;
     // Only clear the composer when the message was ACCEPTED for publishing.
     // The old unconditional clear destroyed the draft on every pre-flight
@@ -679,6 +847,21 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
                     <Settings size={12} />
                   </button>
                 )}
+                {/* Rekey (server decides: room creator or BAO admin — the API
+                    re-verifies and typed-403s everyone else). Rotates the
+                    call key for NEW joins; does not evict current callers. */}
+                {signer && voiceMaterial.get(selectedRoom.roomId) && (
+                  <button onClick={() => setRekeyConfirm(true)} className="text-[10px]" style={{ color: 'var(--np-muted)' }} title="Rekey room (room creator or BAO admin) - rotate the call keys for new joins" aria-label="Rekey room" data-testid="chat-rekey-room">
+                    <KeyRound size={12} />
+                  </button>
+                )}
+                {rekeyConfirm && (
+                  <span className="inline-flex items-center gap-2 text-[10px]" style={{ color: 'var(--np-muted)' }} role="alertdialog" aria-label="Confirm rekey" data-testid="chat-rekey-confirm">
+                    Rekey room? Rotates the call keys — people already in the call stay until they rejoin.
+                    <button type="button" onClick={() => { setRekeyConfirm(false); void handleRekeyRoom(); }} style={{ color: 'var(--np-danger, #b3261e)' }} data-testid="chat-rekey-confirm-yes">Rekey</button>
+                    <button type="button" onClick={() => setRekeyConfirm(false)} data-testid="chat-rekey-confirm-no">Cancel</button>
+                  </span>
+                )}
                 {signer && (
                   <button onClick={() => removeRoom(selectedRoom.roomId)} className="text-[10px]" style={{ color: 'var(--np-muted)' }} title="Leave room">
                     <Trash2 size={12} />
@@ -692,6 +875,34 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
               </>
             )}
           </div>
+          {/* Voice call (ADR v10.2 §6): only for rooms whose wrap delivered
+              voice capability, and signed-in only (owner decision
+              2026-10-10: guests are excluded from calls). The guest gate is
+              a UX boundary: the room capability still reaches every member
+              wrap (text needs it), so a crafted client can bypass it — the
+              abuse levers are the broker caps + the ops kill switch, with
+              the rekey gate and operator kick to follow. Mobile-first bar;
+              the text chat is never displaced. */}
+          {/* Operator UI (the ✕ on participant chips) shows for every
+              signed-in member: the client cannot know the room's creator, so
+              the API authorizes (room creator or BAO admin) and answers a
+              typed 403 otherwise. */}
+          {selectedRoom && voiceMaterial.get(selectedRoom.roomId) && (
+            signer ? (
+              <VoiceCallBar
+                roomId={selectedRoom.roomId}
+                material={voiceMaterial.get(selectedRoom.roomId) ?? { voiceRoot: '', voiceGeneration: 0 }}
+                postPresence={postVoicePresence}
+                subscribePresence={subscribeVoicePresence}
+                canModerate
+                onKickParticipant={(identity) => void handleKickParticipant(identity)}
+              />
+            ) : (
+              <div className="mt-1 text-[10px]" style={{ color: 'var(--np-muted)' }}>
+                This room has a live voice call - <a href="#bao-signin" onClick={(e) => { if (onSignIn) { e.preventDefault(); onSignIn(); } }} className="underline" style={{ color: 'var(--np-accent-2)' }}>sign in</a> to join it.
+              </div>
+            )
+          )}
           <div className="text-[10px]" style={{ color: 'var(--np-muted)' }}>
             {!selectedRoom && 'Pick a room to start chatting'}
             {privacy?.shielded && 'Shielded transport (NIP-59) - uploads are gift-wrapped'}
@@ -788,11 +999,15 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
           style={embedded && !fullscreen ? undefined : { maxHeight: '420px' }}
         >
           {messages.length === 0 ? (
-            <p className="text-center text-xs italic" style={{ color: 'var(--np-muted)' }}>
-              {selectedRoom
-                ? (signer ? 'No messages yet. Say something.' : 'No messages yet.')
-                : 'Join a room from a link, or create one.'}
-            </p>
+            selectedRoom && roomLoading ? (
+              <RoomLoadProgress label="Loading the scroll…" />
+            ) : (
+              <p className="text-center text-xs italic" style={{ color: 'var(--np-muted)' }}>
+                {selectedRoom
+                  ? (signer ? 'No messages yet. Say something.' : 'No messages yet.')
+                  : 'Join a room from a link, or create one.'}
+              </p>
+            )
           ) : (
             <div className="space-y-3">
               {messages.map((msg) => (
@@ -900,6 +1115,18 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
                           </div>
                         </>
                       )}
+                      {speechSupported() && (
+                        <button
+                          type="button"
+                          onClick={() => toggleSpeak(msg)}
+                          className="text-[10px]"
+                          style={{ color: 'var(--np-muted)' }}
+                          title={speakingId === msg.id ? 'Stop reading' : 'Read this message aloud'}
+                          aria-label={speakingId === msg.id ? 'Stop reading message' : 'Read message aloud'}
+                        >
+                          {speakingId === msg.id ? <Square size={10} /> : <Volume2 size={10} />}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setReplyTarget(msg)}
@@ -974,6 +1201,18 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
           </div>
         )}
 
+        {speechHint && (
+          <div className="px-3 py-1 text-[10px]" style={{ color: 'var(--np-error, #b91c1c)' }} role="status">
+            {speechHint}
+          </div>
+        )}
+
+        {voiceActionHint && (
+          <div className="px-3 py-1 text-[10px]" style={{ color: 'var(--np-muted)' }} role="status">
+            {voiceActionHint}
+          </div>
+        )}
+
         {replyTarget && (
           <div className="flex items-center justify-between border-t px-3 py-1 text-[10px]" style={{ borderColor: 'var(--np-rule)', color: 'var(--np-muted)' }}>
             <span>Replying to {replyTarget.author.slice(0, 8)}…: {replyTarget.text.slice(0, 40)}{replyTarget.text.length > 40 ? '…' : ''}</span>
@@ -985,8 +1224,8 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
           {!signer && (
             <p className="px-1 pb-1 text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)', fontFamily: 'var(--np-font-mono)' }}>
               {guestCanPost
-                ? <>Posting as a guest in the landing room - messages vanish with it. <a href="#bao-signin" className="underline" style={{ color: 'var(--np-accent-2)' }}>Sign in</a> to keep your identity and unlock every room, wallet, court & campaigns.</>
-                : <>You are reading the live room as a guest - <a href="#bao-signin" className="underline" style={{ color: 'var(--np-accent-2)' }}>sign in</a> to post and unlock wallet, court & campaigns.</>}
+                ? <>Posting as a guest in the landing room - messages vanish with it. <a href="#bao-signin" onClick={(e) => { if (onSignIn) { e.preventDefault(); onSignIn(); } }} className="underline" style={{ color: 'var(--np-accent-2)' }}>Sign in</a> to keep your identity and unlock every room, wallet, court & campaigns.</>
+                : <>You are reading the live room as a guest - <a href="#bao-signin" onClick={(e) => { if (onSignIn) { e.preventDefault(); onSignIn(); } }} className="underline" style={{ color: 'var(--np-accent-2)' }}>sign in</a> to post and unlock wallet, court & campaigns.</>}
             </p>
           )}
           <div className="flex gap-2">
@@ -999,11 +1238,13 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
               disabled={!selectedRoomId || isSending}
               readOnly={!signer && !guestCanPost}
               onClick={(e) => {
-                // Guest affordance: tapping the locked composer jumps to the
-                // sign-in panel (same page) - the room stays mounted behind it.
+                // Guest affordance: tapping the locked composer opens sign-in.
+                // Surfaces with an app-level sign-in (bao.markets' auth modal)
+                // pass onSignIn; the fund/hub pages scroll to #bao-signin.
                 if (!signer && !guestCanPost) {
                   e.preventDefault();
-                  document.getElementById('bao-signin')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  if (onSignIn) onSignIn();
+                  else document.getElementById('bao-signin')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
               }}
               placeholder={!signer && !guestCanPost ? 'Sign in to post…' : selectedRoomId ? 'Type a message…' : 'Select a room first'}

@@ -21,6 +21,8 @@ import { useLayoutOptions } from "@/contexts/LayoutContext";
 import { useLoginActions } from "@/hooks/useLoginActions";
 import { ChatProvider } from "@/baofund/chat/ChatContext";
 import { ChatPanel } from "@/baofund/chat/ChatPanel";
+import { DmEntry } from "@/baofund/dm/DmEntry";
+import LoginDialog from "@/components/auth/LoginDialog";
 import { DEFAULT_LANDING_ROOM } from "@/baofund/lib/baoCommunity";
 import "@/baofund/baoFundChat.css";
 import "@/baofund/theme/newspaperTheme.css";
@@ -33,6 +35,9 @@ export function FalLivePage() {
   const { user } = useCurrentUser();
   const { logout } = useLoginActions();
   const [chatExpanded, setChatExpanded] = useState(false);
+  // The panel has no in-page `#bao-signin` block: chat/DM guest affordances
+  // open the app's login dialog.
+  const [loginOpen, setLoginOpen] = useState(false);
   const [kbOverlap, setKbOverlap] = useState(0);
   const videoColumnRef = useRef<HTMLDivElement | null>(null);
   const [pinnedVideoHeight, setPinnedVideoHeight] = useState<number | null>(null);
@@ -231,8 +236,18 @@ export function FalLivePage() {
           {/* The single shared ₿AO community chat (relay.bao.fund). Guests see
               and post in the public landing room; signing in unlocks the rest. */}
           <ChatProvider>
-            <ChatPanel embedded defaultRoomName={DEFAULT_LANDING_ROOM} />
+            <DmEntry onSignIn={() => setLoginOpen(true)} />
+            <ChatPanel
+              embedded
+              defaultRoomName={DEFAULT_LANDING_ROOM}
+              onSignIn={() => setLoginOpen(true)}
+            />
           </ChatProvider>
+          <LoginDialog
+            isOpen={loginOpen}
+            onClose={() => setLoginOpen(false)}
+            onLogin={() => setLoginOpen(false)}
+          />
         </div>
       </aside>
     </main>

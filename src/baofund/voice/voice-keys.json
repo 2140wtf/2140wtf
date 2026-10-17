@@ -1,0 +1,23 @@
+{
+  "note": "Regression locks generated from the pinned derivation authority (src/adapters/concordKeys.ts). Byte layout is independently pinned by the manual-HKDF tests in keys.test.ts; cross-implementation CORD conformance remains the interop gate (ADR v10.2 §2/§5) and is not claimed here.",
+  "voiceRoot": "1111111111111111111111111111111111111111111111111111111111111111",
+  "roomId": "0011223344556677",
+  "cases": [
+    {
+      "voiceGeneration": "0000000000000000",
+      "voiceRoom": "9f585ad8653ea442bc4657226cccd78bfdb3b85c32a5fb645a9a07d91333734c",
+      "voiceMediaKey": "d67b25f16c17c323f48f152c166276f695f628938328d0b5a3b4084f7bba527b",
+      "channelId": "d74861d33f7881a21c704067402f3ad062d2547ca08cb19c4a41d761f5935d84",
+      "identity": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "senderKey": "d14d0fd3c302581b6ce907455c291c2735e47ea1f395ec56d042e1bf510259fe"
+    },
+    {
+      "voiceGeneration": "0000000000000001",
+      "voiceRoom": "4661461bd9f0fff49b1ae3ea13818608c42fabecd26aa92fd2277f5c17ea9505",
+      "voiceMediaKey": "763e33f436e407cceace959b80654424c66eb101721d7f68be2a142ff32c1d2b",
+      "channelId": "d74861d33f7881a21c704067402f3ad062d2547ca08cb19c4a41d761f5935d84",
+      "identity": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "senderKey": "713c7886f68f52fe1df1d85d256acc800c3bca4744bbbd433b9db947355d226b"
+    }
+  ]
+}

@@ -42,6 +42,11 @@ export { buildPresence, parsePresence, foldRoster, resolveMentions, segmentMenti
 export { buildCreditRequest, buildCreditFulfill, buildCreditReceipt, parseCredit, foldCredits, corroboratedFunders, newCreditId, sealTo, unseal } from './credits.js';
 export { parseAuthTag, authPreimageHash, verifyOwnerAttestation, parseConditions, evaluateConditions, verifyAuthTag, buildAgentJoinProof, verifyAgentJoinProof, verifyAgentAdmission } from './nipOa.js';
 export { buildTyping, parseTyping, TypingSignal, type TypingEvent } from './typing.js';
+export { buildVoicePresence, parseVoicePresence, VOICE_PRESENCE_TYPE, VOICE_PRESENCE_OPS, type VoicePresence, type VoicePresenceOp, type VoicePresenceInput, } from './voicePresence.js';
+export { sealVoiceRootForRoom, unsealVoiceRootForRoom, voiceSealerPubkey, rootHexToBytes, type VoiceSealResult, } from './voiceSealCore.js';
+export { deriveVoiceChannelId, deriveVoiceKeys, deriveSenderKey, parseVoiceGeneration, serializeVoiceGeneration, assertRoomId, assertVoiceRoot, assertVoiceGeneration, assertVoiceIdentity, VOICE_CHANNEL_ID_LABEL, type VoiceKeys, } from './voiceKeys.js';
+export { requestVoiceToken, buildVoiceGrantEvent, voiceBrokerPath, VoiceTokenError, type VoiceTokenGrant, } from './voiceToken.js';
+export { prepareVoiceJoin, VoiceCall, VoiceCallError, type VoiceSdk, type VoiceSdkJoinOptions, type VoiceSdkRoom, type VoiceParticipant, type VoiceRoomSessionLike, type VoiceCallState, type PreparedVoiceJoin, type PrepareVoiceJoinInput, type PrepareVoiceJoinResult, type JoinVoiceCallInput, } from './voiceCall.js';
 export { buildRetract, parseRetract, foldRetractions, type RetractionState } from './retract.js';
 export { UnreadTracker, type UnreadReport, type UnreadState } from './unread.js';
 export type { Mention, MentionBuild } from './mention.js';

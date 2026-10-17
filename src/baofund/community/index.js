@@ -20,11 +20,15 @@ export * from './invite-ledger.js';
 export * from './admission.js';
 export * from './memberClaim.js';
 export * from './shield.js';
+export * from './dm.js';
+export * from './dmSignaling.js';
+export { DM_CALL_SIGNER_LABEL, DM_CALL_MEDIA_LABEL, DM_CALL_NONCE_BYTES, newDmCallNonce, newDmCallEphemeral, newDmCallOffer, dmCallId32, deriveDmCallSecrets, } from './dmCallKeys.js';
 export * from './agents.js';
 export { AGENT_HELLO_URL, agentShareText, fetchAgentHelloSha, sanitizeRoomName } from './agentPrompt.js';
 export * from './provision.js';
 export * from './credential.js';
 export * from './campaignPreset.js';
+export * from './earnedRoom.js';
 export * from './attestation.js';
 export * from './disclosure.js';
 export * from './tier2.js';
@@ -40,5 +44,15 @@ export { buildCreditRequest, buildCreditFulfill, buildCreditReceipt, parseCredit
 export { parseAuthTag, authPreimageHash, verifyOwnerAttestation, parseConditions, evaluateConditions, verifyAuthTag, buildAgentJoinProof, verifyAgentJoinProof, verifyAgentAdmission } from './nipOa.js';
 export { RelaySim } from './testkit/relaySim.js';
 export { buildTyping, parseTyping, TypingSignal } from './typing.js';
+export { buildVoicePresence, parseVoicePresence, VOICE_PRESENCE_TYPE, VOICE_PRESENCE_OPS, } from './voicePresence.js';
+export { sealVoiceRootForRoom, unsealVoiceRootForRoom, voiceSealerPubkey, rootHexToBytes, } from './voiceSealCore.js';
+export { deriveVoiceChannelId, deriveVoiceKeys, deriveSenderKey, parseVoiceGeneration, serializeVoiceGeneration, assertRoomId, assertVoiceRoot, assertVoiceGeneration, assertVoiceIdentity, VOICE_CHANNEL_ID_LABEL, } from './voiceKeys.js';
+export { requestVoiceToken, buildVoiceGrantEvent, voiceBrokerPath, VoiceTokenError, } from './voiceToken.js';
+export { prepareVoiceJoin, VoiceCall, VoiceCallError, } from './voiceCall.js';
 export { buildRetract, parseRetract, foldRetractions } from './retract.js';
 export { UnreadTracker } from './unread.js';
+// Room control editions (USER-ROLES-3308 spec): vsk:1 roles + vsk:4 banlist.
+// Folded by the client AND by the welcomer daemon (admission coupling - a
+// banned key must not obtain a wrap, ADR-voice-invisible-rooms §11.5).
+export { parseRoleEdition, foldRoleEditions, permsFor, hasPerm, roleEditionFilter, isControlEditionForRoom, mergeControlEventCache, } from './roleEditions.js';
+export { BAN_KIND, BAN_VSK, BANLIST_WIRE_VERSION, parseBanEdition, foldBanEditions, isBanned, banFrom, banEditionFilter, } from './banEditions.js';

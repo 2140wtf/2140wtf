@@ -13,3 +13,4 @@
 export * from './welcomer-core.js';
 export * from './welcomer-gate.js';
 export * from './welcomer-join.js';
+export * from './voiceSealCore.js';
