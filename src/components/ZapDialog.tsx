@@ -36,6 +36,7 @@ import { useFormatMoney } from '@/hooks/useFormatMoney';
 import { usePaymentTargets } from '@/hooks/usePaymentTargets';
 import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
+import { canReceiveNutzap, useNutzapInfo } from '@/hooks/useNutzapInfo';
 
 import { canZap } from '@/lib/canZap';
 import { parseCampaign } from '@/lib/campaign';
@@ -518,6 +519,16 @@ export function ZapDialog({
   const cashuWallet = useCashuWalletContext();
   const hasCashu = !campaign && !isPollVote && cashuWallet.seedAvailable;
 
+  // Whether the recipient can actually receive a Nutzap (NIP-61 kind 10019 with
+  // at least one accepted mint). Without it a "Cashu zap" is not a zap at all:
+  // CashuZapContent falls back to a NUT-18 token inside a NIP-17 DM, which only
+  // pays out if the recipient opens the message. Open-gated like the payment
+  // targets so dialogs sitting closed behind a feed never issue the REQ.
+  const { data: nutzapInfo } = useNutzapInfo(
+    open && !campaign && !isPollVote && hasCashu ? target.pubkey : undefined,
+  );
+  const canNutzap = canReceiveNutzap(nutzapInfo);
+
   // Generic (non-native) payment targets — Monero, Ethereum, etc. These render
   // a QR + native-URI button rather than a built-in send flow.
   const genericTargets = useMemo(
@@ -581,7 +592,14 @@ export function ZapDialog({
     }
 
     return list;
-  }, [campaign, bitcoinIsSilentPayment, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote, allowedPaymentMethods]);
+  },    [campaign, bitcoinIsSilentPayment, bitcoinTarget, hasLightning, lightningTarget, hasCashu, genericTargets, isPollVote, allowedPaymentMethods]);
+
+  // True when a Lightning rail is offered at all. When it is not, the honest
+  // answer is usually that the recipient published no lightning address — but
+  // only if a listing allowlist isn't what removed the rail.
+  const lightningAvailable = methods.some((m) => m.kind === 'lightning');
+  const methodFilteredByListing = !!allowedPaymentMethods && allowedPaymentMethods.length > 0;
+
 
   const defaultMethodId: DialogMethodId = useMemo(() => {
     if (isPollVote) return 'lightning';
@@ -591,6 +609,9 @@ export function ZapDialog({
     return methods[0]?.id ?? 'bitcoin';
   }, [bitcoinIsSilentPayment, bitcoinTarget, hasLightning, lightningTarget, hasCashu, isPollVote, methods]);
   const [activeMethod, setActiveMethod] = useState<DialogMethodId>(defaultMethodId);
+  // Set once the user picks a rail by hand; suppresses the automatic
+  // re-default below so the pane is never yanked out from under them.
+  const userPickedMethodRef = useRef(false);
 
   const currentMethod =
     methods.find((m) => m.id === activeMethod) ?? methods[0];
@@ -636,6 +657,7 @@ export function ZapDialog({
       setError('');
       setConfirmArmed(false);
       setSuccess(null);
+      userPickedMethodRef.current = false;
       setActiveMethod(defaultMethodId);
     } else {
       setAmountSats(initialAmountSats ?? config.defaultZapAmount);
@@ -650,6 +672,18 @@ export function ZapDialog({
     // active method on open/close, not on every capability re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, setInvoice, initialAmountSats]);
+
+  // The recipient's kind-0 metadata (`useAuthor`) and NIP-A3 payment targets
+  // (fetched only once the dialog opens) resolve asynchronously, so the rail
+  // list routinely grows from {Cashu} to {Lightning, Cashu} a moment after the
+  // dialog appears. Nothing above re-applies the preference when that happens,
+  // which left a recipient who *can* be zapped over Lightning showing the Cashu
+  // pane — the "why is this only wired to the Cashu wallet?" report. Re-apply
+  // the preferred default as capabilities land, unless the user already chose.
+  useEffect(() => {
+    if (!open || success || invoice || userPickedMethodRef.current) return;
+    setActiveMethod(defaultMethodId);
+  }, [open, defaultMethodId, success, invoice]);
 
   // Previously, if Bitcoin capability flipped to `unsupported` mid-session we
   // auto-switched to Lightning because the Bitcoin pane was a dead-end. The
@@ -800,7 +834,7 @@ export function ZapDialog({
                     aria-label="Switch payment method"
                   >
                     <PaymentMethodIcon method={currentMethod ? { kind: currentMethod.kind, symbol: currentMethod.target ? PAYMENT_METHODS[currentMethod.target.type].symbol : undefined } : undefined} />
-                    <span className="truncate">{methodTitle(currentMethod)}</span>
+                    <span className="truncate">{methodTitle(currentMethod, canNutzap)}</span>
                     <ChevronDown className="size-4 shrink-0 opacity-70" />
                   </button>
                 </DropdownMenuTrigger>
@@ -808,19 +842,29 @@ export function ZapDialog({
                   {methods.map((m) => (
                     <DropdownMenuItem
                       key={m.id}
-                      onSelect={() => setActiveMethod(m.id)}
+                      onSelect={() => {
+                        userPickedMethodRef.current = true;
+                        setActiveMethod(m.id);
+                      }}
                       className="gap-2"
                     >
                       <PaymentMethodIcon method={m.target ? { kind: m.kind, symbol: PAYMENT_METHODS[m.target.type].symbol } : { kind: m.kind }} />
-                      <span>{m.label}</span>
+                      <span>{methodLabel(m, canNutzap)}</span>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
+              // A single rail still has to name itself: the title used to be a
+              // hardcoded "Send Bitcoin", so a dialog whose only rail was Cashu
+              // (or Monero, etc.) announced on-chain Bitcoin above a different
+              // pane — exactly the kind of mismatch that makes the rail set look
+              // mis-wired.
               <>
-                Send Bitcoin{' '}
-                <HelpTip faqId="send-bitcoin-onchain" />
+                {methodTitle(currentMethod, canNutzap)}{' '}
+                <HelpTip
+                  faqId={currentMethod?.kind === 'lightning' ? 'send-bitcoin-lightning' : 'send-bitcoin-onchain'}
+                />
               </>
             )}
           </DialogTitle>
@@ -855,23 +899,32 @@ export function ZapDialog({
               onClose={() => setOpen(false)}
             />
           ) : (
-            <ZapMethodPane
-              method={currentMethod}
-              target={target}
-              bitcoinOverride={bitcoinOverride}
-              lightningContentProps={lightningContentProps}
-              onOnchainSuccess={({ txid, amountSats }) =>
-                setSuccess({ kind: 'onchain', amountSats, txid })
-              }
-              onCashuSuccess={({ amountSats, eventId }) =>
-                setSuccess({ kind: 'cashu', amountSats, eventId })
-              }
-              onBolt12Success={({ amountSats }) =>
-                setSuccess({ kind: 'bolt12', amountSats })
-              }
-              zappedEvent={cashuZappedEvent}
-              onClose={() => setOpen(false)}
-            />
+            <>
+              <ZapRailNotice
+                recipientPubkey={target.pubkey}
+                lightningAvailable={lightningAvailable}
+                methodFilteredByListing={methodFilteredByListing}
+                cashuSelected={currentMethod?.kind === 'cashu'}
+                canNutzap={canNutzap}
+              />
+              <ZapMethodPane
+                method={currentMethod}
+                target={target}
+                bitcoinOverride={bitcoinOverride}
+                lightningContentProps={lightningContentProps}
+                onOnchainSuccess={({ txid, amountSats }) =>
+                  setSuccess({ kind: 'onchain', amountSats, txid })
+                }
+                onCashuSuccess={({ amountSats, eventId }) =>
+                  setSuccess({ kind: 'cashu', amountSats, eventId })
+                }
+                onBolt12Success={({ amountSats }) =>
+                  setSuccess({ kind: 'bolt12', amountSats })
+                }
+                zappedEvent={cashuZappedEvent}
+                onClose={() => setOpen(false)}
+              />
+            </>
           )}
         </div>
       </DialogContent>
@@ -879,13 +932,70 @@ export function ZapDialog({
   );
 }
 
+/**
+ * Label for a rail. Cashu qualifies itself when the recipient publishes no
+ * NIP-61 Nutzap info, because the send then travels as a token inside an
+ * encrypted DM rather than as a Nutzap.
+ */
+function methodLabel(method: DialogMethod, canNutzap: boolean): string {
+  if (method.kind === 'cashu' && !canNutzap) return `${method.label} (DM token)`;
+  return method.label;
+}
+
 /** Title label for the current method (native Bitcoin keeps "Send Bitcoin"). */
-function methodTitle(method: DialogMethod | undefined): string {
+function methodTitle(method: DialogMethod | undefined, canNutzap = true): string {
   if (!method) return 'Send Bitcoin';
   if (method.kind === 'bitcoin') {
     return method.id === 'silent-payments' ? 'Send Silent Payment' : 'Send Bitcoin';
   }
-  return method.label;
+  return methodLabel(method, canNutzap);
+}
+
+/**
+ * Explains a restricted rail set, so "why is this only Cashu?" is answered on
+ * screen instead of leaving the user to guess. Two cases matter:
+ *  - no Lightning rail: a zap invoice can only be minted from the recipient's
+ *    LNURL (or a declared NIP-A3 lightning target), so without one there is
+ *    nothing for an external wallet to pay;
+ *  - Cashu selected for a recipient without Nutzap info: the sats leave as a
+ *    DM token they must claim, so it is not a zap receipt.
+ */
+function ZapRailNotice({
+  recipientPubkey,
+  lightningAvailable,
+  methodFilteredByListing,
+  cashuSelected,
+  canNutzap,
+}: {
+  recipientPubkey: string;
+  lightningAvailable: boolean;
+  methodFilteredByListing: boolean;
+  cashuSelected: boolean | undefined;
+  canNutzap: boolean;
+}) {
+  const points: string[] = [];
+  if (!lightningAvailable && !methodFilteredByListing) {
+    points.push(
+      'this account has published no Lightning address (lud16), so no invoice can be created for them and an external wallet has nothing to scan',
+    );
+  }
+  if (cashuSelected && !canNutzap) {
+    points.push(
+      'their profile has no Nutzap info (kind 10019), so Cashu is delivered as an encrypted DM token they have to open and claim — it will not appear as a zap receipt',
+    );
+  }
+  if (points.length === 0) return null;
+
+  return (
+    <p
+      className="px-4 pt-3 text-xs leading-relaxed text-muted-foreground"
+      data-testid="zap-rail-notice"
+      data-recipient={recipientPubkey.slice(0, 8)}
+    >
+      <span className="font-medium text-foreground">Why only these rails: </span>
+      {points.join('. ')}.
+    </p>
+  );
 }
 
 interface ZapMethodPaneProps {
