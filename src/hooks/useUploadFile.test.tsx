@@ -25,6 +25,7 @@ vi.mock('@/lib/stripMetadata', () => ({
 
 import { useUploadFile } from '@/hooks/useUploadFile';
 import { errorCodeOf } from '@/lib/errorCodes';
+import { MAX_UPLOAD_SIZE } from '@/lib/fileValidation';
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -57,8 +58,11 @@ describe('useUploadFile client-side validation', () => {
     const stripFileMetadata = await import('@/lib/stripMetadata');
     const { result } = renderHook(() => useUploadFile(), { wrapper: createWrapper() });
 
+    // Derived from the shipped ceiling so raising the limit can't silently
+    // turn this into a "valid file" case again (it was hardcoded to 101 MB,
+    // which became legal when the ceiling moved to 421 MB).
     const bigFile = new File(['x'], 'big.png', { type: 'image/png' });
-    Object.defineProperty(bigFile, 'size', { value: 101 * 1024 * 1024 });
+    Object.defineProperty(bigFile, 'size', { value: MAX_UPLOAD_SIZE + 1 });
 
     let thrown: unknown;
     await result.current.mutateAsync(bigFile).catch((e) => {
