@@ -1,3 +1,4 @@
+import { parseVoicePresence } from './voicePresence.js';
 const KEY_PREFIX = 'bao-unread-v1:';
 /** Cap per-room stored msg_id history to bound KV growth. */
 const HISTORY_CAP = 4096;
@@ -56,7 +57,9 @@ export class UnreadTracker {
         const st = this.state.get(roomId);
         const firstRead = !st;
         const seen = new Set(st?.seen ?? []);
-        const live = messages.filter((m) => !m.redacted);
+        // Voice presence is roster traffic, not conversation: it must never
+        // light a badge (ADR-voice-invisible-rooms §4.1).
+        const live = messages.filter((m) => !m.redacted && parseVoicePresence(m.envelope.payload) === null);
         const unread = live.filter((m) => !seen.has(`${m.envelope.author}:${m.envelope.msg_id}`));
         return { unread, count: unread.length, firstRead };
     }

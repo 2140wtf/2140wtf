@@ -348,15 +348,20 @@ export class Scribe {
         const deletion = buildRetentionDeletion(this.opts.secretKey, scrollScope(this.opts.segKey, this.opts.roomId), expired, this.clock);
         return { segment, deletion, expired, flush };
     }
+    /**
+     * Deliberately NO `expiration` — segments must never carry a NIP-40 tag.
+     * The relay write policy rejects it on kind 31145 (strfry 0.9.6 expiry
+     * cron mis-deletes large padded tagged events; incident 2026-09-09).
+     * Time-window retention stays intact: expiredSegments() plus
+     * buildRetentionDeletion() (kind-5 to the scribe's own segment ids) prune
+     * on roll time regardless of the tag — see the retention section above.
+     */
     segmentCtx() {
         return {
             roomId: this.opts.roomId,
             encKey: new Uint8Array(32), // unused for encoding (segKey present)
             segKey: this.opts.segKey,
             routingId: this.opts.routingId,
-            expiration: this.opts.retention.type === 'time'
-                ? this.clock.nowSec() + this.opts.retention.maxAgeSec
-                : undefined,
         };
     }
     pendingCount() {

@@ -10,8 +10,13 @@
  * message's outer signature and decrypt per message.
  * padded to EXACTLY 24 KB (see SEGMENT_CONTENT_SIZE for why not 32 KB).
  *
- * Tags: d = bao-scroll:<roomId>:<seg#>, prev-chain, flush reason,
- * NIP-40 expiration for time-window rooms, ['-'].
+ * Tags: d = bao-scroll:<roomId>:<seg#>, prev-chain, flush reason, ['-'].
+ * Segments MUST NOT carry a NIP-40 expiration tag: the BAO relay write
+ * policy rejects it on kind 31145 (strfry 0.9.6's expiry cron mis-deletes
+ * large padded tagged events seconds after insert — incident 2026-09-09,
+ * which silently failed every time-window roll). Time-window retention is
+ * enforced by the scribe's own kind-5 purge (expiredSegments +
+ * buildRetentionDeletion), never by the relay.
  *
  * Timestamp discipline: addressable kind → strictly monotonic created_at
  * (§11) — never past-jittered, or replacement silently no-ops.
@@ -46,8 +51,6 @@ export interface SegmentContext {
      *  silently drops messages the live path delivered. */
     previousEncKey?: Uint8Array;
     previousEpoch?: number;
-    /** NIP-40 expiration (absolute unix seconds) for time-window rooms. */
-    expiration?: number;
 }
 export declare function manifestFor(events: NostrEvent[]): SegmentManifest;
 /**

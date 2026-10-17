@@ -16,7 +16,11 @@
  * without connecting or publishing anything.
  *
  * usage:
- *   npx bao-hello [--dry-run] [--json] [--state-dir <dir>] [--hello <name>] '<JOIN_LINK>' [message]
+ *   ./node_modules/.bin/bao-hello [--dry-run] [--json] [--state-dir <dir>] \
+ *     [--hello <name>] [--link-file <file>] '<JOIN_LINK>' [message]
+ *
+ * The binary is the one from the tarball you verified in the brief. Never let a
+ * package runner fetch a registry package named bao-hello (`npx bao-hello`).
  *
  * exit: 0 confirmed, 1 error/timeout.
  */

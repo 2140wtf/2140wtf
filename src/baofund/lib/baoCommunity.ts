@@ -267,14 +267,20 @@ export async function fetchCampaignChatLink(fundraiserId: string): Promise<strin
 }
 
 /**
- * Donor-gated room access (P3 admission menu). The API withholds the room
- * link from non-contributors; a contributor identity (authenticated pubkey,
- * stable across sessions) receives the link plus the credential issuer key
- * needed to blind-request a one-use entry credential. Returns null on any
- * failure; callers surface `reason` when present.
+ * Credential-gated room access (P3 admission menu). The API withholds the
+ * room link from non-contributors; a contributor identity (authenticated
+ * pubkey, stable across sessions) receives the link plus the credential
+ * issuer key needed to blind-request a one-use entry credential. Returns
+ * null on any failure; callers surface `reason` when present.
+ *
+ * `earned` is the ADR-earned-rooms gate (donation-earned campaign room):
+ * the same credential flow as `donors`, but the welcomer enforces the
+ * admission menu so the link alone is never sufficient (the API lane that
+ * emits the per-campaign issuer key is the next increment; a server that
+ * returns `earned` already gets the credential path below).
  */
 export interface CampaignRoomStatus {
-  gate: 'open' | 'invite' | 'follows' | 'donors';
+  gate: 'open' | 'invite' | 'follows' | 'donors' | 'earned';
   available: boolean;
   link?: string | null;
   roomId?: string | null;

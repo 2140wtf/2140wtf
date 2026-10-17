@@ -11,7 +11,7 @@
  *    (interim signalling until the API grows a settlement-network field).
  */
 import React, { useState } from 'react';
-import { createFundraiser, railLabel, type CreateMilestoneInput, type SignerLike } from '../../lib/baoFundraising';
+import { createFundraiser, attachCampaignCard, railLabel, type CreateMilestoneInput, type SignerLike } from '../../lib/baoFundraising';
 import { createGuestSigner, getGuestPubkeyHex } from '../../relay/guestIdentity';
 import { publishCampaignCard } from '../../relay/publishCampaignCard';
 import { markMainnetCashu } from '../../lib/cashu/mainnetMarker';
@@ -74,12 +74,17 @@ function ModeCard({
  *  wording matches what the stack actually enforces today (see AGENTS.md
  *  "Campaign-room admission + registry wiring"): only `invite` changes the
  *  protocol policy; `donors` hides the link from non-contributors at the API;
- *  `follows` is not enforced yet and currently behaves like `open`. */
-const ROOM_GATE_HELP: Record<'open' | 'invite' | 'follows' | 'donors', string> = {
+ *  `follows` is not enforced yet and currently behaves like `open`. `earned`
+ *  is the ADR-earned-rooms gate: the link is necessary but not sufficient -
+ *  the room's door verifies a one-use per-campaign contributor credential.
+ *  That enforcement is merged but NOT deployed yet, so the option is honest
+ *  about being unusable until the server updates land. */
+const ROOM_GATE_HELP: Record<'open' | 'invite' | 'follows' | 'donors' | 'earned', string> = {
   open: 'Open - anyone who receives the link can join. The campaign page shows the link only to you and to contributors; everyone else sees a "contribute first" gate.',
   invite: 'Invite-only - the room is hidden (protocol policy: invite); you hand out personal invite links and can revoke them.',
   follows: 'Followers - meant for your Nostr followers. Enforcement is not live yet, so today the room behaves like Open.',
   donors: 'Donors - the room link is shown only to contributors; anyone who receives the link can join. Today this behaves like Open - the donor admission menu was removed.',
+  earned: 'Earned entry - the link is necessary but not sufficient: admission needs a one-use credential issued for THIS campaign, earned by contributing; the room\'s door will verify it at join. Not live yet - server updates are pending; until they land, this gate cannot be used to create a campaign.',
 };
 
 export function CreateCampaignModal({
@@ -102,10 +107,13 @@ export function CreateCampaignModal({
   const [goal, setGoal] = useState('21400');
   const [category, setCategory] = useState('tools');
   const [rail, setRail] = useState<'l1' | 'liquid'>('l1');
+  // Field report 2026-10-14: a Liquid (testnet) campaign can be mistaken for a
+  // real-income campaign. Require an explicit acknowledgement before publish.
+  const [testnetAck, setTestnetAck] = useState(false);
   // Every campaign gets its discussion room: the checkbox is pre-ticked and
   // locked (owner rule 2026-09-23) - the room is the funding entry point.
   const wantRoom = true;
-  const [roomGate, setRoomGate] = useState<'open' | 'invite' | 'follows' | 'donors'>('open');
+  const [roomGate, setRoomGate] = useState<'open' | 'invite' | 'follows' | 'donors' | 'earned'>('open');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const auth = useAuth();
@@ -158,11 +166,16 @@ export function CreateCampaignModal({
       if (mainnet && !auth.signer) {
         throw new Error('Sign in to launch a mainnet campaign - real campaigns need your key (no guest fallback).');
       }
+      if (!mainnet && !testnetAck) {
+        throw new Error(
+          'Acknowledge that testnet campaigns use zero-value coins (no monetary value, no income) before publishing.',
+        );
+      }
       const signer = auth.signer ?? createGuestSigner();
       const res = await createFundraiser(signer, {
         title: title.trim(),
         description: mainnet ? markMainnetCashu(description.trim()) : description.trim() || undefined,
-        runner_type: 'human',
+        runner_type: 'agent',
         goal_sats: Math.round(Number(goal || 21400)),
         settlement_rail: mainnet ? 'cashu' : rail,
         // First-class network field (API-supported); the description marker
@@ -182,13 +195,25 @@ export function CreateCampaignModal({
       });
       // Relay-native discovery: publish the signed kind-39801 card. The
       // campaign already exists (API/ledger), so a relay-policy rejection is
-      // reported and never fails creation.
+      // reported and never fails creation. On success, report the card event
+      // id back to the API so the campaign's `nostr_event_id` is populated
+      // (an owner-signed card cannot be published by the API itself).
       void publishCampaignCard({
         signer,
         fundraiser: res.fundraiser,
         milestones: res.milestones,
-      }).then((r) => {
-        if (!r.ok) console.warn('[cards] campaign card not published:', r.error);
+      }).then(async (r) => {
+        if (!r.ok) {
+          console.warn('[cards] campaign card not published:', r.error);
+          return;
+        }
+        if (r.id) {
+          try {
+            await attachCampaignCard(signer, res.fundraiser.id, r.id);
+          } catch (err) {
+            console.warn('[cards] card published but its id was not attached:', errorMessage(err));
+          }
+        }
       });
       // Founder sees their own room: join it with the creating signer so it
       // lands in the Chat sidebar and opens selected.
@@ -272,6 +297,7 @@ export function CreateCampaignModal({
               <option value="invite">Invite-only - personal links</option>
               <option value="follows">Followers - your Nostr followers</option>
               <option value="donors">Donors - contributors only</option>
+              <option value="earned">Earned entry - credential required</option>
             </select>
           </div>
           <p data-testid="discussion-room-help" className="mt-2 text-[10px]" style={{ color: 'var(--np-muted)' }}>
@@ -375,6 +401,15 @@ export function CreateCampaignModal({
         </p>
 
         {error && <p className="mb-3 text-xs" style={{ color: 'var(--np-danger)' }}>{error}</p>}
+        {!mainnet && (
+          <label className="mb-3 flex items-start gap-2 text-[11px]" style={{ color: 'var(--np-ink)' }}>
+            <input type="checkbox" checked={testnetAck} onChange={(e) => setTestnetAck(e.target.checked)} data-testid="testnet-ack" className="mt-0.5" />
+            <span>
+              I understand this is a <b>TESTNET</b> campaign: the coins have <b>no monetary value</b> and it
+              cannot generate real income. For real funding, choose <b>Mainnet Cashu</b>.
+            </span>
+          </label>
+        )}
         <div className="flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} className="px-4 py-1.5 text-[11px] uppercase tracking-widest" style={{ color: 'var(--np-muted)', fontFamily: 'var(--np-font-mono)' }}>
             Cancel

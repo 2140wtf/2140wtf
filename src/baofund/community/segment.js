@@ -11,8 +11,13 @@ import { SCROLL_SEGMENT, scrollDTag, parseScrollDTag } from './kinds.js';
  * message's outer signature and decrypt per message.
  * padded to EXACTLY 24 KB (see SEGMENT_CONTENT_SIZE for why not 32 KB).
  *
- * Tags: d = bao-scroll:<roomId>:<seg#>, prev-chain, flush reason,
- * NIP-40 expiration for time-window rooms, ['-'].
+ * Tags: d = bao-scroll:<roomId>:<seg#>, prev-chain, flush reason, ['-'].
+ * Segments MUST NOT carry a NIP-40 expiration tag: the BAO relay write
+ * policy rejects it on kind 31145 (strfry 0.9.6's expiry cron mis-deletes
+ * large padded tagged events seconds after insert — incident 2026-09-09,
+ * which silently failed every time-window roll). Time-window retention is
+ * enforced by the scribe's own kind-5 purge (expiredSegments +
+ * buildRetentionDeletion), never by the relay.
  *
  * Timestamp discipline: addressable kind → strictly monotonic created_at
  * (§11) — never past-jittered, or replacement silently no-ops.
@@ -137,14 +142,16 @@ export function decodeSegmentContent(content, ctx) {
 export function encodeSegmentEvent(args) {
     const clock = args.clock ?? systemClock;
     const rng = args.rng ?? defaultRng;
+    // No `expiration` here, ever: the relay write policy rejects NIP-40 on
+    // kind 31145 and a rejected segment silently fails the whole roll (the
+    // daemon retries, so the scroll never advances). Retention is the
+    // scribe's kind-5 purge — see the file header.
     const tags = [
         ['d', scrollDTag(scrollScope(containerKey(args.ctx), args.ctx.roomId), args.seg)],
         ['prev', args.prevSegmentId ?? 'genesis'],
         ['flush', args.flush],
         ['-'],
     ];
-    if (args.ctx.expiration !== undefined)
-        tags.push(['expiration', String(args.ctx.expiration)]);
     return signEvent({
         kind: SCROLL_SEGMENT,
         created_at: monotonicTimestamp(args.previousCreatedAt, clock),

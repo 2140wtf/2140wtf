@@ -3,6 +3,7 @@ import { parseReview } from './codeCollab.js';
 import { parseBotManifest } from './botCommands.js';
 import { parsePresence, foldRoster } from './presence.js';
 import { parseTyping } from './typing.js';
+import { parseVoicePresence } from './voicePresence.js';
 import { parseRetract, foldRetractions } from './retract.js';
 // ─── Internal fold functions ───────────────────────────────────────────────
 /** Fold reactions by (target, emoji, author), latest-in-scroll wins. */
@@ -153,6 +154,9 @@ export function aggregateScroll(result) {
             return false;
         // Pure typing signal → never conversation content (and never in the scroll anyway).
         if (parseTyping(p) && !hasText(m))
+            return false;
+        // Pure voice-presence (call roster) → never conversation content.
+        if (parseVoicePresence(p) && !hasText(m))
             return false;
         // Pure retraction tombstone → bookkeeping, not conversation.
         if (parseRetract(p) && !hasText(m))

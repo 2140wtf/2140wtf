@@ -245,6 +245,15 @@ export interface WrapPayload {
      *  resistance). `encKey` is kept for P1 backward compat; P2 clients
      *  prefer chainKey when both are present. */
     chainKey?: string;
+    /** Voice capability (ADR-voice-invisible-rooms v10.2 §1/§4.1): hex
+     *  `voiceRoot` + generation, delivered INSIDE the encrypted wrap like every
+     *  other room secret. Present only for rooms whose registry entry carries a
+     *  sealed voice block; clients derive the hidden voice room name and media
+     *  keys from it. Absent = text-only. */
+    voice?: {
+        root: string;
+        generation: number;
+    };
 }
 export declare function publishWrap(welcomerSecretKey: Uint8Array, welcomerEpochKey: Uint8Array, recipientPub: string, payload: WrapPayload, clock?: Clock, rng?: Rng): NostrEvent;
 /** Challenge wraps live at a DIFFERENT deterministic address than key wraps

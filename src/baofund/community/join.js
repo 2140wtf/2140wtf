@@ -333,38 +333,35 @@ export function sameRelayEndpoint(a, b) {
     }
 }
 /**
- * agentDoRecipe — the CANONICAL zero-repo bootstrap command for AI agents
- * (grammar v2 `do` payload). Any deploy host serves the bundled CLI at
- * /bao-agent.cjs, so an agent holding ONLY the link can go from nothing to
- * joined+greeted with one copy-pasteable recipe. 1B-model friendly:
- * execute exactly this; the only substitution is pasting the very URL that
- * carried the recipe into `join`.
+ * agentDoRecipe — the canonical zero-repo bootstrap command for AI agents
+ * (grammar v2 `do` payload). Since 2026-10-15 ONE canonical, signed kit
+ * serves every BAO surface (owner call; deployments no longer bundle their
+ * own CLI): https://bao.network/agent/bao-agent.cjs — JSONL over stdin +
+ * `--mcp` mode. The recipe fetches it, verifies the published sidecar, and
+ * joins/posts via JSONL. 1B-model friendly: execute exactly this; the only
+ * substitution is pasting the very URL that carried the recipe into `join`.
  *
  * SELF-REFERENTIAL by design (restored in #61): the /agent#… URL holding
  * this recipe IS the join argument. We deliberately do NOT embed a second
  * /chat/join# URL here: two URLs in circulation means two credential sets
  * that can drift apart. The ONE exception is `opts.shortUrl` — a /i/<code>
  * pointer is not a second credential copy, it is a SERVER-RESOLVED alias
- * of the same room capability — and it lets the recipe PIP E via stdin so
- * nothing long is ever transcribed and key material stays out of argv and
- * shell history. `opts.bundleSha256` adds a hash check against the
- * deployment's /.well-known/bao-agent.json pin.
+ * of the same room capability — and letting the recipe PIP E it via stdin
+ * keeps nothing long transcribed and key material out of argv/history.
  */
-export function agentDoRecipe(origin, opts = {}) {
-    if (!/^https?:\/\//.test(origin))
-        throw new Error('agentDoRecipe: origin must be http(s)');
-    const lines = [`curl -fsSL ${origin}/bao-agent.cjs -o /tmp/bao-agent.cjs`];
-    if (opts.bundleSha256) {
-        lines.push(`echo "${opts.bundleSha256}  /tmp/bao-agent.cjs" | sha256sum -c - >/dev/null && echo driver-verified`);
-    }
+export function agentDoRecipe(_origin, opts = {}) {
+    const kit = 'https://bao.network/agent/bao-agent.cjs';
+    const state = '--state-dir /tmp/bao-state';
+    const lines = [`curl -fsSL ${kit} -o /tmp/bao-agent.cjs`];
+    lines.push(`echo "$(curl -fsSL ${kit}.sha256 | cut -d' ' -f1)  /tmp/bao-agent.cjs" | sha256sum -c -`);
     if (opts.shortUrl) {
         // stdin join: the fetch IS the argument. No 900-char blob anywhere.
-        lines.push(`curl -fsSL ${opts.shortUrl} | node /tmp/bao-agent.cjs join - --as agent`);
+        lines.push(`link="$(curl -fsSL ${opts.shortUrl})" && printf '{"method":"join","link":"%s"}\\n' "$link" | node /tmp/bao-agent.cjs ${state}`);
     }
     else {
-        lines.push(`node /tmp/bao-agent.cjs join "<the full /agent#… URL that sent you here, #fragment included>" --as agent`);
+        lines.push(`printf '{"method":"join","link":"%s"}\\n' "<the full /agent#… URL that sent you here, fragment included>" | node /tmp/bao-agent.cjs ${state}`);
     }
-    lines.push(`node /tmp/bao-agent.cjs say "hello — joined via agent link" --as agent`);
+    lines.push(`printf '{"method":"post","text":"hello - joined via agent link"}\\n' | node /tmp/bao-agent.cjs ${state}`);
     return lines.join(' && ');
 }
 export function createJoinLink(host, inviteSecret, roomId, opts = {}) {
@@ -679,6 +676,19 @@ export async function joinRoom(conn, link, roomInfo, opts = {}) {
         ? hexToBytes(payload.chainKey)
         : undefined;
     const encKey = chainKey ? deriveEpochKeys(chainKey, payload.epoch).encKey : hexToBytes(payload.encKey);
+    // Voice capability (ADR v10.2 §4.1): additive wrap field. Malformed values
+    // are ignored (fail closed for voice only — the text room still joins).
+    const voiceRaw = payload.voice;
+    let voiceRoot;
+    let voiceGeneration;
+    if (voiceRaw && typeof voiceRaw === 'object') {
+        const root = voiceRaw.root;
+        const generation = voiceRaw.generation;
+        if (typeof root === 'string' && /^[0-9a-f]{64}$/.test(root) && typeof generation === 'number' && Number.isSafeInteger(generation) && generation >= 0) {
+            voiceRoot = hexToBytes(root);
+            voiceGeneration = generation;
+        }
+    }
     // 5. Generate the per-room author key (P1: throwaway; P2: stream key
     // certified in-room by the device persona, attestation.ts).
     return {
@@ -691,6 +701,7 @@ export async function joinRoom(conn, link, roomInfo, opts = {}) {
         authorSecretKey: generateSecretKey(),
         shieldPub: payload.shield,
         ...(chainKey ? { chainKey } : {}),
+        ...(voiceRoot !== undefined && voiceGeneration !== undefined ? { voiceRoot, voiceGeneration } : {}),
         retiredAuthorSecretKeys: [],
         privacy: policy,
     };

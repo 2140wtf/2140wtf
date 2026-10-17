@@ -5,6 +5,11 @@ export interface AdmissionRecord {
     id: string;
     /** Coarse wall-clock seconds — minute precision by convention. */
     ts?: number;
+    /** `nullifier` records only: the cache TTL (seconds) applied when the burn
+     *  was committed. Boot hydration replays the REMAINING lifetime from it
+     *  (`ttl - (now - ts)`), so a restart reconstructs the entry instead of
+     *  guessing a window; records without it fall back conservatively. */
+    ttl?: number;
 }
 /** Torn-tail id. Durable, deterministic — re-derivable iff the same torn
  *  tail comes back, so the tombstone re-burn can be coalesced. */
@@ -39,8 +44,10 @@ export declare class AdmissionLog {
      *  the compaction input and the nullifier-drain source (CRED-09). */
     getLiveRecords(): AdmissionRecord[];
     /** Nullifier burns recorded in this log (newest last) — feed these into a
-     *  NullifierCache on boot (ttlWithGraceSec = now - ts + grace) so a spent
-     *  credential stays spent across a daemon restart (CRED-09). */
+     *  NullifierCache on boot so a spent credential stays spent across a daemon
+     *  restart (CRED-09). The `ttl` recorded at burn time gives the entry's
+     *  remaining lifetime (`ttl - (now - ts)`); a record without one is
+     *  hydrated with a conservative fallback window. */
     drainNullifierRecords(): AdmissionRecord[];
     private makeLine;
     private commit;
