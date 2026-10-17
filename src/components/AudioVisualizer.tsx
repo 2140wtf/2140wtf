@@ -9,6 +9,7 @@ import type { AvatarShape } from '@/lib/avatarShape';
 import { isNostrId } from '@/lib/nostrId';
 import { cn } from '@/lib/utils';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePlayerControls } from '@/hooks/usePlayerControls';
 import { useWaveformPeaks } from '@/hooks/useWaveformPeaks';
 import { useTimedComments } from '@/hooks/useTimedComments';
@@ -64,9 +65,20 @@ export function AudioVisualizer({
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   const [replyTarget, setReplyTarget] = useState<NostrEvent | null>(null);
+  // Hover-to-comment: resting the pointer over the diagram for 2s pins the
+  // composer to the hovered point and focuses it, so commenting at a moment is
+  // discoverable without a click (parity with the /music track rows).
+  const [hoverCommentAt, setHoverCommentAt] = useState<number | null>(null);
+  const [focusToken, setFocusToken] = useState(0);
+  const hoverTimerRef = useRef<number | null>(null);
+  const hoverRatioRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
+  }, []);
 
   // Only a real relay event can carry timed comments.
   const isReal = !!event && isNostrId(event.id) && event.sig.length > 0;
+  const { user } = useCurrentUser();
 
   // Decode the waveform once the player scrolls into view (decoding downloads
   // the audio, so offscreen players don't pay for it).
@@ -243,6 +255,32 @@ export function AudioVisualizer({
     if (duration > 0) seekTo(ratio * duration);
   }, [duration, seekTo]);
 
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }, []);
+
+  /**
+   * After 2s of resting over the diagram, pin the composer to the hovered point
+   * and focus it. Deliberately does NOT seek or start playback — a click still
+   * owns seeking, so a rest of the pointer can never move the track.
+   */
+  const startHoverTimer = useCallback(() => {
+    clearHoverTimer();
+    // Signed-in only: the composer input is disabled for everyone else, so
+    // pinning and focusing it for an anonymous visitor would do nothing.
+    if (!isReal || !user) return;
+    hoverTimerRef.current = window.setTimeout(() => {
+      hoverTimerRef.current = null;
+      const ratio = hoverRatioRef.current;
+      const at = ratio !== null && duration > 0 ? ratio * duration : currentTime;
+      setHoverCommentAt(Math.max(0, at));
+      setFocusToken((n) => n + 1);
+    }, 2000);
+  }, [clearHoverTimer, isReal, user, duration, currentTime]);
+
   const handleCanvasClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!hasStarted) {
@@ -289,8 +327,13 @@ export function AudioVisualizer({
       <div
         ref={containerRef}
         className="relative group w-full aspect-video"
-        onMouseMove={revealControls}
-        onMouseLeave={() => { if (isPlaying) scheduleHide(); }}
+        onMouseMove={(e) => {
+          revealControls();
+          const rect = e.currentTarget.getBoundingClientRect();
+          hoverRatioRef.current = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        }}
+        onMouseEnter={startHoverTimer}
+        onMouseLeave={() => { clearHoverTimer(); if (isPlaying) scheduleHide(); }}
         onClick={(e) => e.stopPropagation()}
       >
       {/* Hidden audio element */}
@@ -443,7 +486,13 @@ export function AudioVisualizer({
 
       {isReal && event && (
         <div className="border-t border-border bg-background">
-          <TimedCommentComposer event={event} currentTime={currentTime} duration={duration} />
+          <TimedCommentComposer
+            event={event}
+            currentTime={currentTime}
+            duration={duration}
+            position={hoverCommentAt ?? undefined}
+            focusToken={focusToken}
+          />
           <ReplyComposeModal
             event={replyTarget ?? undefined}
             open={!!replyTarget}
