@@ -54,7 +54,9 @@ describe('describeUploadRejection', () => {
   it('renders human-readable messages for each rejection reason', () => {
     expect(describeUploadRejection({ reason: 'empty' })).toMatch(/empty/i);
     const message = describeUploadRejection({ reason: 'too-large', size: MAX_UPLOAD_SIZE + 1, max: MAX_UPLOAD_SIZE });
-    expect(message).toMatch(/100 MB/);
+    // Derive the expectation from the shipped ceiling: this assertion used to
+    // hardcode 100 MB and went stale when the ceiling was raised to 421 MB.
+    expect(message).toMatch(new RegExp(`${Math.round(MAX_UPLOAD_SIZE / (1024 * 1024))} MB`));
     // baoError wraps detail in parentheses, so the detail must not contain any.
     expect(message).not.toContain('(');
   });
