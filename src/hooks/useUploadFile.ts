@@ -10,6 +10,7 @@ import { getEffectiveBlossomServers } from "@/lib/appBlossom";
 import { stripFileMetadata } from "@/lib/stripMetadata";
 import { baoError, ErrorCodes } from "@/lib/errorCodes";
 import { describeUploadRejection, validateUploadFile } from "@/lib/fileValidation";
+import { captureVideoPoster, isVideoFile } from "@/lib/videoPoster";
 
 export function useUploadFile() {
   const { user } = useCurrentUser();
@@ -89,6 +90,39 @@ export function useUploadFile() {
         mirrorToServers(url, mirrorServers, user.signer).catch(() => {
           // Mirroring is best-effort — don't fail the upload if it fails.
         });
+      }
+
+      // NIP-92 poster: a video whose imeta has no `image` renders as a black box
+      // everywhere (our feed included). Capture a frame locally and store it
+      // beside the video so the post carries its own picture. Best-effort — the
+      // video itself is already uploaded, so a poster failure is not an upload
+      // failure.
+      if (isVideoFile(sanitized) && !tags.some(([name]) => name === 'image')) {
+        const poster = await captureVideoPoster(sanitized);
+        if (poster) {
+          try {
+            const posterFile = new File(
+              [poster.blob],
+              `poster-${Date.now()}.jpg`,
+              { type: 'image/jpeg' },
+            );
+            const posterTags = await uploader.upload(posterFile);
+            const posterUrl = posterTags[0]?.[1];
+            if (posterUrl) {
+              tags.push(['image', posterUrl]);
+              if (!tags.some(([name]) => name === 'dim')) {
+                tags.push(['dim', `${poster.width}x${poster.height}`]);
+              }
+              if (mirrorServers.length > 0) {
+                mirrorToServers(posterUrl, mirrorServers, user.signer).catch(() => {
+                  // Same best-effort policy as the video's own mirroring.
+                });
+              }
+            }
+          } catch {
+            // The poster is optional: keep the video upload successful.
+          }
+        }
       }
 
       return tags;

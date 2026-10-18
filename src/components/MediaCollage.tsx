@@ -128,6 +128,27 @@ function AudioThumb({ pubkey }: { pubkey: string }) {
 
 function MediaThumb({ item, onClick }: { item: MediaItem; onClick: () => void }) {
   const [loaded, setLoaded] = useState(false);
+  // `loadeddata` can fire before React attaches its listener (cached blobs,
+  // remounts), which left the video invisible and the thumb black. Read
+  // readyState too, and show the NIP-92 poster if the video has one.
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [posterFailed, setPosterFailed] = useState(false);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const sync = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) setLoaded(true);
+    };
+    sync();
+    video.addEventListener('loadeddata', sync);
+    video.addEventListener('loadedmetadata', sync);
+    video.addEventListener('canplay', sync);
+    return () => {
+      video.removeEventListener('loadeddata', sync);
+      video.removeEventListener('loadedmetadata', sync);
+      video.removeEventListener('canplay', sync);
+    };
+  }, [item.url]);
   const { config } = useAppContext();
   const hasCW = item.contentWarning !== undefined;
   const policy = config.contentWarningPolicy;
@@ -140,6 +161,17 @@ function MediaThumb({ item, onClick }: { item: MediaItem; onClick: () => void })
       onClick={showBlur ? (e) => { e.stopPropagation(); setCwRevealed(true); } : onClick}
       aria-label={showBlur ? 'Reveal sensitive content' : 'View media'}
     >
+      {/* Video poster (NIP-92 `image`) — shown until the video decodes a frame,
+          so a poster-bearing video never renders as a black tile. */}
+      {item.type === 'video' && item.thumbnail && !posterFailed && (
+        <img
+          src={item.thumbnail}
+          alt={item.alt ?? ''}
+          className={cn('absolute inset-0 w-full h-full object-cover', loaded && 'opacity-0')}
+          loading="lazy"
+          onError={() => setPosterFailed(true)}
+        />
+      )}
       {isValidBlurhash(item.blurhash) && (
         <Blurhash
           hash={item.blurhash}
@@ -158,6 +190,7 @@ function MediaThumb({ item, onClick }: { item: MediaItem; onClick: () => void })
 
       {item.type === 'video' && !showBlur && (
         <video
+          ref={videoRef}
           src={item.url}
           data-no-native-poster=""
           poster={BLANK_POSTER}
@@ -167,7 +200,6 @@ function MediaThumb({ item, onClick }: { item: MediaItem; onClick: () => void })
           loop
           playsInline
           preload="metadata"
-          onLoadedData={() => setLoaded(true)}
         />
       )}
       {item.type === 'image' && !showBlur && (

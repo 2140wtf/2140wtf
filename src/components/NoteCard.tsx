@@ -116,6 +116,7 @@ import { useNip05Verify } from "@/hooks/useNip05Verify";
 import { useOpenPost } from "@/hooks/useOpenPost";
 import { useProfileUrl } from "@/hooks/useProfileUrl";
 import { useEventStats } from "@/hooks/useTrending";
+import { useVideoThumbnail } from "@/hooks/useVideoThumbnail";
 import { useFormatMoney } from "@/hooks/useFormatMoney";
 import { extractZapMessage } from "@/hooks/useEventInteractions";
 import { getZapAmountSats, getZapSenderPubkey } from "@/lib/zapHelpers";
@@ -1831,6 +1832,13 @@ function ShortVideoMedia({
 
   const safeUrl = sanitizeUrl(imeta?.url);
   const safeThumbnail = sanitizeUrl(imeta?.thumbnail);
+  // A post with no imeta `image` still gets a picture: grab a frame from the
+  // video itself (the hook returns the given thumbnail when there is one), so
+  // an upload without a poster is not a black box.
+  const poster = useVideoThumbnail(safeUrl ?? '', safeThumbnail);
+  // Aspect ratio discovered from the video's own metadata, used until a
+  // thumbnail (which carries its own size) is on screen.
+  const [videoAspect, setVideoAspect] = useState<string | undefined>(undefined);
 
   return (
     <>
@@ -1839,19 +1847,20 @@ function ShortVideoMedia({
           ref={containerRef}
           className={cn(
             'relative mt-3 rounded-2xl overflow-hidden cursor-pointer bg-black',
-            // With preload="none" the <video> has no intrinsic height until it
-            // plays. With no thumbnail to set the box height, fall back to a 16:9
-            // box (most videos are landscape) instead of a square-ish sliver.
-            !safeThumbnail && !isPlaying && 'aspect-video',
+            // Until something real can set the box height (a poster image, or the
+            // video's own metadata), reserve a 16:9 box — most videos are
+            // landscape — instead of a square-ish sliver.
+            !poster && !videoAspect && !isPlaying && 'aspect-video',
           )}
+          style={!poster && videoAspect ? { aspectRatio: videoAspect } : undefined}
           onClick={handlePlayToggle}
         >
           {/* When there's a thumbnail it drives the box size (the <video> below
               is absolutely positioned on top); the plain <img> avoids WebView's
               native gray play-circle that a poster-bearing <video> would draw. */}
-          {safeThumbnail && !isPlaying && (
+          {poster && !isPlaying && (
             <img
-              src={safeThumbnail}
+              src={poster}
               alt=""
               aria-hidden
               className="w-full max-h-[70vh] object-cover"
@@ -1866,12 +1875,27 @@ function ShortVideoMedia({
               'w-full max-h-[70vh] object-cover',
               // Fill on top of the thumbnail (which sets the height) when one is
               // present; otherwise lay out normally.
-              safeThumbnail && !isPlaying && 'absolute inset-0 h-full',
+              poster && !isPlaying && 'absolute inset-0 h-full',
             )}
             loop
             playsInline
             muted={isMuted}
-            preload="none"
+            // "metadata" (not "none") so the element paints a first frame rather
+            // than staying black on posts with no thumbnail.
+            preload="metadata"
+            onLoadedMetadata={() => {
+              const video = videoRef.current;
+              if (!video || video.videoWidth <= 0 || video.videoHeight <= 0) return;
+              setVideoAspect((prev) => prev ?? `${video.videoWidth} / ${video.videoHeight}`);
+              // Force a decoded frame for poster-less posts.
+              if (!poster && video.currentTime === 0) {
+                try {
+                  video.currentTime = 0.1;
+                } catch {
+                  // Engines that reject an early seek simply show the frame they have.
+                }
+              }
+            }}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
           />
