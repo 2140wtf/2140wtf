@@ -46,6 +46,8 @@ export interface MediaItem {
   dim?: string;
   alt?: string;
   mime?: string;
+  /** NIP-92 `image` — the poster for a video item. */
+  thumbnail?: string;
   allUrls: string[];
   allTypes: MediaType[];
   allDims: (string | undefined)[];
@@ -55,8 +57,18 @@ export interface MediaItem {
   contentWarning?: string;
 }
 
-function parseImeta(tags: string[][]): { url: string; blurhash?: string; dim?: string; alt?: string; mime?: string }[] {
-  const results: { url: string; blurhash?: string; dim?: string; alt?: string; mime?: string }[] = [];
+interface ImetaMedia {
+  url: string;
+  blurhash?: string;
+  dim?: string;
+  alt?: string;
+  mime?: string;
+  /** NIP-92 `image` — the poster for a video. */
+  image?: string;
+}
+
+function parseImeta(tags: string[][]): ImetaMedia[] {
+  const results: ImetaMedia[] = [];
   for (const tag of tags) {
     if (tag[0] !== 'imeta') continue;
     const parts: Record<string, string> = {};
@@ -64,7 +76,16 @@ function parseImeta(tags: string[][]): { url: string; blurhash?: string; dim?: s
       const sp = tag[i].indexOf(' ');
       if (sp !== -1) parts[tag[i].slice(0, sp)] = tag[i].slice(sp + 1);
     }
-    if (parts.url) results.push({ url: parts.url, blurhash: parts.blurhash, dim: parts.dim, alt: parts.alt, mime: parts.m });
+    if (parts.url) {
+      results.push({
+        url: parts.url,
+        blurhash: parts.blurhash,
+        dim: parts.dim,
+        alt: parts.alt,
+        mime: parts.m,
+        image: parts.image,
+      });
+    }
   }
   return results;
 }
@@ -86,6 +107,7 @@ export function eventToMediaItem(event: NostrEvent): MediaItem | null {
       dim: first.dim,
       alt: first.alt,
       mime: first.mime,
+      thumbnail: first.image,
       allUrls: imeta.map((e) => e.url),
       allTypes: imeta.map((e) => detectType(e.url, e.mime, event.kind)),
       allDims: imeta.map((e) => e.dim),

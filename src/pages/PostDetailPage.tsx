@@ -1165,7 +1165,7 @@ function PostDetailContent({ event }: { event: NostrEvent }) {
     isTextNote && event.kind !== 1 && event.kind !== 11 && event.kind !== 1111;
 
   const { data: stats } = useEventStats(event.id, event);
-  const { data: interactions } = useEventInteractions(event.id);
+  const { data: interactions } = useEventInteractions(event.id, event);
   const { format: formatMoney } = useFormatMoney();
 
   // Derive top 3 reaction emojis from actual interaction events (NIP-85 doesn't provide these)

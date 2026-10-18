@@ -31,6 +31,21 @@ vi.mock('@/hooks/useCacheFirstSeed', () => ({
   useCacheFirstSeed: vi.fn(),
 }));
 
+// The addressable fetch reads the effective relay list so it can ask each relay
+// directly (the pooled query resolves on the first EOSE and can miss a slower
+// relay). Tests below replace `appConfig.value` to control that list.
+type RelayEntry = { url: string; read: boolean; write: boolean };
+const appConfig = vi.hoisted(() => ({
+  value: {
+    relayMetadata: { relays: [] as RelayEntry[], updatedAt: 0 },
+    useAppRelays: false,
+    useUserRelays: false,
+  },
+}));
+vi.mock('@/hooks/useAppContext', () => ({
+  useAppContext: () => ({ config: appConfig.value }),
+}));
+
 const PUBKEY = '3'.repeat(64);
 const EVENT_ID = '4'.repeat(64);
 const IDENTIFIER = '1703274404';
@@ -68,6 +83,11 @@ describe('event outbox resolution', () => {
     storeEvent.mockReset();
     storeQuery.mockResolvedValue([]);
     storeEvent.mockResolvedValue();
+    appConfig.value = {
+      relayMetadata: { relays: [], updatedAt: 0 },
+      useAppRelays: false,
+      useUserRelays: false,
+    };
 
     primaryQuery.mockRejectedValue(new DOMException('signal timed out', 'TimeoutError'));
     relayQuery.mockImplementation(async (url) => {
@@ -89,6 +109,34 @@ describe('event outbox resolution', () => {
       [{ kinds: [30311], authors: [PUBKEY], '#d': [IDENTIFIER], limit: 1 }],
     );
     expect(storeEvent).toHaveBeenCalledWith(streamEvent);
+  });
+
+  it('finds an addressable event on a read relay the pooled query never returns', async () => {
+    // The pooled query resolves on the first relay EOSE, so an event held only
+    // by a slower relay used to end in "Event not found". No relay hints and no
+    // author relay list here: the configured read relay is the only source.
+    appConfig.value = {
+      relayMetadata: {
+        relays: [{ url: 'wss://slow.example/', read: true, write: false }],
+        updatedAt: 0,
+      },
+      useAppRelays: false,
+      useUserRelays: true,
+    };
+    relayQuery.mockImplementation(async (url) =>
+      url === 'wss://slow.example/' ? [streamEvent] : [],
+    );
+
+    const { result } = renderHook(
+      () => useAddrEvent({ kind: 30311, pubkey: PUBKEY, identifier: IDENTIFIER }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data).toEqual(streamEvent));
+    expect(relayQuery).toHaveBeenCalledWith(
+      'wss://slow.example/',
+      [{ kinds: [30311], authors: [PUBKEY], '#d': [IDENTIFIER], limit: 1 }],
+    );
   });
 
   it('finds an immutable event after the configured relay query times out', async () => {

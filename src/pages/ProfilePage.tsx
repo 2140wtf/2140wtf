@@ -44,6 +44,8 @@ import { useProfileFeed, useProfileLikes as useProfileLikesInfinite, useTabFeed,
 import type { ProfileTab as CoreProfileTab } from '@/hooks/useProfileFeed';
 import { useProfileMedia } from '@/hooks/useProfileMedia';
 import { useProfileProducts } from '@/hooks/useProfileProducts';
+import { useProfileHasMusic } from '@/hooks/useProfileMusic';
+import { ProfileMusicTab } from '@/components/music/ProfileMusicTab';
 import { MediaCollage, MediaCollageSkeleton } from '@/components/MediaCollage';
 import { useProfileSupplementary } from '@/hooks/useProfileData';
 import { LOVE_LIST_KIND } from '@/hooks/useLoveList';
@@ -980,7 +982,29 @@ const DEFAULT_TAB_LABELS = ['Posts', 'Posts & replies', 'Media', 'Products', 'Li
 const CORE_TAB_IDS: Record<string, string> = {
   'Posts': 'posts', 'Posts & replies': 'replies',
   'Media': 'media', 'Products': 'products', 'Badges': 'badges', 'Likes': 'likes', 'Wall': 'wall', 'Orders': 'orders',
+  'Music': 'music',
 };
+
+/**
+ * The Music tab is dynamic: it is offered whenever the author has a playable
+ * track, is never part of the user's kind 16769 tab list, and cannot be
+ * removed from the tab editor.
+ */
+const MUSIC_TAB_LABEL = 'Music';
+
+/** Where the Music tab sits: after Media, else after Posts & replies, else after Posts. */
+function withMusicTab(tabs: EditableTab[], hasMusic: boolean): EditableTab[] {
+  if (!hasMusic || tabs.some((t) => t.label === MUSIC_TAB_LABEL)) return tabs;
+  const musicTab: EditableTab = { label: MUSIC_TAB_LABEL, isCore: true };
+  const preferredAnchors = ['Media', 'Posts & replies', 'Posts'];
+  for (const anchor of preferredAnchors) {
+    const idx = tabs.findIndex((t) => t.label === anchor);
+    if (idx !== -1) {
+      return [...tabs.slice(0, idx + 1), musicTab, ...tabs.slice(idx + 1)];
+    }
+  }
+  return [...tabs, musicTab];
+}
 
 // Map a canonical tab label to its user-facing display text. The canonical
 // label (e.g. 'Posts') is kept for the internal tab id and the serialized
@@ -1217,7 +1241,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   // - [] (event exists, all removed) → show nothing
   // - [...] (event with tabs) → show exactly those
   // - App account (e.g. 2140.wtf) → force only Posts and Posts & replies
-  const viewTabs: EditableTab[] = useMemo(() => {
+  const baseViewTabs: EditableTab[] = useMemo(() => {
     if (isAppAccount) {
       return [
         { label: 'Posts', isCore: true },
@@ -1240,6 +1264,15 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     );
   }, [isAppAccount, profileTabsData, pubkey, user?.pubkey]);
 
+  // A profile that has published music gets a Music tab, appended to whatever
+  // tab list applies to it. It stays out of `baseViewTabs` so it is never
+  // serialized into the kind 16769 tab event.
+  const { data: hasProfileMusic } = useProfileHasMusic(pubkey);
+  const viewTabs: EditableTab[] = useMemo(
+    () => withMusicTab(baseViewTabs, hasProfileMusic === true),
+    [baseViewTabs, hasProfileMusic],
+  );
+
   // Derive the ID of the first visible tab (used as default selection).
   const firstTabId = useMemo(() => {
     if (viewTabs.length === 0) return 'posts';
@@ -1255,7 +1288,8 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
   }, [profileTabsQuery.isFetched, firstTabId]);
 
   const enterTabEditMode = () => {
-    setLocalTabs(viewTabs);
+    // Edit only the tabs the user owns — the dynamic Music tab is not theirs to reorder.
+    setLocalTabs(baseViewTabs);
     setTabEditMode(true);
   };
 
@@ -1295,7 +1329,10 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
     );
     await publishProfileTabs({ tabs: allTabs, vars: profileVars });
     // If the active tab was removed, fall back to the first remaining tab
-    const remainingIds = localTabs.map((t) => CORE_TAB_IDS[t.label] ?? t.label);
+    const remainingIds = [
+      ...localTabs.map((t) => CORE_TAB_IDS[t.label] ?? t.label),
+      ...(hasProfileMusic ? ['music'] : []),
+    ];
     if (!remainingIds.includes(activeTab)) {
       setActiveTab(remainingIds[0] ?? 'posts');
     }
@@ -1327,7 +1364,7 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
 
   // Drop active tab if it was deleted
   useEffect(() => {
-    const isCoreTab = ['posts', 'replies', 'media', 'products', 'badges', 'likes', 'wall', 'orders'].includes(activeTab);
+    const isCoreTab = ['posts', 'replies', 'media', 'products', 'badges', 'likes', 'wall', 'orders', 'music'].includes(activeTab);
     if (!isCoreTab && !profileSavedTabs.find((t) => t.label === activeTab)) {
       setActiveTab(firstTabId);
     }
@@ -1856,6 +1893,8 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
           (tag === 'profile-feed' && key[1] === pubkey) ||
           (tag === 'profile-media' && key[1] === pubkey) ||
           (tag === 'profile-products' && key[1] === pubkey) ||
+          (tag === 'profile-tracks' && key[1] === pubkey) ||
+          (tag === 'profile-has-music' && key[1] === pubkey) ||
           (tag === 'profile-likes-infinite' && key[1] === pubkey) ||
           (tag === 'profile-pinned-events' && key[1] === pubkey) ||
           (tag === 'wall-comments' && key[1] === pubkey)
@@ -2567,6 +2606,11 @@ type EditableTab = { label: string; isCore: boolean; tab?: ProfileTab };
               <div className="py-12 text-center text-muted-foreground">No media posts yet.</div>
             )}
           </div>
+        )}
+
+        {/* Music tab — the author's own kind 36787 tracks */}
+        {hasTabs && activeTab === 'music' && pubkey && (
+          <ProfileMusicTab pubkey={pubkey} />
         )}
 
         {/* Badges tab — grid of accepted NIP-58 badges */}

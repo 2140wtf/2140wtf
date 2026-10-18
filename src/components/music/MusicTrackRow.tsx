@@ -27,6 +27,19 @@ interface MusicTrackRowProps {
 }
 
 /**
+ * How long a single click waits before it commits to its action (open the
+ * composer), so the first half of a double click never opens one on its way to
+ * the track page. Kept short — the composer is the row's primary action.
+ */
+const SINGLE_CLICK_DELAY_MS = 250;
+
+/** True for a plain left click — modified and middle clicks must keep their
+ *  native link behaviour (open in a new tab / window). */
+function isPlainLeftClick(e: React.MouseEvent): boolean {
+  return e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+}
+
+/**
  * Compact track row for "Recently Added" sections and the Tracks tab.
  *
  * Layout: [index/play] [artwork] [title + artist] [duration]
@@ -36,6 +49,12 @@ interface MusicTrackRowProps {
  * - Hover: Index replaced with play icon
  * - Now playing: Primary-colored title, pause icon, subtle bg tint
  * - No artwork: Small Music icon placeholder
+ *
+ * **Click behaviour**: a single click comments (starts the track and opens the
+ * timed-comment composer at the playhead), a double click opens the track's own
+ * page. Signed-out listeners have no composer, so a single click opens the track
+ * page for them. The row stays a real link, so modified/middle clicks, keyboard
+ * activation and the explicit "open track page" button keep working.
  */
 export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   const player = useAudioPlayer();
@@ -52,8 +71,11 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
   // Hover-to-comment timer (opens the composer after 2s over the waveform).
   const hoverTimer = useRef<number | null>(null);
   const hoverRatio = useRef<number | null>(null);
+  // Pending single-click action (see SINGLE_CLICK_DELAY_MS).
+  const clickTimer = useRef<number | null>(null);
   useEffect(() => () => {
     if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
+    if (clickTimer.current !== null) window.clearTimeout(clickTimer.current);
   }, []);
   const isNowPlaying = player.currentTrack?.id === event.id;
   const peaks = useWaveformPeaks(parsed?.url, hovered || isNowPlaying);
@@ -134,16 +156,89 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     }, 2000);
   };
 
+  /** Start the track, keeping its artwork fallback consistent everywhere. */
+  const startTrack = () => {
+    const track = toAudioTrack(event, parsed);
+    track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
+    player.playTrack(track);
+  };
+
+  /**
+   * The waveform strip is a gesture zone inside the row's link (click to seek
+   * and comment, hover 2s to comment, click a commenter's avatar to jump).
+   * None of those gestures may *also* follow the row's `href`: the click used
+   * to be swallowed by `onClick`'s `stopPropagation` (which React can't turn
+   * into link prevention), so the browser navigated away from the composer it
+   * had just opened, and a click on a commenter's avatar navigated away from
+   * the reply it was offering.
+   *
+   * Captured rather than bubbled because the avatars stop propagation on their
+   * own click, and we only prevent the *default* action — the seek, marker and
+   * composer handlers all still run. Modified clicks keep native link
+   * behaviour, so ⌘/ctrl-click still opens the track in a new tab.
+   */
+  const preventLinkNavigation = (e: React.MouseEvent) => {
+    if (isPlainLeftClick(e)) e.preventDefault();
+  };
+
   /** Open the track's page; start it in the global player so the mini player
    *  keeps playing across the navigation. */
   const openTrack = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isNowPlaying) {
-      const track = toAudioTrack(event, parsed);
-      track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
-      player.playTrack(track);
+    if (!isNowPlaying) startTrack();
+    navigate(naddrPath);
+  };
+
+  const clearClickTimer = () => {
+    if (clickTimer.current !== null) {
+      window.clearTimeout(clickTimer.current);
+      clickTimer.current = null;
     }
+  };
+
+  /**
+   * Single click = comment, double click = open the track page.
+   *
+   * Playback still starts on the very first click (no delay), so the track is
+   * already playing when the second click navigates — the mini player then keeps
+   * it going on the track page.
+   */
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (!isPlainLeftClick(e)) return;
+    e.preventDefault();
+
+    const commentAt = isNowPlaying ? Math.max(0, player.currentTime) : 0;
+    if (!isNowPlaying) startTrack();
+
+    // Keyboard/assistive activation (a click with `detail: 0`) must follow the
+    // link, and a signed-out listener has no composer to open — both keep the
+    // row's old behaviour of going straight to the track page.
+    if (e.detail === 0 || !user || !isReal) {
+      navigate(naddrPath);
+      return;
+    }
+
+    if (clickTimer.current !== null) {
+      // Second click inside the window: a double click, not a comment.
+      clearClickTimer();
+      setCommentTime(null);
+      navigate(naddrPath);
+      return;
+    }
+
+    clickTimer.current = window.setTimeout(() => {
+      clickTimer.current = null;
+      if (user && isReal) setCommentTime(commentAt);
+    }, SINGLE_CLICK_DELAY_MS);
+  };
+
+  /** The OS double-click window can outlast SINGLE_CLICK_DELAY_MS, in which case
+   *  the composer is already open — close it before leaving for the track page. */
+  const handleRowDoubleClick = (e: React.MouseEvent) => {
+    if (!isPlainLeftClick(e)) return;
+    clearClickTimer();
+    setCommentTime(null);
     navigate(naddrPath);
   };
 
@@ -157,15 +252,11 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
       to={naddrPath}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      // Selecting a track starts it in the global player so playback continues
-      // seamlessly on the track's own page (the global player survives
-      // navigation); clicking the currently-playing track keeps its position.
-      onClick={() => {
-        if (isNowPlaying) return;
-        const track = toAudioTrack(event, parsed);
-        track.artwork ??= sanitizeUrl(author.data?.metadata?.picture);
-        player.playTrack(track);
-      }}
+      // Single click comments at the playhead; double click opens the track
+      // page. Playback starts on the first click either way, so it continues
+      // seamlessly in the mini player across the navigation.
+      onClick={handleRowClick}
+      onDoubleClick={handleRowDoubleClick}
       className={cn(
         'flex items-center gap-3 px-4 py-2.5 transition-colors cursor-pointer group',
         isNowPlaying ? 'bg-primary/5' : 'hover:bg-secondary/30',
@@ -212,6 +303,7 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
         <div
           className="relative mt-1.5"
           onClick={(e) => e.stopPropagation()}
+          onClickCapture={preventLinkNavigation}
           onMouseEnter={startHoverTimer}
           onMouseLeave={clearHoverTimer}
           onMouseMove={(e) => {

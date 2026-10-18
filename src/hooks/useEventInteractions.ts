@@ -1,9 +1,11 @@
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
-import type { NostrEvent } from '@nostrify/nostrify';
+import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { isCustomEmoji, getCustomEmojiUrl } from '@/lib/customEmoji';
 import { isNostrId } from '@/lib/nostrId';
 import { parseBolt11Amount } from '@/lib/bolt11';
+import { isAddressableKind } from '@/lib/eventKinds';
+import { parseNutzapEvent } from '@/lib/cashu/cashuNip60';
 
 export interface RepostEntry {
   eventId: string;
@@ -128,29 +130,50 @@ export function extractZapMessage(event: NostrEvent): string {
   return '';
 }
 
-/** Fetches interaction events (reposts, quotes, reactions, zaps) for a given event ID. */
-export function useEventInteractions(eventId: string | undefined) {
+/**
+ * Fetches interaction events (reposts, quotes, reactions, zaps) for a given event.
+ *
+ * Pass the event itself (not just its id) when it may be addressable: zap
+ * receipts for addressable targets (music tracks kind 36787, articles, …) are
+ * often tagged with the `a` address only — no `e` tag — so an `#e`-only query
+ * reports "no zaps" for content that demonstrably has them. See the `#a`
+ * filter below (useOnchainZaps handles the same case for kind 8333).
+ */
+export function useEventInteractions(eventId: string | undefined, event?: NostrEvent) {
   const { nostr } = useNostr();
 
+  const addrCoord = event && isAddressableKind(event.kind)
+    ? `${event.kind}:${event.pubkey}:${event.tags.find(([n]) => n === 'd')?.[1] ?? ''}`
+    : undefined;
+
   return useQuery<EventInteractions>({
-    queryKey: ['event-interactions', eventId ?? ''],
+    queryKey: ['event-interactions', eventId ?? '', addrCoord ?? ''],
     queryFn: async ({ signal }) => {
       if (!eventId) return { reposts: [], quotes: [], reactions: [], zaps: [] };
 
       const timeout = AbortSignal.timeout(5000);
       const combined = AbortSignal.any([signal, timeout]);
 
-      // Single query with two filter objects — relay handles as OR
-      const allEvents = await nostr.query(
-        [
-          { kinds: [6, 16, 7, 9735], '#e': [eventId], limit: 50 },
-          { kinds: [1], '#q': [eventId], limit: 20 },
-        ],
-        { signal: combined },
-      );
+      // Single query with several filter objects — the relay handles them as OR.
+      // 9321 (NIP-61 Nutzap) is a zap rail: without it a Cashu zap is invisible
+      // in the Zaps tab even though the sender's success screen reported it.
+      const filters: NostrFilter[] = [
+        { kinds: [6, 16, 7, 9735, 9321], '#e': [eventId], limit: 50 },
+        { kinds: [1], '#q': [eventId], limit: 20 },
+      ];
+      if (addrCoord) {
+        filters.push({ kinds: [9735, 9321], '#a': [addrCoord], limit: 50 });
+      }
 
-      const eTagEvents = allEvents.filter(e => e.kind !== 1 || e.tags.some(([n, v]) => n === 'e' && v === eventId));
-      const qTagEvents = allEvents.filter(e => e.kind === 1 && e.tags.some(([n, v]) => n === 'q' && v === eventId));
+      const allEvents = await nostr.query(filters, { signal: combined });
+
+      // A receipt can match both the `#e` and the `#a` filter — count it once.
+      const byId = new Map<string, NostrEvent>();
+      for (const event of allEvents) byId.set(event.id, event);
+      const uniqueEvents = [...byId.values()];
+
+      const eTagEvents = uniqueEvents.filter(e => e.kind !== 1 || e.tags.some(([n, v]) => n === 'e' && v === eventId));
+      const qTagEvents = uniqueEvents.filter(e => e.kind === 1 && e.tags.some(([n, v]) => n === 'q' && v === eventId));
 
       const reposts: RepostEntry[] = [];
       const quotes: QuoteEntry[] = [];
@@ -192,6 +215,21 @@ export function useEventInteractions(eventId: string | undefined) {
                 senderPubkey,
                 amountSats: Math.floor(msats / 1000),
                 message: extractZapMessage(e),
+                createdAt: e.created_at,
+              });
+            }
+            break;
+          }
+          case 9321: {
+            // NIP-61 Nutzap: the amount lives in the enclosed Cashu proofs
+            // (sats), and parseNutzapEvent rejects unsigned/malformed events.
+            const nutzap = parseNutzapEvent(e);
+            if (nutzap && nutzap.amount > 0) {
+              zaps.push({
+                eventId: e.id,
+                senderPubkey: nutzap.sender,
+                amountSats: nutzap.amount,
+                message: e.content,
                 createdAt: e.created_at,
               });
             }

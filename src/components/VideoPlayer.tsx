@@ -90,6 +90,52 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // `loadeddata` can fire before React attaches its listener (cached videos,
+  // fast local blobs, remounts), which left the element permanently
+  // transparent: on a post with no thumbnail that is an unexplained black box.
+  // Read readyState directly as well, and keep the events as the fast path.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const sync = () => {
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) setVideoReady(true);
+    };
+    sync();
+    video.addEventListener('loadeddata', sync);
+    video.addEventListener('loadedmetadata', sync);
+    video.addEventListener('canplay', sync);
+    return () => {
+      video.removeEventListener('loadeddata', sync);
+      video.removeEventListener('loadedmetadata', sync);
+      video.removeEventListener('canplay', sync);
+    };
+  }, [src]);
+
+  // Paint a first frame even with no thumbnail. A paused <video> preloading
+  // only metadata may never decode a frame at t=0, so the box stays black; a
+  // tiny seek forces the browser to decode and paint one. Skipped when a poster
+  // is on its way or playback has already started.
+  const frameNudged = useRef(false);
+  useEffect(() => {
+    if (generatedPoster || hasStarted || startTime) return;
+    const video = videoRef.current;
+    if (!video || frameNudged.current) return;
+    const nudge = () => {
+      if (frameNudged.current) return;
+      if (video.readyState < HTMLMediaElement.HAVE_METADATA) return;
+      frameNudged.current = true;
+      try {
+        video.currentTime = 0.1;
+      } catch {
+        // Some engines reject a seek before the first frame; the readyState
+        // sync above still reveals whatever the element can paint.
+      }
+    };
+    nudge();
+    video.addEventListener('loadedmetadata', nudge, { once: true });
+    return () => video.removeEventListener('loadedmetadata', nudge);
+  }, [generatedPoster, hasStarted, startTime, src]);
+
   const { showControls, revealControls, scheduleHide, isMuted, volume, toggleMute, handleVolumeChange } = usePlayerControls({
     mediaRef: videoRef,
     containerRef,
@@ -300,11 +346,12 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
           // constraints from normal layout so the frame centers within the viewport.
           'fullscreen:object-contain fullscreen:static fullscreen:max-h-none fullscreen:h-full fullscreen:w-full',
           // The element shows a transparent poster until playback, so keep it
-          // hidden while the thumbnail <img> overlay is covering it. Reveal it
-          // once playback starts, or — when there's no thumbnail — as soon as it
-          // has decoded a frame so the user sees something before pressing play.
+          // hidden behind the thumbnail <img> overlay (which sits on top) and
+          // reveal it as soon as it has decoded a frame — with or without a
+          // thumbnail, so a poster-less post shows its first frame instead of a
+          // black box.
           'transition-opacity duration-150',
-          (hasStarted || (videoReady && !generatedPoster)) ? 'opacity-100' : 'opacity-0',
+          (hasStarted || videoReady) ? 'opacity-100' : 'opacity-0',
         )}
         playsInline
         preload="metadata"
