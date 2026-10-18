@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { TestApp } from '@/test/TestApp';
@@ -15,25 +16,37 @@ import { ZapDialog } from './ZapDialog';
  */
 const author: { data: { metadata: Record<string, unknown> } | undefined } = { data: undefined };
 const targets: { targets: PaymentTarget[] } = { targets: [] };
+/** The viewer's Cashu wallet — absent in the "Cashu only, no wallet" case. */
+const cashuWalletState: { seedAvailable: boolean; allMints: string[]; balances: Record<string, number>; mintUrl: string } = {
+  seedAvailable: true,
+  allMints: [],
+  balances: {},
+  mintUrl: '',
+};
+/** The recipient's NIP-61 receive info, as the kind-10019 lookup resolves it. */
+const nutzapInfoState: { data: { pubkey: string; mints: string[]; relays: string[] } | null } = { data: null };
+const toastMock = vi.fn();
 
 vi.mock('@/hooks/useAuthor', () => ({ useAuthor: () => author }));
 vi.mock('@/hooks/usePaymentTargets', () => ({ usePaymentTargets: () => targets }));
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: { pubkey: 'd'.repeat(64), signer: {} }, metadata: undefined }),
 }));
-vi.mock('@/hooks/useToast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
+vi.mock('@/hooks/useToast', () => ({ useToast: () => ({ toast: toastMock }) }));
 vi.mock('@/hooks/useWallet', () => ({ useWallet: () => ({ webln: null, activeNWC: null }) }));
 vi.mock('@/hooks/useZapPaymentListener', () => ({ useZapPaymentListener: () => {} }));
 vi.mock('@/hooks/useFormatMoney', () => ({
   useFormatMoney: () => ({ format: (sats: number) => `${sats} sats` }),
 }));
-// Sender has a Cashu wallet, so the Cashu rail always exists on this side —
-// whether it *should* is what these tests pin down.
+// By default the sender has a Cashu wallet, so the Cashu rail always exists on
+// this side — whether it *should* is what these tests pin down. The tests that
+// cover the *dead zap button* flip it off, since that case is precisely "the
+// author takes Cashu and this viewer has no wallet to send it from".
 vi.mock('@/hooks/useCashuWalletContext', () => ({
-  useCashuWalletContext: () => ({ seedAvailable: true, allMints: [], balances: {}, mintUrl: '' }),
+  useCashuWalletContext: () => cashuWalletState,
 }));
 vi.mock('@/hooks/useNutzapInfo', () => ({
-  useNutzapInfo: () => ({ data: null, isLoading: false }),
+  useNutzapInfo: () => ({ data: nutzapInfoState.data, isLoading: false }),
   // Mirrors the real predicate so these tests can't silently diverge from it.
   canReceiveNutzap: (info: { pubkey?: string; mints?: string[] } | null | undefined) =>
     !!info && (info.mints?.length ?? 0) > 0 && !!info.pubkey,
@@ -83,7 +96,66 @@ const renderDialog = () =>
     </TestApp>,
   );
 
+beforeEach(() => {
+  // The hooks above read these objects on every render, so each test starts
+  // from the default capabilities and overrides only what it is about.
+  cashuWalletState.seedAvailable = true;
+  nutzapInfoState.data = null;
+  toastMock.mockClear();
+});
+
 const switcher = () => screen.getByRole('button', { name: /switch payment method/i });
+
+/** The dialog's trigger node, rendering the icon-only fallback wrapper. */
+const renderTrigger = () =>
+  render(
+    <TestApp>
+      <ZapDialog target={TARGET}>
+        <button type="button">Zap</button>
+      </ZapDialog>
+    </TestApp>,
+  );
+
+describe('ZapDialog unavailable zap button', () => {
+  it('says a Cashu-only author needs the viewer\'s wallet, and links to it', async () => {
+    author.data = { metadata: {} }; // no lud16/lud06
+    targets.targets = []; // no NIP-A3 target
+    cashuWalletState.seedAvailable = false; // this viewer has no Cashu wallet
+    nutzapInfoState.data = { pubkey: 'e'.repeat(64), mints: ['https://mint.example'], relays: [] };
+
+    renderTrigger();
+    fireEvent.click(await screen.findByRole('button', { name: 'Zap' }));
+
+    // The icon stays, but it is not a dead control any more.
+    expect(screen.queryByTestId('zap-modal')).toBeNull();
+    const call = toastMock.mock.calls.at(-1)?.[0];
+    expect(call.title).toBe('Cashu wallet required');
+    expect(call.description).toMatch(/accepts Cashu Nutzaps only/i);
+
+    // …and the toast carries the way out: an action that links to the wallet.
+    // (Inspected as an element because Radix's ToastAction only paints inside a
+    // mounted Toast, which is not what this test is about.)
+    const action = call.action as ReactElement<{ altText: string; children: ReactElement<{ to: string }> }>;
+    expect(action.props.altText).toBe('Open Cashu wallet');
+    expect(action.props.children.props.to).toBe('/wallet');
+  });
+
+  it('says an author with no rail at all accepts no zaps', async () => {
+    author.data = { metadata: {} };
+    targets.targets = [];
+    cashuWalletState.seedAvailable = false;
+    nutzapInfoState.data = null; // no NIP-61 receive info either
+
+    renderTrigger();
+    fireEvent.click(await screen.findByRole('button', { name: 'Zap' }));
+
+    expect(screen.queryByTestId('zap-modal')).toBeNull();
+    const call = toastMock.mock.calls.at(-1)?.[0];
+    expect(call.title).toBe('Zaps unavailable');
+    expect(call.description).toMatch(/hasn't enabled zaps/i);
+    expect(call.action).toBeUndefined();
+  });
+});
 
 describe('ZapDialog rail selection', () => {
   it('moves to Lightning when the recipient lightning address resolves after mount', async () => {
