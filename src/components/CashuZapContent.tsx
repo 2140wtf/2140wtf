@@ -140,7 +140,12 @@ export function CashuZapContent({
   const { format: formatMoney } = useFormatMoney();
   const primaryDisplay = formatMoney(numericSats);
 
-  const isBusy = isSending || isDmSending || wallet.loading;
+  // While the recipient's Nutzap support is being resolved the rail is not
+  // decided yet, so the form stays usable (amount, mint, balance) but Send waits
+  // — otherwise a Nutzap-capable recipient could be paid with a DM token by
+  // mistake.
+  const isCheckingSupport = nutzapInfoLoading;
+  const isBusy = isSending || isDmSending || wallet.loading || isCheckingSupport;
   const canSend =
     numericSats > 0 &&
     selectedMintUrl &&
@@ -252,15 +257,6 @@ export function CashuZapContent({
         <p className="text-sm text-muted-foreground">
           Cashu wallet is not available. Make sure you are logged in with a signer that supports NIP-44.
         </p>
-      </div>
-    );
-  }
-
-  if (nutzapInfoLoading) {
-    return (
-      <div className="px-4 py-8 text-center space-y-3">
-        <Loader2 className="size-5 animate-spin mx-auto text-muted-foreground" />
-        <p className="text-sm text-muted-foreground">Looking up Nutzap receive info…</p>
       </div>
     );
   }
@@ -392,7 +388,12 @@ export function CashuZapContent({
       </Button>
 
       <p className="text-[11px] text-muted-foreground text-center flex items-center justify-center gap-1">
-        {isNutzapMode ? (
+        {isCheckingSupport ? (
+          <>
+            <Loader2 className="size-3 animate-spin" />
+            Checking Nutzap support…
+          </>
+        ) : isNutzapMode ? (
           <>Sends a NIP-61 Nutzap (kind 9321) locked to the recipient&apos;s Cashu pubkey.</>
         ) : (
           <>

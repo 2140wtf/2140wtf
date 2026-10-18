@@ -26,6 +26,8 @@ import { CashuZapContent } from '@/components/CashuZapContent';
 import { PaymentMethodIcon } from '@/components/PaymentMethodIcon';
 import { ZapAmountInput } from '@/components/ZapAmountInput';
 import { ZapSuccessScreen } from '@/components/ZapSuccessScreen';
+import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useToast } from '@/hooks/useToast';
@@ -37,6 +39,7 @@ import { usePaymentTargets } from '@/hooks/usePaymentTargets';
 import { useZapPaymentListener } from '@/hooks/useZapPaymentListener';
 import { useCashuWalletContext } from '@/hooks/useCashuWalletContext';
 import { canReceiveNutzap, useNutzapInfo } from '@/hooks/useNutzapInfo';
+import { ToastAction } from '@/components/ui/toast';
 
 import { canZap } from '@/lib/canZap';
 import { parseCampaign } from '@/lib/campaign';
@@ -519,16 +522,6 @@ export function ZapDialog({
   const cashuWallet = useCashuWalletContext();
   const hasCashu = !campaign && !isPollVote && cashuWallet.seedAvailable;
 
-  // Whether the recipient can actually receive a Nutzap (NIP-61 kind 10019 with
-  // at least one accepted mint). Without it a "Cashu zap" is not a zap at all:
-  // CashuZapContent falls back to a NUT-18 token inside a NIP-17 DM, which only
-  // pays out if the recipient opens the message. Open-gated like the payment
-  // targets so dialogs sitting closed behind a feed never issue the REQ.
-  const { data: nutzapInfo } = useNutzapInfo(
-    open && !campaign && !isPollVote && hasCashu ? target.pubkey : undefined,
-  );
-  const canNutzap = canReceiveNutzap(nutzapInfo);
-
   // Generic (non-native) payment targets — Monero, Ethereum, etc. These render
   // a QR + native-URI button rather than a built-in send flow.
   const genericTargets = useMemo(
@@ -600,6 +593,27 @@ export function ZapDialog({
   const lightningAvailable = methods.some((m) => m.kind === 'lightning');
   const methodFilteredByListing = !!allowedPaymentMethods && allowedPaymentMethods.length > 0;
 
+
+  // Whether the recipient can actually receive a Nutzap (NIP-61 kind 10019 with
+  // at least one accepted mint). Without it a "Cashu zap" is not a zap at all:
+  // CashuZapContent falls back to a NUT-18 token inside a NIP-17 DM, which only
+  // pays out if the recipient opens the message.
+  //
+  // One lookup serves two needs. While the dialog is open it warms the Cashu
+  // pane's rail before the pane mounts (the user usually lands on the Lightning
+  // form first), which also keeps it from showing a "checking" state. And while
+  // the dialog is CLOSED it is what lets the dead-button fallback below tell
+  // "accepts Cashu only, open your wallet" apart from "accepts nothing" — that
+  // case has no wallet of our own, so it must not be gated on `hasCashu`.
+  //
+  // Open-gated like the payment targets so dialogs sitting closed behind a feed
+  // never issue the REQ, except when there is no usable rail at all.
+  const needsNutzapProbe =
+    !campaign && !isPollVote && !!user && ((open && hasCashu) || methods.length === 0);
+  const { data: nutzapInfo } = useNutzapInfo(
+    needsNutzapProbe && target.pubkey ? target.pubkey : undefined,
+  );
+  const canNutzap = canReceiveNutzap(nutzapInfo);
 
   const defaultMethodId: DialogMethodId = useMemo(() => {
     if (isPollVote) return 'lightning';
@@ -793,9 +807,50 @@ export function ZapDialog({
 
   if (!canOpenZap) {
     // Uncontrolled callers wrap a trigger node; render it bare so the icon
-    // still appears (just won't open anything). Controlled callers don't
-    // pass children and won't try to open the dialog for themselves anyway.
-    return children ? <>{children}</> : null;
+    // still appears. Controlled callers don't pass children and won't try to
+    // open the dialog for themselves anyway.
+    if (!children) return null;
+
+    // A signed-in viewer looking at someone who accepts no zap rail at all used
+    // to get a zap icon that silently did nothing. Keep the icon, but explain
+    // itself on hover/click instead of being a dead control. Two different
+    // causes, two different fixes: the author takes nothing we can pay, or the
+    // author takes Cashu and this viewer has no wallet to send it from.
+    const cashuOnly = canNutzap;
+    const unavailable = !!user && user.pubkey !== target.pubkey && !campaign && methods.length === 0;
+    const unavailableReason = unavailable
+      ? cashuOnly
+        ? 'This author accepts Cashu Nutzaps only. Open your Cashu wallet to zap them.'
+        : "This author hasn't enabled zaps — no Lightning address, bitcoin address or Cashu support is published."
+      : null;
+    if (!unavailableReason) return <>{children}</>;
+
+    return (
+      <div
+        className={cn('cursor-not-allowed opacity-60', className)}
+        title={unavailableReason}
+        aria-disabled="true"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toast({
+            title: cashuOnly ? 'Cashu wallet required' : 'Zaps unavailable',
+            description: unavailableReason,
+            ...(cashuOnly
+              ? {
+                  action: (
+                    <ToastAction altText="Open Cashu wallet" asChild>
+                      <Link to="/wallet">Wallet</Link>
+                    </ToastAction>
+                  ),
+                }
+              : {}),
+          });
+        }}
+      >
+        {children}
+      </div>
+    );
   }
 
   return (

@@ -62,7 +62,10 @@ interface InteractionsModalProps {
 
 export function InteractionsModal({ target, open, onOpenChange, initialTab = 'reposts' }: InteractionsModalProps) {
   const [activeTab, setActiveTab] = useState<InteractionTab>(initialTab);
-  const { data, isLoading } = useEventInteractions(open ? target.id : undefined);
+  // `target` (not just its id) so addressable targets also match `a`-tagged
+  // zap receipts — music tracks zapped by address from other clients otherwise
+  // show "No zaps yet" even though their NIP-85 stats count zaps.
+  const { data, isLoading } = useEventInteractions(open ? target.id : undefined, open ? target : undefined);
   const { zaps: onchainZaps, isLoading: isLoadingOnchain } = useOnchainZaps(
     open ? target : undefined,
   );

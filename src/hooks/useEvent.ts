@@ -1,12 +1,24 @@
+import { useMemo } from 'react';
 import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
-import { ZAPSTORE_RELAY } from '@/lib/appRelays';
+import { ZAPSTORE_RELAY, getEffectiveRelays } from '@/lib/appRelays';
+import { useAppContext } from '@/hooks/useAppContext';
 import { useNostrStorage } from '@/hooks/useNostrStorage';
 import { useCacheFirstSeed } from '@/hooks/useCacheFirstSeed';
 
 /** Kinds whose canonical home is the Zapstore relay. */
 const ZAPSTORE_KINDS = [32267, 30063, 3063];
+
+/**
+ * Pause before retrying a miss on a cold page load. A freshly signed-in tab
+ * fires a burst of relay queries (contact list, profile, wallet, NIP-61 info)
+ * while the sockets are still dialing, so every source can time out at once
+ * even though the relays have the event. The retry runs after the burst has
+ * settled and is what keeps an out-of-set track from rendering
+ * "Event not found".
+ */
+const COLD_START_RETRY_DELAY_MS = 1000;
 
 /** Public relays used only to discover an author's NIP-65 outbox list. */
 const OUTBOX_DISCOVERY_RELAYS = [
@@ -89,6 +101,38 @@ function extractWriteRelays(event: NostrEvent): string[] {
     }
   }
   return [...relays];
+}
+
+/**
+ * Resolve with the first non-null value, or null once every source has
+ * settled empty. Used to race several event sources without waiting for the
+ * slowest one.
+ */
+function firstEvent(sources: Promise<NostrEvent | null>[]): Promise<NostrEvent | null> {
+  return new Promise((resolve) => {
+    let remaining = sources.length;
+    let settled = false;
+    const done = (value: NostrEvent | null) => {
+      if (settled) return;
+      remaining -= 1;
+      if (value) {
+        settled = true;
+        resolve(value);
+        return;
+      }
+      if (remaining === 0) {
+        settled = true;
+        resolve(null);
+      }
+    };
+    if (remaining === 0) {
+      resolve(null);
+      return;
+    }
+    for (const source of sources) {
+      void source.then(done, () => done(null));
+    }
+  });
 }
 
 /**
@@ -189,6 +233,24 @@ export function useEvent(eventId: string | undefined, relays?: string[], authorH
         }
       }
 
+      // 4. Cold-start retry (see COLD_START_RETRY_DELAY_MS). A miss here is
+      //    usually a stalled socket, not a deleted event.
+      await new Promise((resolve) => setTimeout(resolve, COLD_START_RETRY_DELAY_MS));
+      try {
+        events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
+      } catch {
+        events = [];
+      }
+      if (events.length > 0) return events[0];
+
+      if (relays && relays.length > 0) {
+        const hinted = await queryRelaySet(nostr, relays, filter, AbortSignal.timeout(5000));
+        if (hinted.length > 0) {
+          void store.event(hinted[0]);
+          return hinted[0];
+        }
+      }
+
       return null;
     },
     enabled: !!eventId,
@@ -212,6 +274,17 @@ function isAddressableKind(kind: number): boolean {
 export function useAddrEvent(addr: AddrCoords | undefined, relays?: string[]) {
   const { nostr } = useNostr();
   const { store } = useNostrStorage();
+  const { config } = useAppContext();
+  // The relays the pooled query talks to, addressed directly: the pool resolves
+  // as soon as the FIRST relay EOSEs (eoseTimeout: 300), which drops events that
+  // only a slower relay holds — the usual cause of "Event not found" for tracks
+  // and articles published outside the app's fastest relays.
+  const readRelays = useMemo(
+    () => getEffectiveRelays(config.relayMetadata, config.useAppRelays, config.useUserRelays)
+      .relays.filter((r) => r.read)
+      .map((r) => r.url),
+    [config.relayMetadata, config.useAppRelays, config.useUserRelays],
+  );
 
   // Seed from the local event store so a known addressable/replaceable event
   // renders immediately. Unlike fetch-by-id, an addr coordinate points at a
@@ -262,32 +335,63 @@ export function useAddrEvent(addr: AddrCoords | undefined, relays?: string[]) {
         }
       }
 
-      // 1. Query the user's configured relays (batched + cached automatically)
-      let events: NostrEvent[] = [];
-      try {
-        events = await nostr.query(filter, { signal: AbortSignal.timeout(5000) });
-      } catch {
-        // Continue to relay hints and NIP-65 outbox discovery on timeout.
-      }
-      if (events.length > 0) return events[0];
+      // 1. Race the cheap sources: the pooled query (batched + cached) and the
+      //    configured read relays queried one by one (each waits for its own
+      //    EOSE, so a slow relay can no longer be discarded by the pool's early
+      //    resolution), plus any relay hints the naddr carried. Running them
+      //    concurrently keeps the common case fast and stops a miss on the
+      //    fastest relay from turning into two sequential fallback queries.
+      // Relays can ignore filters or return stale/related events, so only accept
+      // a result that really is the requested coordinate.
+      const matching = (event: NostrEvent | null | undefined): NostrEvent | null => {
+        if (!event) return null;
+        if (event.kind !== addr.kind || event.pubkey !== addr.pubkey) return null;
+        if (isAddressable && (event.tags.find(([n]) => n === 'd')?.[1] ?? '') !== addr.identifier) return null;
+        return event;
+      };
 
-      // 2. If not found and we have relay hints, try those relays directly
-      if (relays && relays.length > 0) {
-        try {
-          const hintEvents = await queryRelaySet(nostr, relays, filter, AbortSignal.timeout(5000));
-          if (hintEvents.length > 0) {
-            // group() bypasses the batcher's cache tap — persist explicitly.
-            void store.event(hintEvents[0]);
-            return hintEvents[0];
-          }
-        } catch {
-          // relay hint query failed — fall through
+      const best = (events: NostrEvent[]) =>
+        events.map(matching).find((e): e is NostrEvent => !!e) ?? null;
+
+      const raceSources = () => {
+        const sources: Promise<NostrEvent | null>[] = [
+          nostr
+            .query(filter, { signal: AbortSignal.timeout(5000) })
+            .then(best)
+            .catch(() => null),
+          queryRelaySet(nostr, readRelays, filter, AbortSignal.timeout(4000))
+            .then(best)
+            .catch(() => null),
+        ];
+        if (relays && relays.length > 0) {
+          sources.push(
+            queryRelaySet(nostr, relays, filter, AbortSignal.timeout(4000))
+              .then(best)
+              .catch(() => null),
+          );
         }
+        return firstEvent(sources);
+      };
+
+      const resolve = async (): Promise<NostrEvent | null> => {
+        const raced = await raceSources();
+        if (raced) return raced;
+
+        // 2. Last resort: fetch the author's NIP-65 relay list and try their
+        //    write relays (naddr always includes the author pubkey)
+        return matching(
+          await queryAuthorRelays(nostr, addr.pubkey, filter, AbortSignal.timeout(10000)),
+        );
+      };
+
+      let found = await resolve();
+
+      // 3. Cold-start retry (see COLD_START_RETRY_DELAY_MS).
+      if (!found) {
+        await new Promise((done) => setTimeout(done, COLD_START_RETRY_DELAY_MS));
+        found = await resolve();
       }
 
-      // 3. Last resort: fetch the author's NIP-65 relay list and try their
-      //    write relays (naddr always includes the author pubkey)
-      const found = await queryAuthorRelays(nostr, addr.pubkey, filter, AbortSignal.timeout(10000));
       if (found) {
         void store.event(found);
         return found;
