@@ -163,6 +163,24 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
     player.playTrack(track);
   };
 
+  /**
+   * The waveform strip is a gesture zone inside the row's link (click to seek
+   * and comment, hover 2s to comment, click a commenter's avatar to jump).
+   * None of those gestures may *also* follow the row's `href`: the click used
+   * to be swallowed by `onClick`'s `stopPropagation` (which React can't turn
+   * into link prevention), so the browser navigated away from the composer it
+   * had just opened, and a click on a commenter's avatar navigated away from
+   * the reply it was offering.
+   *
+   * Captured rather than bubbled because the avatars stop propagation on their
+   * own click, and we only prevent the *default* action — the seek, marker and
+   * composer handlers all still run. Modified clicks keep native link
+   * behaviour, so ⌘/ctrl-click still opens the track in a new tab.
+   */
+  const preventLinkNavigation = (e: React.MouseEvent) => {
+    if (isPlainLeftClick(e)) e.preventDefault();
+  };
+
   /** Open the track's page; start it in the global player so the mini player
    *  keeps playing across the navigation. */
   const openTrack = (e: React.MouseEvent) => {
@@ -285,6 +303,7 @@ export function MusicTrackRow({ event, index }: MusicTrackRowProps) {
         <div
           className="relative mt-1.5"
           onClick={(e) => e.stopPropagation()}
+          onClickCapture={preventLinkNavigation}
           onMouseEnter={startHoverTimer}
           onMouseLeave={clearHoverTimer}
           onMouseMove={(e) => {
