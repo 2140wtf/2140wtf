@@ -38,6 +38,7 @@ import { MyTradesSection } from "@/components/MyTradesSection";
 import { cn } from "@/lib/utils";
 import { openUrl } from "@/lib/downloadFile";
 import { mergeApiAndRelayMarkets, type RelayMergedMarket } from "@/lib/baoRelayMarkets";
+import { getBaoNetwork, setBaoNetwork } from "@/lib/baoNetwork";
 import type { BaoMarket } from "@/lib/baoMarketParser";
 
 const SORT_OPTIONS = [
@@ -270,6 +271,7 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const [createOpen, setCreateOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedMarketId = searchParams.get("market");
+  const network = getBaoNetwork();
 
   useSeoMeta({
     title: `₿AO MARKETS | ${config.appName}`,
@@ -561,6 +563,21 @@ export function PredictionMarketsPage(): React.JSX.Element {
               ))}
             </SelectContent>
           </Select>
+
+          <ToggleGroup
+            type="single"
+            value={network}
+            onValueChange={(v) => {
+              if (v === 'demo' || v === 'testnet') setBaoNetwork(v);
+            }}
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            aria-label="BAO network"
+          >
+            <ToggleGroupItem value="demo" aria-label="Demo network">Demo</ToggleGroupItem>
+            <ToggleGroupItem value="testnet" aria-label="Public testnet">Testnet</ToggleGroupItem>
+          </ToggleGroup>
 
           <ToggleGroup
             type="single"

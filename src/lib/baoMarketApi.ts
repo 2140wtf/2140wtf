@@ -12,8 +12,14 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 
 import { type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
+import { baoNetworkEndpoints, getBaoNetwork } from '@/lib/baoNetwork';
 
 export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
+
+/** Public API base for the selected network. */
+export function baoPublicApiBase(): string {
+  return baoNetworkEndpoints(getBaoNetwork()).api;
+}
 
 /**
  * Primary API base. There is no local API: dev and deployed builds alike talk
@@ -22,6 +28,7 @@ export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
  * remains as an explicit override.
  */
 function baoPrimaryApiBase(): string {
+  if (getBaoNetwork() === 'testnet') return baoPublicApiBase();
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
   if (fromEnv) return `${fromEnv}/v1`;
   if (import.meta.env.DEV) return BAO_PUBLIC_API_BASE;
@@ -203,7 +210,7 @@ export async function baoApiFetch(path: string, signal?: AbortSignal): Promise<R
   }
 
   const proxiedPath = `${baoPrimaryApiBase()}${path}`;
-  const publicPath = `${BAO_PUBLIC_API_BASE}${path}`;
+  const publicPath = `${baoPublicApiBase()}${path}`;
 
   let res: Response;
   try {
@@ -240,7 +247,7 @@ export async function baoApiFetchAll(path: string, signal?: AbortSignal): Promis
   if (isCircuitOpen()) return [];
 
   const primary = `${baoPrimaryApiBase()}${path}`;
-  const publicUrl = `${BAO_PUBLIC_API_BASE}${path}`;
+  const publicUrl = `${baoPublicApiBase()}${path}`;
 
   const tryFetch = async (url: string): Promise<Response | null> => {
     try {

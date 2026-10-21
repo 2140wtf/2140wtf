@@ -11,6 +11,7 @@
  */
 
 import { baoNip98Header, type BaoApiSigner } from '@/lib/baoApiAuth';
+import { baoNetworkEndpoints, getBaoNetwork } from '@/lib/baoNetwork';
 import type { MilestoneEvidenceV1 } from '@/lib/baoWorkContract';
 
 export type BaoFundraiserFormat = 'milestones' | 'stream';
@@ -116,6 +117,7 @@ export const BAO_MARKETS_URL = 'https://bao.markets';
 
 /** Base URL of the bao.markets API (no trailing slash). */
 export function baoApiBase(): string {
+  if (getBaoNetwork() === 'testnet') return baoNetworkEndpoints('testnet').fundApi;
   const fromEnv = (import.meta.env.VITE_BAO_FUNDRAISING_API_URL as string | undefined)?.replace(/\/+$/, '');
   if (fromEnv) return fromEnv;
   // No local API: dev and deployed builds alike talk to the public bao.markets
@@ -280,6 +282,7 @@ export function baoRelayUrl(): string {
  * deployment is the signet demo; override only when pointing at a local API.
  */
 function baoNetwork(): string {
+  if (getBaoNetwork() === 'testnet') return 'testnet';
   return (import.meta.env.VITE_BAO_NETWORK as string | undefined) ?? 'demo';
 }
 

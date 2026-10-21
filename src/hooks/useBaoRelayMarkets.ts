@@ -4,8 +4,8 @@ import type { NostrFilter } from "@nostrify/nostrify";
 
 import { type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
 import {
-  BAO_MARKET_NETWORK,
-  BAO_MARKETS_RELAY,
+  baoMarketNetwork,
+  baoMarketsRelay,
   parseBaoRelayMarkets,
 } from "@/lib/baoRelayMarkets";
 
@@ -30,7 +30,7 @@ export function useBaoRelayMarkets(category: string = "all", status: "active" | 
   const { nostr } = useNostr();
 
   return useQuery<BaoMarket[]>({
-    queryKey: ["bao-relay-markets", category, status, BAO_MARKET_NETWORK],
+    queryKey: ["bao-relay-markets", category, status, baoMarketNetwork()],
     enabled,
     queryFn: async ({ signal }) => {
       const controller = new AbortController();
@@ -39,7 +39,7 @@ export function useBaoRelayMarkets(category: string = "all", status: "active" | 
 
       const filter: NostrFilter = {
         kinds: [BAO_MARKET_KIND],
-        "#n": [BAO_MARKET_NETWORK],
+        "#n": [baoMarketNetwork()],
         limit: QUERY_LIMIT,
       };
       if (category !== "all") {
@@ -47,7 +47,7 @@ export function useBaoRelayMarkets(category: string = "all", status: "active" | 
       }
 
       try {
-        const events = await nostr.group([BAO_MARKETS_RELAY]).query([filter], {
+        const events = await nostr.group([baoMarketsRelay()]).query([filter], {
           signal: controller.signal,
         });
 

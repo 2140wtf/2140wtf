@@ -1,6 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-
-const SMJ_API_BASE = 'https://relay.bao.network/bao-api/v1';
+import { baoPublicApiBase } from '@/lib/baoMarketApi';
 
 interface SmjOption {
   id: string;
@@ -81,7 +80,7 @@ export function buildSmjLiveMarket(
  */
 async function fetchSmjOdds(marketId: string, signal?: AbortSignal): Promise<SmjLiveMarket | null> {
   const encodedId = encodeURIComponent(marketId);
-  const res = await fetch(`${SMJ_API_BASE}/smj/${encodedId}`, { signal });
+  const res = await fetch(`${baoPublicApiBase()}/smj/${encodedId}`, { signal });
   if (!res.ok) return null;
   const json = (await res.json()) as SmjDetailResponse;
   const options = json?.data?.options;
@@ -90,7 +89,7 @@ async function fetchSmjOdds(marketId: string, signal?: AbortSignal): Promise<Smj
   const live = buildSmjLiveMarket(options);
   if (live) return live;
 
-  const historyRes = await fetch(`${SMJ_API_BASE}/smj/${encodedId}/history`, { signal });
+  const historyRes = await fetch(`${baoPublicApiBase()}/smj/${encodedId}/history`, { signal });
   if (!historyRes.ok) return null;
   const history = (await historyRes.json()) as SmjHistoryResponse;
   return buildSmjLiveMarket(options, Array.isArray(history.data?.bets) ? history.data.bets : []);

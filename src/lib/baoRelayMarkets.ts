@@ -15,9 +15,20 @@
 import type { NostrEvent } from "@nostrify/nostrify";
 
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
+import { baoNetworkEndpoints, getBaoNetwork } from "@/lib/baoNetwork";
 
-/** Relay that carries the canonical kind-38000 market definitions. */
+/** Relay that carries the canonical kind-38000 market definitions (demo). */
 export const BAO_MARKETS_RELAY = "wss://relay.bao.network";
+
+/** Relay for the selected network. */
+export function baoMarketsRelay(): string {
+  return baoNetworkEndpoints(getBaoNetwork()).relay;
+}
+
+/** Market `n` tag for the selected network. */
+export function baoMarketNetwork(): string {
+  return baoNetworkEndpoints(getBaoNetwork()).marketNetwork;
+}
 
 /**
  * Network the app displays markets for. bao.markets currently runs in demo
@@ -64,7 +75,7 @@ function countOutcomes(...sources: unknown[]): number {
  */
 export function isValidBaoRelayMarketEvent(
   event: NostrEvent,
-  network: string = BAO_MARKET_NETWORK,
+  network: string = baoMarketNetwork(),
 ): boolean {
   if (event.kind !== BAO_MARKET_KIND) return false;
 
@@ -105,7 +116,7 @@ export function isValidBaoRelayMarketEvent(
  */
 export function parseBaoRelayMarket(
   event: NostrEvent,
-  network: string = BAO_MARKET_NETWORK,
+  network: string = baoMarketNetwork(),
 ): BaoMarket | null {
   if (!isValidBaoRelayMarketEvent(event, network)) return null;
   return parseBaoMarket(event);
@@ -117,7 +128,7 @@ export function parseBaoRelayMarket(
  */
 export function parseBaoRelayMarkets(
   events: NostrEvent[],
-  network: string = BAO_MARKET_NETWORK,
+  network: string = baoMarketNetwork(),
 ): BaoMarket[] {
   const byDTag = new Map<string, BaoMarket>();
   const seenEventIds = new Set<string>();

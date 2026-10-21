@@ -4,8 +4,8 @@ import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from "@/lib/baoMarketParser";
 import { apiMarketToBaoMarket, baoApiFetchAll, fetchBaoMarketCategories, type ApiMarket } from "@/lib/baoMarketApi";
+import { baoMarketNetwork, baoMarketsRelay } from "@/lib/baoRelayMarkets";
 
-const RELAY = "wss://relay.bao.network";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
@@ -78,7 +78,7 @@ function isMarketActive(market: BaoMarket, now: number): boolean {
 }
 
 async function fetchRelayMarkets(category: string, status: 'active' | 'all', signal?: AbortSignal): Promise<BaoMarket[]> {
-  const relay = new NRelay1(RELAY);
+  const relay = new NRelay1(baoMarketsRelay());
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 
@@ -86,6 +86,7 @@ async function fetchRelayMarkets(category: string, status: 'active' | 'all', sig
 
   const filter: NostrFilter = {
     kinds: [BAO_MARKET_KIND],
+    "#n": [baoMarketNetwork()],
     limit: QUERY_LIMIT,
   };
   if (category !== "all") {
@@ -126,7 +127,7 @@ async function fetchRelayMarkets(category: string, status: 'active' | 'all', sig
 export type BaoMarketSource = "api" | "relay" | "both";
 
 function getQueryKey(category: string, status: 'active' | 'all', source: BaoMarketSource) {
-  return ["bao-prediction-markets", category, status, source];
+  return ["bao-prediction-markets", category, status, source, baoMarketNetwork()];
 }
 
 export function useBaoPredictionMarkets(category: string = "all", status: 'active' | 'all' = "active", source: BaoMarketSource = "api") {
@@ -185,12 +186,13 @@ export function useBaoPredictionMarkets(category: string = "all", status: 'activ
   // Batch incoming events to avoid re-rendering the grid on every single event.
   useEffect(() => {
     if (source === "api") return;
-    const relay = new NRelay1(RELAY);
+    const relay = new NRelay1(baoMarketsRelay());
     const controller = new AbortController();
 
     const since = Math.floor(Date.now() / 1000);
     const filter: NostrFilter = {
       kinds: [BAO_MARKET_KIND],
+      "#n": [baoMarketNetwork()],
       limit: QUERY_LIMIT,
       since,
     };
