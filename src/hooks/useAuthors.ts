@@ -111,6 +111,11 @@ export function useAuthors(pubkeys: string[], relays?: readonly string[]) {
         if (authorMap.get(pubkey)?.event) {
           continue;
         }
+        const cachedAuthor = queryClient.getQueryData<{ event?: NostrEvent; metadata?: NostrMetadata }>(['author', pubkey]);
+        if (cachedAuthor?.event) {
+          authorMap.set(pubkey, { pubkey, ...cachedAuthor });
+          continue;
+        }
         const [cached] = await store.query([{ kinds: [0], authors: [pubkey] }]);
         if (cached) {
           authorMap.set(pubkey, { pubkey, ...parseAuthorEvent(cached) });
