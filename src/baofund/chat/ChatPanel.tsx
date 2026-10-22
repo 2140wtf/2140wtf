@@ -118,6 +118,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     isSending,
     error,
     roomLoading = false,
+    scrollTruncated = false,
     mentionUnread,
     voiceMaterial = new Map(),
     postVoicePresence = async () => false,
@@ -998,6 +999,20 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
           className={`flex-1 px-3 py-3 ${embedded && !fullscreen ? '' : 'overflow-y-auto'}`}
           style={embedded && !fullscreen ? undefined : { maxHeight: '420px' }}
         >
+          {scrollTruncated && (
+            <div
+              className="mb-3 rounded border px-2 py-1.5 text-[11px] leading-snug"
+              style={{
+                borderColor: 'var(--np-rule)',
+                color: 'var(--np-muted)',
+                background: 'var(--np-paper, transparent)',
+              }}
+            >
+              Some older messages may be missing - this room's scroll was truncated by
+              retention. The messages shown are complete from the point the relay still
+              serves.
+            </div>
+          )}
           {messages.length === 0 ? (
             selectedRoom && roomLoading ? (
               <RoomLoadProgress label="Loading the scroll…" />
