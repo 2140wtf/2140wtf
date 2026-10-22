@@ -180,7 +180,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   // in this browser (from an earlier signed-in session, or invite links) stay
   // out of the guest sidebar until sign-in.
   const visibleRooms = React.useMemo(
-    () => (signer ? rooms : rooms.filter((room) => room.name === DEFAULT_LANDING_ROOM)),
+    () => (signer ? rooms : rooms.filter((room) => room.publicLanding === true)),
     [rooms, signer],
   );
   // Identity rebind: the open room's live session was keyed to the identity
@@ -306,7 +306,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   const selectedRoom = visibleRooms.find((r) => r.roomId === selectedRoomId);
   // Guests may post in the landing room only (burner identity; the room's
   // retention applies). Every other room stays member-only.
-  const guestCanPost = !signer && selectedRoom?.name === DEFAULT_LANDING_ROOM;
+  const guestCanPost = !signer && selectedRoom?.publicLanding === true;
   const privacy = selectedRoom ? roomLinkPrivacy(selectedRoom.link) : null;
 
   // Copyable onboarding prompt for AI agents (owner 2026-09-20). The popup

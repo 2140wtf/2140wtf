@@ -9,9 +9,11 @@
  * commit pinned by baocommunity/bao_fund_it). Auth is projected from 2140.wtf's
  * Nostrify login via src/baofund/auth/useAuth.
  *
- * The room set comes from the Fund API's public rooms, i.e. the FUND relay
- * (wss://relay.bao.fund) — the same chat as bao.fund, never a different
- * relay's room. Guests see the public landing room (Trollbox) and can post.
+ * The default room set comes from the Fund API's public rooms, i.e. the FUND
+ * relay (wss://relay.bao.fund) — the same chat as bao.fund. Imported invites
+ * are protocol-portable: a link may name another ws/wss relay, and it is
+ * never auto-removed; such a room will not share the fund scroll/admission.
+ * Guests see the public landing room (Trollbox) and can post.
  *
  * Deep links from the fund page: `{ defaultRoomName }` lands on a public
  * room; `{ campaignRoomId, title }` imports + opens that campaign's room.

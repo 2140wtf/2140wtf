@@ -50,6 +50,10 @@ export interface FundRoomMeta {
   /** Campaign this room belongs to (set by `importCampaign`). Lets the room
    *  surface a Fund action for its campaign without re-deriving the link. */
   fundraiserId?: string;
+  /** Set ONLY when the room came from the Fund API's public-room directory
+   *  and is the canonical landing room. Guest posting is gated on this, never
+   *  on a user-supplied label. */
+  publicLanding?: boolean;
 }
 
 export const ROOMS_STORAGE_KEY = 'bao-fund-community-rooms';

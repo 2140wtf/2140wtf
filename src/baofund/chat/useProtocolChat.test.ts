@@ -1008,7 +1008,7 @@ it('syncExternalRooms picks the NIP-98 transport per source URL (same-origin fun
   try {
     const signer = { signEvent: async (e: unknown) => e } as unknown as Parameters<UseProtocolChatReturn['syncExternalRooms']>[0];
     await act(async () => { await current.syncExternalRooms(signer); });
-    const markets = seen.find((s) => s.url.includes('relay.bao.network'));
+    const markets = seen.find((s) => s.url.includes('api.testnet.bao.network'));
     const fundApi = seen.find((s) => s.url.endsWith('/fund-api/v1/chat/fund-rooms'));
     // Markets API: cross-origin -> standard Authorization (CORS-exposed).
     expect(markets?.headers.Authorization).toMatch(/^Nostr /);
