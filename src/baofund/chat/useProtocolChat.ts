@@ -88,6 +88,7 @@ import {
 import { buildMemberClaim, verifyMemberClaim, type MemberIdentity } from './memberIdentity';
 import { probeRelayStorage } from '../lib/relayStorageProbe';
 import { fundApiOrigin, nip98AuthHeaders } from '../lib/fundHttp';
+import { marketsApiBase } from '../lib/fundNetwork';
 import { fetchIsChatAdmin } from './useIsChatAdmin';
 import { validateRoomInvite } from '../lib/roomInvite';
 
@@ -1524,10 +1525,14 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       const stored = new Map(loadRooms().map((r) => [r.roomId, r]));
       let changed = false;
       for (const room of pub) {
-        const meta = roomMetaFromLink(room.link, room.name);
+        const isLanding = room.name === DEFAULT_LANDING_ROOM;
+        const meta: FundRoomMeta = {
+          ...roomMetaFromLink(room.link, room.name),
+          ...(isLanding ? { publicLanding: true } : {}),
+        };
         const existing = stored.get(room.roomId);
         if (existing) {
-          if (existing.name !== meta.name || existing.link !== meta.link) {
+          if (existing.name !== meta.name || existing.link !== meta.link || (isLanding && existing.publicLanding !== true)) {
             persist(addRoom({ ...meta, joinedAt: existing.joinedAt }));
             changed = true;
           }
@@ -1562,7 +1567,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       // PLUS the milestone-market rooms the fund provisioned (those live in
       // bao_fund, which the markets API cannot see).
       const sources = [
-        'https://relay.bao.network/bao-api/v1/chat/my-rooms',
+        `${marketsApiBase()}/v1/chat/my-rooms`,
         `${fundApiOrigin()}/v1/chat/fund-rooms`,
       ];
       const existing = loadRooms();

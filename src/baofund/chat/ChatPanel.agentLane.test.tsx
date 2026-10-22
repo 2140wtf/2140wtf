@@ -11,8 +11,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_LANDING_ROOM } from '../lib/baoCommunity';
 
-const ROOM_A = { roomId: 'room-a', name: DEFAULT_LANDING_ROOM, link: 'https://app.bao.network/chat/join#human-a', shielded: false, joinedAt: 0 };
-const ROOM_B = { roomId: 'room-b', name: DEFAULT_LANDING_ROOM, link: 'https://app.bao.network/chat/join#human-b', shielded: false, joinedAt: 0 };
+const ROOM_A = { roomId: 'room-a', name: DEFAULT_LANDING_ROOM, link: 'https://app.bao.network/chat/join#human-a', shielded: false, joinedAt: 0, publicLanding: true };
+const ROOM_B = { roomId: 'room-b', name: DEFAULT_LANDING_ROOM, link: 'https://app.bao.network/chat/join#human-b', shielded: false, joinedAt: 0, publicLanding: true };
 const AGENT_LINK_A = 'https://app.bao.network/chat/join#agent-a';
 
 const baseCtx = () => ({

@@ -70,6 +70,12 @@ describe('rooms persistence', () => {
     expect(rooms).toHaveLength(0);
   });
 
+  it('keeps the trusted public-landing flag across storage reloads', () => {
+    const meta = { ...roomMetaFromLink(link('room-a'), 'Troll₿ox'), publicLanding: true };
+    addFundRoom(meta, storage);
+    expect(loadFundRooms(storage)[0]?.publicLanding).toBe(true);
+  });
+
   it('strips a legacy live-only opt-in persisted by older versions', () => {
     const meta = roomMetaFromLink(link('room-a'), 'Trollbox');
     addFundRoom(meta, storage);
