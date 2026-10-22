@@ -56,7 +56,7 @@ function views(id: string) {
   return { timeline: [{ envelope: { msg_id: id, author: id, payload: { text: id } }, redacted: false }],
     roster: new Map(), reactions: new Map(), threadIndex: { threads: new Map(), orphans: [] } } as unknown as ScrollViews;
 }
-function room(id: string, epoch = 0) {
+function room(id: string, epoch = 0, chainWarnings: string[] = []) {
   const session = {
     subscribeLive: vi.fn((_cb: (env: Envelope) => void) => vi.fn()),
     subscribeTyping: vi.fn(() => vi.fn()), subscribeMentions: vi.fn(() => vi.fn()),
@@ -67,7 +67,7 @@ function room(id: string, epoch = 0) {
   // the views); derive the MergeResult from whatever readViews the test set.
   session.read.mockImplementation(async () => {
     const v = await session.readViews();
-    return { messages: v.timeline ?? [], rejected: [], coverage: new Map(), chainWarnings: [] } as unknown as MergeResult;
+    return { messages: v.timeline ?? [], rejected: [], coverage: new Map(), chainWarnings } as unknown as MergeResult;
   });
   // Raw-conn subscriptions (role editions + governance redactions) are
   // captured so tests can drive their callbacks.
@@ -224,6 +224,13 @@ it('surfaces a missing room credential for a contributor instead of joining', as
   await act(async () => { await current.importCampaign('fr_1', 'Coop', {} as never); });
   expect(current.error).toContain('credential');
   expect(mocks.join).not.toHaveBeenCalled();
+});
+
+it('surfaces a truncated scroll instead of presenting it as complete', async () => {
+  const a = room('A', 0, ['scribe: seg# gap 1 → 2 (retention purge or truncation)']);
+  mocks.join.mockResolvedValue(a);
+  await act(async () => { await current.selectRoom('A'); });
+  expect(current.scrollTruncated).toBe(true);
 });
 
 it('joins a newly imported room immediately', async () => {
