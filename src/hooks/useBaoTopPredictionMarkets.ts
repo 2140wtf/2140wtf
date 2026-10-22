@@ -3,8 +3,8 @@ import { NRelay1 } from '@nostrify/nostrify';
 
 import { parseBaoMarket, type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
 import { apiMarketToBaoMarket, baoApiFetch, type ApiMarket } from '@/lib/baoMarketApi';
+import { baoMarketNetwork, baoMarketsRelay } from '@/lib/baoRelayMarkets';
 
-const RELAY = 'wss://relay.bao.network';
 const QUERY_TIMEOUT_MS = 15_000;
 
 async function fetchTopApiMarkets(signal: AbortSignal): Promise<ApiMarket[]> {
@@ -29,14 +29,14 @@ function isMarketActive(market: BaoMarket, now: number): boolean {
 }
 
 async function fetchActiveRelayMarkets(signal: AbortSignal): Promise<BaoMarket[]> {
-  const relay = new NRelay1(RELAY);
+  const relay = new NRelay1(baoMarketsRelay());
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
 
   signal.addEventListener('abort', () => controller.abort(), { once: true });
 
   try {
-    const events = await relay.query([{ kinds: [BAO_MARKET_KIND], limit: 500 }], {
+    const events = await relay.query([{ kinds: [BAO_MARKET_KIND], '#n': [baoMarketNetwork()], limit: 500 }], {
       signal: controller.signal,
     });
 
@@ -67,7 +67,7 @@ async function fetchActiveRelayMarkets(signal: AbortSignal): Promise<BaoMarket[]
 
 export function useBaoTopPredictionMarkets() {
   return useQuery<BaoMarket[]>({
-    queryKey: ['bao-top-prediction-markets'],
+    queryKey: ['bao-top-prediction-markets', baoMarketNetwork()],
     queryFn: async ({ signal }) => {
       try {
         const apiMarkets = await fetchTopApiMarkets(signal);

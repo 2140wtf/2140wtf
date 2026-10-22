@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type { BaoMarket } from '@/lib/baoMarketParser';
+import { baoPublicApiBase } from '@/lib/baoMarketApi';
 
 export type PriceHistoryRange = '1H' | '1D' | '1W' | '1M' | 'ALL';
 
@@ -27,8 +28,6 @@ interface PriceHistoryApiResponse {
   meta?: unknown;
 }
 
-const API_BASE = '/v1';
-const PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
 
 function rangeToPeriod(range: PriceHistoryRange): string {
   switch (range) {
@@ -83,9 +82,9 @@ async function fetchOutcomeHistory(
   signal: AbortSignal,
 ): Promise<PricePoint[]> {
   const params = new URLSearchParams({ period, outcome_id: outcomeId });
-  const path = `${API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
+  const path = `${baoPublicApiBase()}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
 
-  const publicPath = `${PUBLIC_API_BASE}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
+  const publicPath = `${baoPublicApiBase()}/markets/${encodeURIComponent(marketId)}/price-history?${params.toString()}`;
 
   let res: Response;
   try {

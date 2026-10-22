@@ -23,7 +23,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
 import { BAO_MARKET_KIND } from '@/lib/baoMarketParser';
-import { BAO_MARKETS_RELAY, BAO_MARKET_NETWORK } from '@/lib/baoRelayMarkets';
+import { baoMarketNetwork, baoMarketsRelay } from '@/lib/baoRelayMarkets';
 
 interface CreateBaoMarketDialogProps {
   open: boolean;
@@ -103,12 +103,12 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
           ['d', id],
           ['title', title.trim()],
           ['c', category],
-          ['n', BAO_MARKET_NETWORK],
+          ['n', baoMarketNetwork()],
           ['end', String(end)],
           ...validOutcomes.map((o) => ['outcome', o]),
           ['alt', 'Prediction market definition'],
         ],
-        relay: BAO_MARKETS_RELAY,
+        relay: baoMarketsRelay(),
       });
       toast({ title: 'Market published', description: 'Live on the ₿AO relay — relay-first clients see it within seconds.' });
       onOpenChange(false);
