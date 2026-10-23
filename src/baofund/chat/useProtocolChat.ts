@@ -152,6 +152,10 @@ export interface UseProtocolChatReturn {
   /** The selected room's join + first scroll read is in flight; the message
    *  area shows a load progress instead of a premature empty state. */
   roomLoading: boolean;
+  /** The selected room's scroll has a retention/chain gap. The timeline can
+   *  show a partial history; the UI must say so instead of implying it is
+   *  complete. Cleared on room switch. */
+  scrollTruncated: boolean;
   importLink(link: string, name?: string): Promise<void>;
   /** Resolve + join a campaign's room. Returns the persisted room metadata
    *  so callers can select it by its real (link-derived) roomId; null when
@@ -296,6 +300,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
    *  the message area shows a progress bar instead of a premature empty
    *  state - a room with history took seconds to prove "empty"). */
   const [roomLoading, setRoomLoading] = React.useState(false);
+  const [scrollTruncated, setScrollTruncated] = React.useState(false);
   const [isSending, setIsSending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const liveRef = React.useRef<Map<string, LiveRoom>>(new Map());
@@ -527,6 +532,11 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       if (!isCurrent(live)) return;
       const result = await live.session.read();
       if (!isCurrent(live)) return;
+      // Retention purge / chain gap in any scribe segment means the scroll is
+      // incomplete. Surface it; never present a truncated timeline as whole.
+      setScrollTruncated(
+        result.chainWarnings.some((warning) => /truncat|retention purge|seg# gap/i.test(warning)),
+      );
       const views = aggregateScroll(result);
       // aggregateScroll drops governance-redacted messages from every view
       // without a retraction entry; hand their identities (author + msg_id,
@@ -629,6 +639,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     for (const roomId of [...liveRef.current.keys()]) closeRoom(roomId);
     setSelectedRoomId(meta.roomId);
     setMessages([]);
+    setScrollTruncated(false);
     setRoomLoading(true);
     setTyping({ authors: [] });
     setRoster(new Map());
@@ -935,6 +946,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
         // the control query is awaited) must not remain rendered after a
         // rejected join.
         setMessages([]);
+        setScrollTruncated(false);
         setTyping({ authors: [] });
         setRoster(new Map());
         setMentions([]);
@@ -1262,6 +1274,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
       setSelectedRoomId(null);
       setRoomLoading(false);
       setMessages([]);
+      setScrollTruncated(false);
       setMentions([]);
       setTyping({ authors: [] });
       setRoster(new Map());
@@ -1603,6 +1616,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     setSelectedRoomId(null);
     setRoomLoading(false);
     setMessages([]);
+    setScrollTruncated(false);
     setTyping({ authors: [] });
     setRoster(new Map());
     setMentions([]);
@@ -1689,7 +1703,7 @@ export function useProtocolChat(opts: UseProtocolChatOptions = {}): UseProtocolC
     /** Owner spec: author keys that announced as bots - render 🤖. */
     botAuthors,
     selectRoom, resetSessions, sendMessage, postToRoom, notifyTyping, toggleReaction, retractMessage, replyToMessage,
-    selfAuthor, isSending, error, roomLoading,
+    selfAuthor, isSending, error, roomLoading, scrollTruncated,
     importLink, importCampaign, createRoom, removeRoom,
     ensureDefaultRooms,
     syncExternalRooms,
