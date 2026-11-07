@@ -240,7 +240,9 @@ const MarketCard = memo(function MarketCard({
 
 export function PredictionMarketsPage(): React.JSX.Element {
   const { config } = useAppContext();
-  const [category, setCategory] = useState("mining");
+  // "all" — the catalogue no longer carries a `mining` category, and a default
+  // that is absent from the live category list filters every market out.
+  const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<3 | 2 | 1>(() => {
