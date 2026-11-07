@@ -238,6 +238,14 @@ const MarketCard = memo(function MarketCard({
   );
 });
 
+/**
+ * Categories that belong to the ₿AO Fund silo — mirrors canonical bao.markets
+ * `isAgenticCategory` (['bao-fund', 'agentic']). Every row in these categories
+ * is one fundraiser milestone; the catalogue view shows one project card per
+ * campaign on the Fund page instead, so milestone rows must stay off the grid.
+ */
+const AGENTIC_MARKET_CATEGORIES = ['bao-fund', 'agentic'];
+
 export function PredictionMarketsPage(): React.JSX.Element {
   const { config } = useAppContext();
   // "all" — the catalogue no longer carries a `mining` category, and a default
@@ -322,7 +330,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
     return marketsWithOdds.filter((m) => {
       if (m.state === 'ended') return false;
       // ₿AO Fund milestone markets live on the ₿AO Fund page, not here.
-      if (m.category === 'fundraiser') return false;
+      // `fundraiser` is only a query alias — the API files these rows under
+      // `bao-fund`, so the previous `=== 'fundraiser'` guard never matched and
+      // 110 untraded milestone markets flooded the default (all-categories) grid.
+      if (m.category && AGENTIC_MARKET_CATEGORIES.includes(m.category)) return false;
       if (!showResolved) {
         if (m.state !== 'active') return false;
         if (m.endTime > 0 && m.endTime < now) return false;
@@ -336,7 +347,12 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const categories = useMemo(() => {
     if (apiCategories.length > 0) {
       const visible = apiCategories
-        .filter((c) => c.slug !== 'fundraiser' && (showResolved ? c.count : c.active_count) > 0)
+        // Agentic slugs are filtered out of the grid above, so offering them
+        // here would only produce an empty result set.
+        .filter((c) =>
+          !AGENTIC_MARKET_CATEGORIES.includes(c.slug) &&
+          (showResolved ? c.count : c.active_count) > 0,
+        )
         .sort((a, b) => (showResolved ? b.count - a.count : b.active_count - a.active_count));
       return ['all', ...visible.map((c) => c.slug)];
     }
