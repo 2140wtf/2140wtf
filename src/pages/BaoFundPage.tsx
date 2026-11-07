@@ -26,6 +26,7 @@ import { FundFaq, FundIntroCollapsible } from "@/baofund/components/landing/Fund
 import { FundMePanel } from "@/baofund/components/landing/FundGuides";
 import { gateStripProp, useFundFeed } from "@/baofund/relay/fundFeed";
 import { fetchFundraiser } from "@/baofund/lib/baoFundraising";
+import { BAO_CATEGORIES, campaignChipId } from "@/lib/baoCategories";
 import { useLayoutOptions } from "@/contexts/LayoutContext";
 import "@/baofund/theme/newspaperTheme.css";
 import "@/baofund/theme/appTokens.css";
@@ -57,6 +58,7 @@ export function BaoFundPage() {
   const [pledgeTarget, setPledgeTarget] = useState<PledgeTarget | null>(null);
   const [chatGate, setChatGate] = useState<ChatGate | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000));
 
   useEffect(() => {
@@ -134,12 +136,21 @@ export function BaoFundPage() {
     })();
   }, [deepLinkFrId, feed.loading, cards, fundCard, auth.signer]);
 
+  // Chip filter: creation files the campaign in the 'bao-fund' silo and stores
+  // the chosen chip in `subcategory`, so matching on `category` alone left every
+  // live campaign (40/40 rows are 'bao-fund') reachable only under "All".
+  const visibleCards = useMemo(
+    () => (categoryFilter === "all" ? cards : cards.filter((c) => campaignChipId(c) === categoryFilter)),
+    [cards, categoryFilter],
+  );
+
   const campaignCountLabel = useMemo(() => {
     if (feed.loading) return "Fetching fundraisers…";
     if (feed.source === "offline") return "Live feed unreachable — nothing cached, no campaigns shown";
     if (cards.length === 0) return "No open campaigns yet — create one";
-    return `${cards.length} campaign${cards.length === 1 ? "" : "s"}`;
-  }, [feed.loading, feed.source, cards.length]);
+    if (visibleCards.length === 0) return "No campaigns in this category";
+    return `${visibleCards.length} campaign${visibleCards.length === 1 ? "" : "s"}`;
+  }, [feed.loading, feed.source, cards.length, visibleCards.length]);
 
   return (
     <div className="newspaper min-h-screen" style={{ background: "var(--np-bg)", color: "var(--np-ink)" }}>
@@ -187,8 +198,27 @@ export function BaoFundPage() {
           </p>
         )}
 
+        <div className="flex flex-wrap items-center gap-1.5 pb-4" aria-label="Filter campaigns by category">
+          {[{ id: "all", label: "All" }, ...BAO_CATEGORIES].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryFilter(c.id)}
+              aria-pressed={categoryFilter === c.id}
+              className="px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em]"
+              style={
+                categoryFilter === c.id
+                  ? { color: "var(--np-on-accent)", background: "var(--np-accent)", border: "1px solid var(--np-accent)", fontFamily: "var(--np-font-mono)" }
+                  : { color: "var(--np-ink)", border: "1px solid var(--np-rule)", fontFamily: "var(--np-font-mono)" }
+              }
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid gap-5 sm:grid-cols-2">
-          {cards.map((c) => (
+          {visibleCards.map((c) => (
             <FundingCampaignCard
               key={c.id}
               campaign={c}

@@ -18,8 +18,7 @@ import { markMainnetCashu } from '../../lib/cashu/mainnetMarker';
 import { useAuth } from '../../auth/useAuth';
 import '../../theme/newspaperTheme.css';
 import { errorMessage } from '../../lib/errors';
-
-const CATEGORIES = ['infra', 'tools', 'compute', 'attestation', 'content', 'research', 'other'];
+import { BAO_CATEGORIES } from '@/lib/baoCategories';
 
 export type CreateMode = 'playground' | 'mainnet';
 
@@ -105,7 +104,11 @@ export function CreateCampaignModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [goal, setGoal] = useState('21400');
-  const [category, setCategory] = useState('tools');
+  // The API stores every campaign in the fund silo (`category: 'bao-fund'`);
+  // discovery uses the free-form subcategory, which is what the Fund page's
+  // chips filter on. Sending a chip id as `category` produced campaigns whose
+  // category (e.g. 'attestation') matched no chip in any client.
+  const [subcategory, setSubcategory] = useState<string>('tools');
   const [rail, setRail] = useState<'l1' | 'liquid'>('l1');
   // Field report 2026-10-14: a Liquid (testnet) campaign can be mistaken for a
   // real-income campaign. Require an explicit acknowledgement before publish.
@@ -182,7 +185,8 @@ export function CreateCampaignModal({
         // stays as fallback for older deployments and older clients.
         network: mainnet ? 'mainnet' : 'testnet',
         format: 'milestones',
-        category,
+        category: 'bao-fund',
+        subcategory,
         discussion_room: { enabled: wantRoom, gate: roomGate },
         milestones: milestones.length
           ? milestones
@@ -348,9 +352,10 @@ export function CreateCampaignModal({
           )}
           <label className="block">
             <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)' }}>Category</span>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}
+            <select value={subcategory} onChange={(e) => setSubcategory(e.target.value)}
+              aria-label="Campaign category"
               className="mt-1 w-full border px-2 py-1.5 text-sm outline-none" style={{ borderColor: 'var(--np-rule)' }}>
-              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              {BAO_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </label>
         </div>

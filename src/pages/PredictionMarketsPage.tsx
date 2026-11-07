@@ -36,6 +36,7 @@ import { MarketMiniSparkline } from "@/components/MarketMiniSparkline";
 import { CreateBaoMarketDialog } from "@/components/CreateBaoMarketDialog";
 import { MyTradesSection } from "@/components/MyTradesSection";
 import { cn } from "@/lib/utils";
+import { isAgenticMarketCategory, isPickerMarketCategory, marketRowCategory } from "@/lib/marketCategories";
 import { openUrl } from "@/lib/downloadFile";
 import { mergeApiAndRelayMarkets, type RelayMergedMarket } from "@/lib/baoRelayMarkets";
 import { getBaoNetwork, setBaoNetwork } from "@/lib/baoNetwork";
@@ -240,7 +241,9 @@ const MarketCard = memo(function MarketCard({
 
 export function PredictionMarketsPage(): React.JSX.Element {
   const { config } = useAppContext();
-  const [category, setCategory] = useState("mining");
+  // "all" — the catalogue no longer carries a `mining` category, and a default
+  // that is absent from the live category list filters every market out.
+  const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
   const [columns, setColumns] = useState<3 | 2 | 1>(() => {
@@ -320,7 +323,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
     return marketsWithOdds.filter((m) => {
       if (m.state === 'ended') return false;
       // ₿AO Fund milestone markets live on the ₿AO Fund page, not here.
-      if (m.category === 'fundraiser') return false;
+      // `fundraiser` is only a query alias — the API files these rows under
+      // `bao-fund`, so the previous `=== 'fundraiser'` guard never matched and
+      // 110 untraded milestone markets flooded the default (all-categories) grid.
+      if (isAgenticMarketCategory(m.category)) return false;
       if (!showResolved) {
         if (m.state !== 'active') return false;
         if (m.endTime > 0 && m.endTime < now) return false;
@@ -331,12 +337,27 @@ export function PredictionMarketsPage(): React.JSX.Element {
 
   // Category picker: the API catalog (with live counts), falling back to the
   // categories present in the loaded markets when the catalog is unavailable.
+  //
+  // Chips are keyed by the ROW category, not the catalogue slug: the catalogue
+  // reports the Angor silo under its union alias `fundraiser`, while the rows
+  // carry `angor`, so filtering on the slug matched nothing and the 10 Angor
+  // markets were only reachable through "All categories".
   const categories = useMemo(() => {
     if (apiCategories.length > 0) {
-      const visible = apiCategories
-        .filter((c) => c.slug !== 'fundraiser' && (showResolved ? c.count : c.active_count) > 0)
-        .sort((a, b) => (showResolved ? b.count - a.count : b.active_count - a.active_count));
-      return ['all', ...visible.map((c) => c.slug)];
+      const byRowCategory = new Map<string, number>();
+      for (const c of apiCategories) {
+        if (!isPickerMarketCategory(c.slug)) continue;
+        const count = showResolved ? c.count : c.active_count;
+        if (count <= 0) continue;
+        const value = marketRowCategory(c.slug);
+        // max, not sum: `fundraiser` is a UNION over `angor`, so adding both
+        // counts would double-count the same rows.
+        byRowCategory.set(value, Math.max(byRowCategory.get(value) ?? 0, count));
+      }
+      const visible = [...byRowCategory.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([value]) => value);
+      return ['all', ...visible];
     }
     const set = new Set<string>();
     for (const m of activeMarkets) {
@@ -348,7 +369,10 @@ export function PredictionMarketsPage(): React.JSX.Element {
   const categoryCount = useMemo(() => {
     const map = new Map<string, number>();
     for (const c of apiCategories) {
-      map.set(c.slug, showResolved ? c.count : c.active_count);
+      if (!isPickerMarketCategory(c.slug)) continue;
+      const key = marketRowCategory(c.slug);
+      const count = showResolved ? c.count : c.active_count;
+      map.set(key, Math.max(map.get(key) ?? 0, count));
     }
     return map;
   }, [apiCategories, showResolved]);

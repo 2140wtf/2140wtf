@@ -14,7 +14,11 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pin the image: `ubuntu-latest` now resolves to 26.04, which Playwright
+    # 1.59.0 refuses to install Chromium for — "Playwright does not support
+    # chromium on ubuntu26.04-x64" — so the job died before running a single
+    # spec. 24.04 is a supported target for this Playwright release.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout repository

@@ -53,7 +53,7 @@ import {
   type ContributeResult,
   type ReleaseMilestoneResult,
 } from '@/lib/baoFundraising';
-import { BAO_CATEGORIES } from '@/lib/baoCategories';
+import { BAO_CATEGORIES, campaignChipId } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
@@ -206,9 +206,11 @@ export function BaoFundingPage() {
   };
 
   const allFundraisers = listQuery.data ?? [];
+  // Matching only on `category` meant every live campaign (all 'bao-fund')
+  // matched no chip except All — see campaignChipId for the mapping.
   const fundraisers = categoryFilter === 'all'
     ? allFundraisers
-    : allFundraisers.filter((f) => (f.category === 'daos' ? 'baos' : (f.category ?? 'tools')) === categoryFilter);
+    : allFundraisers.filter((f) => campaignChipId(f) === categoryFilter);
   const detail = detailQuery.data;
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
 

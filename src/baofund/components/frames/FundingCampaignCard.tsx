@@ -23,6 +23,9 @@ export interface CampaignCardDraft {
   title: string;
   description: string;
   category: string;
+  /** Chip the create dialog filed the campaign under (creation stores the silo,
+   *  'bao-fund', in `category` and the chosen chip here). */
+  subcategory?: string | null;
   pledgedSats: number;
   goalSats: number;
   endTimeSec: number;

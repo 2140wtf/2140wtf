@@ -38,6 +38,10 @@ export interface BaoFundraiser {
   /** v2: payout format. Missing on legacy rows → treat as 'milestones'. */
   format?: BaoFundraiserFormat;
   category?: string | null;
+  /** The chip the campaign was filed under. Creation stores the silo,
+   *  `'bao-fund'`, in `category` and the chosen chip here, so the Fund page's
+   *  chips must match on this. Missing on legacy rows → they belong on Other. */
+  subcategory?: string | null;
   /** v2 stream fields (unix seconds) */
   stream_start_at?: number | string | null;
   stream_end_at?: number | string | null;
@@ -269,6 +273,9 @@ export interface CreateFundraiserInput {
   network?: string;
   format?: BaoFundraiserFormat;
   category?: string;
+  /** Free-form discovery tag. The fund silo itself is always `category:
+   *  'bao-fund'`, so this is the value the Fund page's category chips match. */
+  subcategory?: string | null;
   milestones?: CreateMilestoneInput[];
   /** BAO Community: optional encrypted discussion room for the campaign
    *  (provisioned by the operator API - rule 8; the fund never touches
