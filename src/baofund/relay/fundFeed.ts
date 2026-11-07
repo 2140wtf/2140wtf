@@ -80,6 +80,7 @@ export function milestoneCard(f: BaoFundraiser, m: BaoMilestone, priorSats = 0):
     title: m.title || m.question || `${f.title} - Milestone ${m.idx + 1}`,
     description: m.description || m.criteria || f.description || '',
     category: f.category ?? 'fund',
+    subcategory: f.subcategory ?? null,
     // API network is authoritative; the legacy description marker is NOT
     // a money authority (fail closed).
     mainnetCashu: f.network === 'mainnet' || f.settlement_rail === 'cashu',
@@ -115,6 +116,7 @@ export function fundraiserCard(f: BaoFundraiser): CampaignCardDraft {
     title: f.title,
     description: f.description ?? '',
     category: f.category ?? 'fund',
+    subcategory: f.subcategory ?? null,
     // API network is authoritative; the description marker is NOT a money
     // authority (twin of milestoneCard; a testnet record with the marker in
     // its owner-controlled description must never open the real-money flow).

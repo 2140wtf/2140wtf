@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TestApp } from '@/test/TestApp';
@@ -47,6 +47,34 @@ describe('BaoFundPage', () => {
     render(<LayoutStoreContext.Provider value={new LayoutStore()}><TestApp><BaoFundPage /></TestApp></LayoutStoreContext.Provider>);
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/AO Fund/);
     expect(screen.getByText(/No open campaigns yet/i)).toBeInTheDocument();
+  });
+
+  it('filters campaigns by the chip the create dialog filed them under', async () => {
+    const base = {
+      description: '',
+      pledgedSats: 0,
+      goalSats: 1000,
+      endTimeSec: Math.floor(Date.now() / 1000) + 86400,
+      category: 'bao-fund',
+    };
+    mocks.cards = [
+      { ...base, id: 'fr-research', frId: 'fr-research', title: 'Research campaign', subcategory: 'research' },
+      { ...base, id: 'fr-legacy', frId: 'fr-legacy', title: 'Legacy campaign', subcategory: null },
+    ];
+    render(<LayoutStoreContext.Provider value={new LayoutStore()}><TestApp><BaoFundPage /></TestApp></LayoutStoreContext.Provider>);
+
+    expect(await screen.findByText('Research campaign')).toBeInTheDocument();
+    expect(screen.getByText('Legacy campaign')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Research' }));
+    expect(screen.getByText('Research campaign')).toBeInTheDocument();
+    expect(screen.queryByText('Legacy campaign')).not.toBeInTheDocument();
+
+    // Creation predating `subcategory` is silo-only; it belongs on Other, not
+    // on a chip that can never match.
+    fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+    expect(screen.getByText('Legacy campaign')).toBeInTheDocument();
+    expect(screen.queryByText('Research campaign')).not.toBeInTheDocument();
   });
 
   it('opens the pledge flow from a fund-from-the-room deep link', async () => {

@@ -38,6 +38,10 @@ export interface BaoFundraiser {
   /** v2: payout format. Missing on legacy rows → treat as 'milestones'. */
   format?: BaoFundraiserFormat;
   category?: string | null;
+  /** The chip the campaign was filed under. Creation stores the silo,
+   *  `'bao-fund'`, in `category` and the chosen chip here, so the Fund page's
+   *  chips must match on this. Missing on legacy rows → they belong on Other. */
+  subcategory?: string | null;
   /** v2 stream fields (unix seconds) */
   stream_start_at?: number | string | null;
   stream_end_at?: number | string | null;
