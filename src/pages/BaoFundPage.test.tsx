@@ -66,15 +66,23 @@ describe('BaoFundPage', () => {
     expect(await screen.findByText('Research campaign')).toBeInTheDocument();
     expect(screen.getByText('Legacy campaign')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Research' }));
+    // The count is on the chip, so an empty category is visible before the
+    // click instead of only after it.
+    expect(screen.getByRole('button', { name: 'All (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Research (1)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pets (0)' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Research/ }));
     expect(screen.getByText('Research campaign')).toBeInTheDocument();
     expect(screen.queryByText('Legacy campaign')).not.toBeInTheDocument();
 
     // Creation predating `subcategory` is silo-only; it belongs on Other, not
     // on a chip that can never match.
-    fireEvent.click(screen.getByRole('button', { name: 'Other' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Other/ }));
     expect(screen.getByText('Legacy campaign')).toBeInTheDocument();
     expect(screen.queryByText('Research campaign')).not.toBeInTheDocument();
+    // Filtering does not rewrite the counts: they describe the whole feed.
+    expect(screen.getByRole('button', { name: 'Research (1)' })).toBeInTheDocument();
   });
 
   it('opens the pledge flow from a fund-from-the-room deep link', async () => {
