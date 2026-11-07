@@ -186,3 +186,26 @@ it('refuses a testnet campaign until the no-value acknowledgement is ticked', as
   await submit();
   expect(mocks.create).toHaveBeenCalledTimes(1);
 });
+
+it('files the campaign in the fund silo and carries the chip id as subcategory', async () => {
+  await render();
+  const category = container.querySelector<HTMLSelectElement>('select[aria-label="Campaign category"]')!;
+  const values = Array.from(category.options).map((o) => o.value);
+  // The old list shipped 'attestation' and 'content', which no fund chip knows.
+  expect(values).not.toContain('attestation');
+  expect(values).not.toContain('content');
+  expect(values).toContain('research');
+  await act(async () => {
+    category.value = 'research';
+    category.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => {
+    setValue(container.querySelectorAll<HTMLInputElement>('input')[0], 'Research campaign');
+    setValue(container.querySelector<HTMLTextAreaElement>('textarea')!, 'This is a long enough campaign description to pass the server-side rule.');
+  });
+  await tickTestnetAck();
+  await submit();
+  const body = mocks.create.mock.calls[0][1] as { category: string; subcategory: string };
+  expect(body.category).toBe('bao-fund');
+  expect(body.subcategory).toBe('research');
+});

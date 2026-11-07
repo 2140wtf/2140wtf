@@ -269,6 +269,9 @@ export interface CreateFundraiserInput {
   network?: string;
   format?: BaoFundraiserFormat;
   category?: string;
+  /** Free-form discovery tag. The fund silo itself is always `category:
+   *  'bao-fund'`, so this is the value the Fund page's category chips match. */
+  subcategory?: string | null;
   milestones?: CreateMilestoneInput[];
   /** BAO Community: optional encrypted discussion room for the campaign
    *  (provisioned by the operator API - rule 8; the fund never touches

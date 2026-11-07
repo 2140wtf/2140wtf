@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useNostrPublish } from '@/hooks/useNostrPublish';
 import { useToast } from '@/hooks/useToast';
+import { useBaoMarketCategories } from '@/hooks/useBaoPredictionMarkets';
+import { isSelectableMarketCategory } from '@/lib/marketCategories';
 import { BAO_MARKET_KIND } from '@/lib/baoMarketParser';
 import { baoMarketNetwork, baoMarketsRelay } from '@/lib/baoRelayMarkets';
 
@@ -32,19 +34,20 @@ interface CreateBaoMarketDialogProps {
   onCreated?: () => void;
 }
 
-export const MARKET_CATEGORIES = [
-  { value: 'bitcoin', label: 'Bitcoin' },
-  { value: 'politics', label: 'Politics' },
-  { value: 'sports', label: 'Sports' },
-  { value: 'nostr', label: 'Nostr' },
-  { value: 'angor-markets', label: 'Angor Markets' },
-  { value: 'culture', label: 'Culture' },
-  { value: 'events', label: 'Events' },
-  { value: 'climate-energy', label: 'Climate & Energy' },
-  { value: 'economics', label: 'Economics' },
-  { value: 'tech-science', label: 'Tech & Science' },
-  { value: 'bao', label: 'BAO' },
-  { value: 'other', label: 'Other' },
+/**
+ * Fallback only: these are the slugs `GET /v1/categories` currently serves, so
+ * a market created from this list is always reachable through the markets
+ * picker. The live catalogue wins whenever it answers.
+ *
+ * The old hardcoded twelve (`bitcoin`, `politics`, `sports`, `angor-markets`,
+ * `climate-energy`, `tech-science`, ...) had no counterpart in the API
+ * vocabulary, so a market tagged with one of them could never be selected back
+ * — three of those slugs do not even exist in bao.markets' canonical taxonomy.
+ */
+export const FALLBACK_MARKET_CATEGORIES = [
+  { value: 'crypto', label: 'crypto' },
+  { value: 'btc-price', label: 'btc-price' },
+  { value: 'politics-us', label: 'politics-us' },
 ] as const;
 
 /**
@@ -61,14 +64,35 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('bitcoin');
+  // Options come from the live catalogue — the same list the markets page
+  // renders chips for. `fundraiser` (a query alias) and the ₿AO Fund silo are
+  // filtered out by isSelectableMarketCategory.
+  const { data: apiCategories = [] } = useBaoMarketCategories();
+  const categoryOptions = useMemo(() => {
+    const live = apiCategories
+      .filter((c) => isSelectableMarketCategory(c.slug))
+      .map((c) => ({ value: c.slug, label: c.label || c.slug }));
+    return live.length > 0
+      ? live
+      : FALLBACK_MARKET_CATEGORIES.map((c) => ({ value: c.value as string, label: c.label as string }));
+  }, [apiCategories]);
+  const [category, setCategory] = useState(() => categoryOptions[0]?.value ?? '');
   const [outcomes, setOutcomes] = useState<string[]>(['yes', 'no']);
   const [endDays, setEndDays] = useState('30');
+
+  // A selection that disappears from the catalogue (first render before it
+  // loads, or a category that lost its last market) would submit a slug with no
+  // picker chip — resync it instead of publishing an unreachable market.
+  useEffect(() => {
+    if (!categoryOptions.some((o) => o.value === category)) {
+      setCategory(categoryOptions[0]?.value ?? '');
+    }
+  }, [categoryOptions, category]);
 
   const reset = () => {
     setTitle('');
     setDescription('');
-    setCategory('bitcoin');
+    setCategory(categoryOptions[0]?.value ?? '');
     setOutcomes(['yes', 'no']);
     setEndDays('30');
   };
@@ -85,6 +109,10 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
     }
     if (validOutcomes.length < 2) {
       toast({ title: 'Need at least two outcomes', variant: 'destructive' });
+      return;
+    }
+    if (!category) {
+      toast({ title: 'Pick a category', description: 'The catalogue has not loaded a category to file this market under yet.', variant: 'destructive' });
       return;
     }
     const days = parseInt(endDays, 10) || 30;
@@ -165,7 +193,7 @@ export function CreateBaoMarketDialog({ open, onOpenChange, onCreated }: CreateB
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {MARKET_CATEGORIES.map((option) => (
+                  {categoryOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

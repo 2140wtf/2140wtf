@@ -43,6 +43,23 @@ export function baoCategoryId(category: string | null | undefined): BaoCategoryI
   return (BAO_CATEGORIES.some((c) => c.id === normalized) ? normalized : 'other') as BaoCategoryId;
 }
 
+/**
+ * Which Fund-page chip a campaign belongs to.
+ *
+ * Creation stores the silo itself in `category` ('bao-fund', fixed server-side)
+ * and the chosen chip in `subcategory`; older rows carry the chip id in
+ * `category`. Rows with neither (every campaign created before `subcategory`
+ * existed) land on "Other" rather than silently matching nothing.
+ */
+export function campaignChipId(campaign: {
+  category?: string | null;
+  subcategory?: string | null;
+}): BaoCategoryId {
+  const raw = campaign.subcategory?.trim() ||
+    (campaign.category && campaign.category !== 'bao-fund' ? campaign.category : '');
+  return raw ? baoCategoryId(raw) : 'other';
+}
+
 /** Display label for a raw category string (handles legacy `daos`). */
 export function baoCategoryLabel(category: string | null | undefined): string {
   const id = baoCategoryId(category);
