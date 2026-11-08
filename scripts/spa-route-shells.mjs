@@ -38,10 +38,14 @@ import { fileURLToPath } from 'node:url';
 export const SPA_ROUTE_SHELLS = [
   'community',
   'chat',
+  // Invite links are shared as URLs; the join path must answer 200 or the
+  // fragment never reaches the app that adopts it.
+  'chat/join',
   'bao/fund',
   'bao/court',
   'bao/markets',
   'fal-live',
+  'fal-live/join',
   // Static surfaces that get pasted into chats, posts and agent prompts.
   // Nothing dynamic belongs here: an id in the path cannot be pre-generated.
   'wallet',
