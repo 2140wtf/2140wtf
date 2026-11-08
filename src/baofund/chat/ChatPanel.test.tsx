@@ -11,7 +11,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const ROOM = { roomId: 'r1', name: 'Troll₿ox', link: 'https://app.bao.network/chat/join#x', shielded: false, joinedAt: 0, publicLanding: true };
 
-const h = vi.hoisted(() => ({ mentionUnread: new Map<string, number>() }));
+const h = vi.hoisted(() => ({
+  mentionUnread: new Map<string, number>(),
+  importLink: vi.fn(async () => undefined),
+}));
 
 vi.mock('@/baofund/community/agents.js', () => ({
   roomLinkPrivacy: () => ({ shielded: false }),
@@ -39,7 +42,7 @@ vi.mock('./ChatContext', () => ({
     isSending: false,
     error: null,
     mentionUnread: h.mentionUnread,
-    importLink: vi.fn(async () => undefined),
+    importLink: h.importLink,
     createRoom: vi.fn(async () => undefined),
     removeRoom: vi.fn(),
     ensureDefaultRooms: vi.fn(async () => undefined),
@@ -72,6 +75,9 @@ beforeEach(() => {
   // jsdom has no Element.scrollTo - the panel auto-scrolls on fullscreen.
   Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
   h.mentionUnread = new Map();
+  h.importLink.mockClear();
+  // Every test starts on a plain path: only a join path adopts a fragment.
+  window.history.replaceState(null, '', '/');
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -132,4 +138,27 @@ it('does not relabel the host surface when there are no mentions', async () => {
   document.title = '₿AO Fund';
   await render({});
   expect(document.title).toBe('₿AO Fund');
+});
+
+it('opens the room a join link names, without a paste', async () => {
+  // The link IS the invite: opening /chat/join#<fragment> must do exactly what
+  // pasting the same string into the panel does.
+  window.history.replaceState(null, '', '/chat/join#frag-abc');
+  await render({});
+  expect(h.importLink).toHaveBeenCalledWith(`${window.location.origin}/chat/join#frag-abc`);
+});
+
+it('adopts a fal.live join link as the canonical invite URL', async () => {
+  window.history.replaceState(null, '', '/fal-live/join#frag-live');
+  await render({ embedded: true });
+  // One canonical form: the frame opens the room, the stored link stays /chat/join.
+  expect(h.importLink).toHaveBeenCalledWith(`${window.location.origin}/chat/join#frag-live`);
+});
+
+it('never adopts a fragment standing on the chat page itself', async () => {
+  // Anchors and campaign hashes live on the surfaces too; only a join path is
+  // an invite, or every deep link would be imported as a room.
+  window.history.replaceState(null, '', '/community#section-2');
+  await render({});
+  expect(h.importLink).not.toHaveBeenCalled();
 });

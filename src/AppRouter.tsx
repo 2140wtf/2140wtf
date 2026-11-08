@@ -351,12 +351,20 @@ export function AppRouter() {
               <Route path="/lightning-observatory" element={<LightningObservatoryPage />} />
               <Route path="/lightning-observatory/full" element={<LightningObservatoryFullPage />} />
               <Route path="/fal-live" element={<FalLivePage />} />
+              {/* A join path is a chat surface that adopts the invite in its
+                  fragment (see ChatPanel); the frame opens the room it names. */}
+              <Route path="/fal-live/join" element={<FalLivePage />} />
               <Route path="/roadstr" element={<RoadstrPage />} />
               <Route path="/market" element={<MarketPage />} />
               <Route path="/market/auction/:sellerPubkey/:dTag" element={<AuctionDetailPage />} />
               <Route path="/messages" element={<MessagesPage />} />
               <Route path="/messages/:npub" element={<MessageThreadPage />} />
               <Route path="/community" element={<BaoFundChatPage />} />
+              {/* /chat is the short, stable name for the same surface - it
+                  already had a shell, so it answered 200 and then 404'd inside
+                  the app. Invite links use it as their join path. */}
+              <Route path="/chat" element={<BaoFundChatPage />} />
+              <Route path="/chat/join" element={<BaoFundChatPage />} />
               <Route path="/bao/community" element={<Navigate to="/community" replace />} />
               <Route path="/bao/baocommunity" element={<Navigate to="/community" replace />} />
               <Route path="/bao/chat" element={<Navigate to="/community" replace />} />

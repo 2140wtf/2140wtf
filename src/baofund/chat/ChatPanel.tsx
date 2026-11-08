@@ -1,6 +1,7 @@
 import React from 'react';
 import { Send, Lock, Hash, MessageCircle, Plus, X, Copy, Check, Shield, Bot, Trash2, Reply, RotateCcw, AtSign, HardDrive, Loader2, Settings, UserPlus, Ban, Maximize2, Minimize2, LogOut, Info, HandCoins, Volume2, Square, KeyRound } from 'lucide-react';
 import { useChatContext, type ChatItem } from './ChatContext';
+import { joinLinkFromLocation } from './inviteRoute';
 import { agentShareText, fetchAgentHelloSha, sanitizeRoomName } from './agentPrompt';
 import { speechSupported, sanitizeForSpeech, speakText, stopSpeech, speechVoiceCount, primeSpeechVoices } from './messageSpeech';
 import { useIsChatAdmin } from './useIsChatAdmin';
@@ -177,6 +178,22 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     // into the local list so the same rooms follow the user everywhere.
     void syncExternalRooms(effective);
   }, [signer, defaultRoomId, ensureDefaultRooms, syncExternalRooms]);
+  // Direct invite links: `/chat/join#<fragment>` and `/fal-live/join#<fragment>`
+  // are the same credential the paste box accepts, so opening the URL is the
+  // same action as pasting it - and until now only the paste box existed, with
+  // no route and no shell for the join path at all. importLink validates before
+  // it admits or persists anything (see its fail-closed notes), so a bad or
+  // expired fragment leaves a quiet error and no dead room. The fragment stays
+  // in the address bar on purpose: re-mounting re-imports the same link, which
+  // is idempotent by roomId, so a refresh retries a join that failed in transit.
+  const inviteAdopted = React.useRef(false);
+  React.useEffect(() => {
+    if (inviteAdopted.current) return;
+    const link = joinLinkFromLocation(window.location.pathname, window.location.hash, window.location.origin);
+    if (!link) return;
+    inviteAdopted.current = true;
+    void importLink(link);
+  }, [importLink]);
   // Signed-out visitors only see the one public door. Rooms already persisted
   // in this browser (from an earlier signed-in session, or invite links) stay
   // out of the guest sidebar until sign-in.
