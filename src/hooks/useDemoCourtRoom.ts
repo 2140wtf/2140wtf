@@ -25,7 +25,7 @@ import {
 } from '@bao/court';
 import type { SelectedJuror } from '@bao/court';
 
-const RELAY = 'wss://relay.bao.network';
+const RELAY = 'wss://relay.bao.markets';
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 500;
 const SETTLE_MS = 2_000;

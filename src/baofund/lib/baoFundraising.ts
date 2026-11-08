@@ -339,7 +339,7 @@ export const BAO_FUNDRAISER_CREATE_KIND = 38003;  /**
     if (fromEnv) return fromEnv;
     // One relay per universe: demo events live on the demo relay, fund
     // (testnet) events on the fund's own relay.
-    return isDemoNetwork() ? 'wss://relay.bao.network' : 'wss://relay.bao.fund';
+    return isDemoNetwork() ? 'wss://relay.bao.markets' : 'wss://relay.bao.fund';
   }
 
 /** Campaign creation uses createFundraiser through the dedicated Fund API.
