@@ -19,6 +19,7 @@
 - Cashu seed decryption errors now explain recovery options and warn before destructive regeneration.
 - Feed events persist in IndexedDB for instant warm and offline loads without false empty states.
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
+- `/wallet`, `/market`, `/pets`, `/court` and `/lightning-observatory` answer 200 when linked directly, like the surfaces that already had a shell.
 - Direct links to a shareable surface no longer bounce through a redirect: the build also writes the flat shell (`dist/bao/markets.html`, which GitHub Pages serves for `/bao/markets`), so a copied URL stays exactly as shared instead of gaining a trailing slash, and the trailing-slash form keeps answering 200.
 
 ### Added
@@ -30,6 +31,7 @@
 - Help FAQ "Agent Safety" section covering safe browser, terminal, self-hosted, VPS/cloud, and Cloudflare Workers agent setups, prompt injection, worst-case isolation, and why ₿AO roles don't protect your computer.
 
 ### Changed
+- A `/testnet` route namespace: `/testnet/bao/markets` and `/testnet/bao/fund` render the markets and fund surfaces with the public testnet deployment forced on (the URL keeps its path and gains `network=testnet`, which every data path already reads), `/testnet` lands on the markets surface, and each ships a shell so the link answers 200.
 - Deploys run the retired-host guard before building, so a `*.testnet.bao.network` reference cannot reach Pages even when a change skipped the test job (direct push, re-run, or revert), not only when it went through a PR.
 
 ## [0.26.0] — 2026-08-06
