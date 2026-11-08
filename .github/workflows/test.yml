@@ -42,5 +42,10 @@ jobs:
           GIT_CONFIG_KEY_1: url.https://github.com/.insteadOf
           GIT_CONFIG_VALUE_1: git+ssh://git@github.com/
           
+      # Cheap and first, so a retired host in shipped code is the earliest thing
+      # a PR hears about (git ls-files + one regex per text file, no build).
+      - name: Guard retired bao.network hosts
+        run: npm run check:retired-hosts
+
       - name: Run tests
         run: npm run test
