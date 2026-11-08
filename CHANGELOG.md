@@ -20,6 +20,7 @@
 - Feed events persist in IndexedDB for instant warm and offline loads without false empty states.
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
 - `/wallet`, `/market`, `/pets`, `/court` and `/lightning-observatory` answer 200 when linked directly, like the surfaces that already had a shell.
+- The fal.live chat panel is chat-only again: inside the ~320px right frame the 260px room column is now a "Rooms" disclosure that expands inside the frame, so the timeline no longer collapses to a clipped sliver, and the message list scrolls instead of overflowing.
 - Direct links to a shareable surface no longer bounce through a redirect: the build also writes the flat shell (`dist/bao/markets.html`, which GitHub Pages serves for `/bao/markets`), so a copied URL stays exactly as shared instead of gaining a trailing slash, and the trailing-slash form keeps answering 200.
 
 ### Added

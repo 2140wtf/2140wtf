@@ -222,6 +222,10 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   const [newRoomAudienceMode, setNewRoomAudienceMode] = React.useState<'humans' | 'agents' | 'both'>('both');
   const [newRoomLabel, setNewRoomLabel] = React.useState('');
   const [showCreate, setShowCreate] = React.useState(false);
+  // Embedded frames (the fal.live right panel) are ~320px wide. A 260px room
+  // column beside the timeline there leaves the timeline a clipped sliver, so
+  // the rooms move behind this disclosure — collapsed means chat only.
+  const [roomsOpen, setRoomsOpen] = React.useState(false);
   const [showSettings, setShowSettings] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [replyTarget, setReplyTarget] = React.useState<ChatItem | null>(null);
@@ -584,16 +588,39 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
 
   return (
     <div
-      className={`grid gap-4 sm:grid-cols-[260px_1fr] ${fullscreen ? 'fixed inset-0 z-50 overflow-y-auto p-3 sm:p-5' : ''}`}
+      className={`grid gap-4 ${embedded && !fullscreen ? 'grid-cols-1 gap-2' : 'sm:grid-cols-[260px_1fr]'} ${fullscreen ? 'fixed inset-0 z-50 overflow-y-auto p-3 sm:p-5' : ''}`}
       style={fullscreen ? { background: 'var(--np-paper, #fdfdf8)' } : undefined}
     >
 
-      {/* Sidebar */}
-      <div className="border-r pr-2" style={{ borderColor: 'var(--np-rule)' }}>
+      {/* Sidebar. Embedded: a collapsible menu that stays inside the frame,
+          so the panel is chat-only until the reader opens it. Full width: the
+          column as before. */}
+      <div
+        className={embedded && !fullscreen ? 'border-b pb-2' : 'border-r pr-2'}
+        style={{ borderColor: 'var(--np-rule)' }}
+      >
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)' }}>
-            Rooms
-          </span>
+          {embedded && !fullscreen ? (
+            <button
+              type="button"
+              onClick={() => setRoomsOpen((open) => !open)}
+              className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] uppercase tracking-widest hover:bg-black/5"
+              style={{ color: 'var(--np-muted)' }}
+              aria-expanded={roomsOpen}
+              aria-controls="chat-rooms-disclosure"
+              title={roomsOpen ? 'Hide rooms' : 'Show rooms'}
+              data-testid="chat-rooms-toggle"
+            >
+              <span aria-hidden>{roomsOpen ? '▾' : '▸'}</span>
+              <span className="truncate">
+                Rooms{selectedRoom ? ` · ${selectedRoom.name}` : ''}
+              </span>
+            </button>
+          ) : (
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--np-muted)' }}>
+              Rooms
+            </span>
+          )}
           <span className="flex items-center gap-1">
             {canCreateRoom && (
               <button
@@ -619,6 +646,17 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
             )}
           </span>
         </div>
+
+        <div
+          id="chat-rooms-disclosure"
+          className={
+            embedded && !fullscreen
+              ? roomsOpen
+                ? 'max-h-[45vh] overflow-y-auto'
+                : 'hidden'
+              : undefined
+          }
+        >
 
         {canCreateRoom && showCreate && (
           <form onSubmit={handleCreate} className="mb-3 border p-2" style={{ borderColor: 'var(--np-rule)' }}>
@@ -812,10 +850,11 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
           </div>
         )}
 
+        </div>
       </div>
 
       {/* Main chat */}
-      <div className="flex min-h-[360px] flex-col border" style={{ borderColor: 'var(--np-rule)' }}>
+      <div className="flex min-h-[360px] min-w-0 flex-col border" style={{ borderColor: 'var(--np-rule)' }}>
         <div className="border-b px-3 py-2" style={{ borderColor: 'var(--np-rule)' }}>
           <div className="flex items-center gap-2 text-sm font-semibold">
             {privacy?.shielded ? <Shield size={14} /> : <Hash size={14} />}
@@ -996,7 +1035,7 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
 
         <div
           ref={scrollRef}
-          className={`flex-1 px-3 py-3 ${embedded && !fullscreen ? '' : 'overflow-y-auto'}`}
+          className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
           style={embedded && !fullscreen ? undefined : { maxHeight: '420px' }}
         >
           {scrollTruncated && (
@@ -1263,17 +1302,19 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
                 }
               }}
               placeholder={!signer && !guestCanPost ? 'Sign in to post…' : selectedRoomId ? 'Type a message…' : 'Select a room first'}
-              className="flex-1 rounded border bg-transparent px-3 py-2 text-sm"
+              className="min-w-0 flex-1 rounded border bg-transparent px-3 py-2 text-sm"
               style={{ borderColor: 'var(--np-rule)', color: 'var(--np-ink)' }}
             />
             <button
               type="submit"
               disabled={!selectedRoomId || isSending || !input.trim()}
-              className="flex items-center gap-1 rounded border px-3 py-2 text-sm disabled:opacity-50"
+              className="flex shrink-0 items-center gap-1 rounded border px-3 py-2 text-sm disabled:opacity-50"
               style={{ borderColor: 'var(--np-rule)', color: 'var(--np-ink)' }}
             >
               <Send size={14} />
-              <span className="hidden sm:inline">Send</span>
+              {/* A narrow embedded frame cannot spare the label's width; the
+                screen-reader text keeps the button named. */}
+              <span className={embedded && !fullscreen ? 'sr-only' : 'hidden sm:inline'}>Send</span>
             </button>
           </div>
         </form>
