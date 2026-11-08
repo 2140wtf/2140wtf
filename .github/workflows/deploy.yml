@@ -47,6 +47,12 @@ jobs:
       - name: Guard retired bao.network hosts
         run: npm run check:retired-hosts
 
+      # The zone config is inert until 2140.wtf moves to Cloudflare, which is
+      # exactly why it is checked here: drift caught at deploy time, not at
+      # cutover. Offline and credential-free.
+      - name: Check Cloudflare zone config
+        run: npm run check:cloudflare
+
       - name: Install dependencies and build
         env:
           # Pets battle escrow operator pubkey + release URL (public values —

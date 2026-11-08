@@ -1,0 +1,30 @@
+{
+  "$comment": [
+    "Zone settings that make the Cloudflare proxy safe in front of GitHub",
+    "Pages for this app. Values are PATCHed one setting at a time via",
+    "/zones/{zone_id}/settings/{id}; `why` is documentation only.",
+    "",
+    "Two of these are correctness, not preference:",
+    "  ssl=strict        Flexible terminates TLS at the edge and speaks plain",
+    "                    HTTP to Pages, which redirects back to HTTPS - the",
+    "                    classic redirect loop, on every page.",
+    "  rocket_loader=off Email obfuscation and Rocket Loader rewrite markup and",
+    "                    defer scripts; both break a client-side routed app.",
+    "  email_obfuscation=off"
+  ],
+  "settings": [
+    { "id": "ssl", "value": "strict", "why": "Pages serves a valid Let's Encrypt cert; Flexible would loop against its HTTPS redirect." },
+    { "id": "always_use_https", "value": "on", "why": "One canonical scheme at the edge, matching the origin's own redirect." },
+    { "id": "automatic_https_rewrites", "value": "on", "why": "No mixed-content surprises for the few absolute links in static HTML." },
+    { "id": "min_tls_version", "value": "1.2", "why": "Modern floor; the Pages origin already requires TLS 1.2+." },
+    { "id": "tls_1_3", "value": "on", "why": "Default on new zones; pinned so a settings drift is visible in review." },
+    { "id": "http3", "value": "on", "why": "Free win for the relay-heavy surfaces." },
+    { "id": "brotli", "value": "on", "why": "The bundles are large; the origin does not compress at the edge." },
+    { "id": "rocket_loader", "value": "off", "why": "Rewrites <script> loading order and breaks the SPA bootstrap." },
+    { "id": "email_obfuscation", "value": "off", "why": "Rewrites markup and injects script; unsafe for a client-rendered app." },
+    { "id": "mirage", "value": "off", "why": "Mobile image rewriting has no benefit for app bundles and can break SVG." },
+    { "id": "polish", "value": "off", "why": "Image transcoding would alter hashed asset bytes under an immutable TTL." },
+    { "id": "cache_level", "value": "standard", "why": "Cache static extensions only; the ruleset above owns the real policy." },
+    { "id": "browser_cache_ttl", "value": 14400, "why": "Fallback browser TTL for responses the ruleset does not cover." }
+  ]
+}
