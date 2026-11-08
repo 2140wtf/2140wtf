@@ -323,12 +323,15 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   // user's. defaultRoomId (campaign invites) wins when both are present.
   const landedByName = React.useRef(false);
   React.useEffect(() => {
-    if (landedByName.current || defaultRoomId || !defaultRoomName) return;
+    // An invite in the URL outranks the named default too: /fal-live passes
+    // defaultRoomName, and selecting it would activateRoom over the invited
+    // room (clearing the invite's error and landing the wrong room).
+    if (landedByName.current || defaultRoomId || inviteLink || !defaultRoomName) return;
     const room = visibleRooms.find((r) => r.name === defaultRoomName);
     if (!room) return;
     landedByName.current = true;
     void selectRoom(room.roomId);
-  }, [defaultRoomId, defaultRoomName, visibleRooms, selectRoom]);
+  }, [defaultRoomId, defaultRoomName, inviteLink, visibleRooms, selectRoom]);
 
   const selectedRoom = visibleRooms.find((r) => r.roomId === selectedRoomId);
   // Guests may post in the landing room only (burner identity; the room's

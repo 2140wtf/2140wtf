@@ -14,6 +14,7 @@ const ROOM = { roomId: 'r1', name: 'Troll₿ox', link: 'https://app.bao.network/
 const h = vi.hoisted(() => ({
   mentionUnread: new Map<string, number>(),
   importLink: vi.fn(async () => undefined),
+  selectRoom: vi.fn(async () => undefined),
   ensureDefaultRooms: vi.fn(async (
     _signer: unknown,
     _skipLanding: boolean,
@@ -37,7 +38,7 @@ vi.mock('./ChatContext', () => ({
     roster: new Map(),
     mentions: [],
     selectedRoomId: 'r1',
-    selectRoom: vi.fn(async () => undefined),
+    selectRoom: h.selectRoom,
     sendMessage: vi.fn(async () => undefined),
     notifyTyping: vi.fn(),
     toggleReaction: vi.fn(async () => undefined),
@@ -82,6 +83,7 @@ beforeEach(() => {
   h.mentionUnread = new Map();
   h.importLink.mockClear();
   h.ensureDefaultRooms.mockClear();
+  h.selectRoom.mockClear();
   // Every test starts on a plain path: only a join path adopts a fragment.
   window.history.replaceState(null, '', '/');
   container = document.createElement('div');
@@ -181,4 +183,12 @@ it('still lands in the default room when the URL carries no invite', async () =>
   await render({});
   expect(h.ensureDefaultRooms.mock.calls.length).toBeGreaterThan(0);
   expect(h.ensureDefaultRooms.mock.calls.every((call) => call[1] === false)).toBe(true);
+});
+
+it('does not let the named default room open over an invite', async () => {
+  // /fal-live passes defaultRoomName; that landing is a second way to steal the
+  // session from the invited room.
+  window.history.replaceState(null, '', '/fal-live/join#frag-live');
+  await render({ embedded: true, defaultRoomName: 'Troll₿ox' });
+  expect(h.selectRoom).not.toHaveBeenCalled();
 });
