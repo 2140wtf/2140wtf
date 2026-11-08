@@ -39,6 +39,14 @@ jobs:
           node-version: "22"
           cache: npm
 
+      # A deploy ships whatever is on main, including a change that reached it
+      # by a path that skipped the test job (a direct push, a re-run, a
+      # hotfix). Re-check here, before the build: the guard reads git ls-files
+      # and needs no install, and a retired host must never reach Pages
+      # regardless of how it got merged.
+      - name: Guard retired bao.network hosts
+        run: npm run check:retired-hosts
+
       - name: Install dependencies and build
         env:
           # Pets battle escrow operator pubkey + release URL (public values —
