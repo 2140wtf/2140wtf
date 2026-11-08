@@ -3,7 +3,7 @@ import { NRelay1, type NostrEvent, type NostrFilter } from '@nostrify/nostrify';
 import { extractReadRelays } from '@/lib/inboxRelays';
 
 /** Canonical BAO Court relay used as a fallback/public bulletin board. */
-export const BAO_COURT_RELAY = 'wss://relay.bao.network';
+export const BAO_COURT_RELAY = 'wss://relay.bao.markets';
 
 /** Maximum number of recipient inbox relays to fan out to. */
 const MAX_INBOX_RELAYS = 10;

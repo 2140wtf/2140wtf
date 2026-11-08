@@ -12,7 +12,7 @@ import {
   type DisputeCase,
 } from "@bao/court";
 
-const RELAY = "wss://relay.bao.network";
+const RELAY = "wss://relay.bao.markets";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
