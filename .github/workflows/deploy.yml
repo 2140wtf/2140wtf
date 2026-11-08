@@ -72,6 +72,21 @@ jobs:
           npm run build
           cp dist/index.html dist/404.html
 
+      # GitHub Pages has no rewrites, so a shareable surface answers 200 only if
+      # its own shell directory was generated. Read the list back from the
+      # generator instead of repeating it here, so the two cannot drift.
+      - name: Verify SPA route shells
+        run: |
+          ROUTES=$(node -e "import('./scripts/spa-route-shells.mjs').then((m) => console.log(m.SPA_ROUTE_SHELLS.join(' ')))")
+          for route in $ROUTES; do
+            if [ -f "dist/$route/index.html" ]; then
+              echo "ok: dist/$route/index.html"
+            else
+              echo "::error::dist/$route/index.html is missing — https://2140.wtf/$route would answer 404."
+              exit 1
+            fi
+          done
+
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
 

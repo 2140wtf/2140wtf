@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Direct links to `/bao/markets` answer 200 instead of the GitHub Pages 404 fallback: the build copies the SPA shell into `dist/bao/markets/`, and the deploy asserts every shareable surface got its shell, so crawlers, link unfurlers and agents no longer read a rendering page as missing.
 - ₿AO purge can no longer hang on "Purging…" without acknowledgment: a fast signer pre-flight plus deadlines on the kind-13303 read, each caller-signed NIP-09 batch, and the whole purge (120s cap) turn a non-responsive browser-extension or NIP-46 signer into a clear error with recovery instructions instead of an infinite spinner and zero kind-5s on any relay.
 - ₿AO purge now deletes the creator's own kind-39998 sponsorship records: the caller-signed NIP-09 batch is sent for community owners as well as the 2140 operator, so a purge no longer leaves the sponsorship behind (which failed deletion verification) when the founder is not the app-operator key.
 - Operator purge of a ₿AO now works end-to-end on relay.bao.network: the relay's write policy honors operator-signed kind-5 deletions across authors for the Concord kinds (wraps, invite bundles, and the kind-39998 sponsorship record that used to be left behind).
