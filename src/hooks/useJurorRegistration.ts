@@ -23,7 +23,10 @@ function buildMockStakeCommitment(
   return {
     amountSats: bondAmountSats,
     bondAddress,
-    status: "confirmed",
+    // Non-custodial honesty: the spark bond has NOT been verified on-chain yet
+    // (spark bond verification is not implemented). It must never be displayed
+    // as 'confirmed' without verification — 'pending' until a real check lands.
+    status: "pending",
     committedAt: Math.floor(Date.now() / 1000),
   };
 }
