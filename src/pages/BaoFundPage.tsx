@@ -144,6 +144,17 @@ export function BaoFundPage() {
     [cards, categoryFilter],
   );
 
+  // Per-chip counts, computed from the loaded feed so an empty chip reads
+  // (0) before it is clicked instead of after.
+  const chipCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const card of cards) {
+      const id = campaignChipId(card);
+      counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+    return counts;
+  }, [cards]);
+
   const campaignCountLabel = useMemo(() => {
     if (feed.loading) return "Fetching fundraisers…";
     if (feed.source === "offline") return "Live feed unreachable — nothing cached, no campaigns shown";
@@ -212,7 +223,7 @@ export function BaoFundPage() {
                   : { color: "var(--np-ink)", border: "1px solid var(--np-rule)", fontFamily: "var(--np-font-mono)" }
               }
             >
-              {c.label}
+              {c.label} ({c.id === "all" ? cards.length : (chipCounts.get(c.id) ?? 0)})
             </button>
           ))}
         </div>

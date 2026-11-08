@@ -53,7 +53,6 @@ import {
   type ContributeResult,
   type ReleaseMilestoneResult,
 } from '@/lib/baoFundraising';
-import { BAO_CATEGORIES, campaignChipId } from '@/lib/baoCategories';
 import { openUrl } from '@/lib/downloadFile';
 import { genUserName } from '@/lib/genUserName';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
@@ -95,11 +94,6 @@ function RunnerBadge({ type }: { type: BaoFundraiser['runner_type'] }) {
   return <Badge variant="secondary" className="gap-1"><User className="size-3" /> Human</Badge>;
 }
 
-const CATEGORY_FILTERS = [
-  { id: 'all', label: 'All' },
-  ...BAO_CATEGORIES,
-] as const;
-
 /**
  * ₿AO Fund (DEMO) — milestone prediction markets + time-lock treasury
  * streams over the bao.markets API, plus a REAL Routstr compute-credits tab
@@ -118,7 +112,6 @@ export function BaoFundingPage() {
   const [computeEntryKey, setComputeEntryKey] = useState(0);
   const [contributeTarget, setContributeTarget] = useState<BaoFundraiser | null>(null);
   const [scoreTarget, setScoreTarget] = useState<{ fundraiser: BaoFundraiser; milestone: BaoMilestone; model: string } | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [opportunityFilter, setOpportunityFilter] = useState<'campaigns' | 'compute'>('campaigns');
   const [focusMode, setFocusMode] = useState(false);
   const [searchParams] = useSearchParams();
@@ -206,11 +199,6 @@ export function BaoFundingPage() {
   };
 
   const allFundraisers = listQuery.data ?? [];
-  // Matching only on `category` meant every live campaign (all 'bao-fund')
-  // matched no chip except All — see campaignChipId for the mapping.
-  const fundraisers = categoryFilter === 'all'
-    ? allFundraisers
-    : allFundraisers.filter((f) => campaignChipId(f) === categoryFilter);
   const detail = detailQuery.data;
   const isOwner = !!user && !!detail && detail.fundraiser.owner_pubkey === user.pubkey;
 
@@ -372,20 +360,6 @@ export function BaoFundingPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap" aria-label="Filter projects by category">
-            {CATEGORY_FILTERS.map((c) => (
-              <Button
-                key={c.id}
-                size="sm"
-                variant={categoryFilter === c.id ? 'default' : 'outline'}
-                className="h-7 text-xs"
-                onClick={() => setCategoryFilter(c.id)}
-              >
-                {c.label}
-              </Button>
-            ))}
-          </div>
-
           {listQuery.isLoading ? (
             <div className="space-y-3">
               {[0, 1, 2].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
@@ -397,17 +371,15 @@ export function BaoFundingPage() {
                 Check your connection, or set <code className="text-xs">VITE_BAO_FUNDRAISING_API_URL</code> to override the endpoint.
               </CardContent>
             </Card>
-          ) : fundraisers.length === 0 ? (
+          ) : allFundraisers.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                {allFundraisers.length === 0
-                  ? 'No fundraising campaigns yet. Create one to define its public milestones and evidence.'
-                  : 'No campaigns in this category.'}
+                No fundraising campaigns yet. Create one to define its public milestones and evidence.
               </CardContent>
             </Card>
           ) : (
             <div className="space-y-3">
-              {fundraisers.map((f) => (
+              {allFundraisers.map((f) => (
                 <CampaignCard
                   key={f.id}
                   fundraiser={f}
