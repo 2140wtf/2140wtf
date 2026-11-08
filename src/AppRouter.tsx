@@ -21,6 +21,7 @@ import { useCurrentUser } from "./hooks/useCurrentUser";
 import { useProfileUrl } from "./hooks/useProfileUrl";
 import { getExtraKindDef } from "./lib/extraKinds";
 import { PollsViewProvider } from "@/contexts/PollsViewContext";
+import { TestnetSurface } from "@/components/TestnetSurface";
 
 // Poll feed views: use the extended BAO poll relay set so the polls page sees
 // the same events as bao.markets.
@@ -360,6 +361,13 @@ export function AppRouter() {
               <Route path="/bao/baocommunity" element={<Navigate to="/community" replace />} />
               <Route path="/bao/chat" element={<Navigate to="/community" replace />} />
               <Route path="/bao/markets" element={<PredictionMarketsPage />} />
+              {/* /testnet namespace: the same two surfaces with the public
+                  testnet deployment forced on. TestnetSurface adds the
+                  `network` query parameter the data paths already read, so the
+                  surface never renders once against demo endpoints. */}
+              <Route path="/testnet" element={<Navigate to="/testnet/bao/markets?network=testnet" replace />} />
+              <Route path="/testnet/bao/markets" element={<TestnetSurface><PredictionMarketsPage /></TestnetSurface>} />
+              <Route path="/testnet/bao/fund" element={<TestnetSurface><BaoFundPage /></TestnetSurface>} />
               <Route path="/bao/bao-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/prediction-markets" element={<Navigate to="/bao/markets" replace />} />
               <Route path="/bao/fund" element={<BaoFundPage />} />

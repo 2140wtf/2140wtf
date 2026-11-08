@@ -42,6 +42,17 @@ export const SPA_ROUTE_SHELLS = [
   'bao/court',
   'bao/markets',
   'fal-live',
+  // Static surfaces that get pasted into chats, posts and agent prompts.
+  // Nothing dynamic belongs here: an id in the path cannot be pre-generated.
+  'wallet',
+  'market',
+  'pets',
+  'court',
+  'lightning-observatory',
+  // The /testnet namespace (testnet mode forced on).
+  'testnet',
+  'testnet/bao/markets',
+  'testnet/bao/fund',
 ];
 
 export function writeRouteShells(distDir = 'dist', routes = SPA_ROUTE_SHELLS) {
