@@ -1,0 +1,61 @@
+{
+  "$comment": [
+    "Cache policy for the 2140.wtf zone, applied as the entrypoint of the",
+    "http_request_cache_settings phase. Rules are evaluated in order and the",
+    "first match wins, so the order below IS the policy: hashed assets, then",
+    "unhashed media, then everything that must never be cached at the edge.",
+    "",
+    "Why HTML is never cached here: GitHub Pages serves this app as a static",
+    "SPA, and every build renames the bundles (/assets/index-<hash>.js). An",
+    "edge-cached index.html or route shell would keep pointing browsers at",
+    "assets the new deploy already removed, which fails as a blank page, not",
+    "as a stale-looking page. HTML therefore always goes to the origin.",
+    "",
+    "Requests that match no rule fall back to the zone's default behaviour",
+    "(cache_level standard: static extensions only, respecting origin TTL)."
+  ],
+  "name": "2140.wtf cache policy",
+  "description": "Immutable hashed assets at the edge; HTML, route shells, the service worker and the web manifest always from the origin.",
+  "rules": [
+    {
+      "description": "Hashed build output (/assets/index-<hash>.js|css, fonts, images): immutable, one year.",
+      "expression": "starts_with(http.request.uri.path, \"/assets/\") and http.request.method in {\"GET\" \"HEAD\"}",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": true,
+        "edge_ttl": {
+          "mode": "override_origin",
+          "default": 31536000
+        },
+        "browser_ttl": {
+          "mode": "override_origin",
+          "default": 31536000
+        }
+      }
+    },
+    {
+      "description": "Unhashed static media and fonts (public/ files keep their names across builds): short edge TTL, quick browser revalidation.",
+      "expression": "matches(http.request.uri.path, \"\\.(ico|png|jpe?g|gif|webp|avif|svg|woff2?|ttf|otf|mp3|mp4|webm)$\") and http.request.method in {\"GET\" \"HEAD\"}",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": true,
+        "edge_ttl": {
+          "mode": "override_origin",
+          "default": 3600
+        },
+        "browser_ttl": {
+          "mode": "override_origin",
+          "default": 300
+        }
+      }
+    },
+    {
+      "description": "Documents and app entry points: .html, the extensionless route shells (/chat, /bao/markets, ...), the service worker and the web manifest. Never cached at the edge.",
+      "expression": "(ends_with(http.request.uri.path, \".html\") or ends_with(http.request.uri.path, \"/sw.js\") or ends_with(http.request.uri.path, \".webmanifest\") or not(matches(http.request.uri.path, \"\\.[a-z0-9]+$\")))",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": false
+      }
+    }
+  ]
+}
