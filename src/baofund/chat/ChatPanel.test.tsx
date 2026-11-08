@@ -14,6 +14,11 @@ const ROOM = { roomId: 'r1', name: 'Troll₿ox', link: 'https://app.bao.network/
 const h = vi.hoisted(() => ({
   mentionUnread: new Map<string, number>(),
   importLink: vi.fn(async () => undefined),
+  ensureDefaultRooms: vi.fn(async (
+    _signer: unknown,
+    _skipLanding: boolean,
+    _opts?: { onlyRoomName?: string },
+  ) => undefined),
 }));
 
 vi.mock('@/baofund/community/agents.js', () => ({
@@ -45,7 +50,7 @@ vi.mock('./ChatContext', () => ({
     importLink: h.importLink,
     createRoom: vi.fn(async () => undefined),
     removeRoom: vi.fn(),
-    ensureDefaultRooms: vi.fn(async () => undefined),
+    ensureDefaultRooms: h.ensureDefaultRooms,
     capabilities: new Map(),
     capabilityProbeInFlight: false,
     botAuthors: new Set(),
@@ -76,6 +81,7 @@ beforeEach(() => {
   Element.prototype.scrollTo = vi.fn() as unknown as typeof Element.prototype.scrollTo;
   h.mentionUnread = new Map();
   h.importLink.mockClear();
+  h.ensureDefaultRooms.mockClear();
   // Every test starts on a plain path: only a join path adopts a fragment.
   window.history.replaceState(null, '', '/');
   container = document.createElement('div');
@@ -161,4 +167,18 @@ it('never adopts a fragment standing on the chat page itself', async () => {
   window.history.replaceState(null, '', '/community#section-2');
   await render({});
   expect(h.importLink).not.toHaveBeenCalled();
+});
+
+it('does not let the default room land over an invite', async () => {
+  window.history.replaceState(null, '', '/chat/join#frag-abc');
+  await render({});
+  // Landing Troll₿ox after the invite would clear its error and open the wrong
+  // room, so every default-room call must arrive with skipLanding set.
+  expect(h.ensureDefaultRooms.mock.calls.every((call) => call[1] === true)).toBe(true);
+});
+
+it('still lands in the default room when the URL carries no invite', async () => {
+  await render({});
+  expect(h.ensureDefaultRooms.mock.calls.length).toBeGreaterThan(0);
+  expect(h.ensureDefaultRooms.mock.calls.every((call) => call[1] === false)).toBe(true);
 });

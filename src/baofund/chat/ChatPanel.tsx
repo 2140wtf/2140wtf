@@ -160,6 +160,16 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
   // defaults still available in the sidebar. Signed-out guests import ONLY
   // the public landing room: the other rooms are member doors (owner spec
   // 2026-09-19: guests see Trollbox, authed users see Trollbox + Public Chat).
+  // Direct invite links: `/chat/join#<fragment>` and `/fal-live/join#<fragment>`
+  // are the same credential the paste box accepts, so opening the URL is the
+  // same action as pasting it. Read once, because this also decides the landing
+  // rules below: an invite must suppress the default room's landing, exactly
+  // like a campaign link (`defaultRoomId`) does, or `activateRoom` would clear
+  // the invite and open Troll₿ox instead of the invited room.
+  const inviteLink = React.useMemo(
+    () => joinLinkFromLocation(window.location.pathname, window.location.hash, window.location.origin),
+    [],
+  );
   const guestDefaultsEnsured = React.useRef(false);
   const memberDefaultsEnsured = React.useRef(false);
   React.useEffect(() => {
@@ -168,32 +178,27 @@ export function ChatPanel({ defaultRoomId, defaultRoomName, defaultFullscreen = 
     if (!signer) {
       if (guestDefaultsEnsured.current) return;
       guestDefaultsEnsured.current = true;
-      void ensureDefaultRooms(effective, Boolean(defaultRoomId), { onlyRoomName: DEFAULT_LANDING_ROOM });
+      void ensureDefaultRooms(effective, Boolean(defaultRoomId || inviteLink), { onlyRoomName: DEFAULT_LANDING_ROOM });
       return;
     }
     if (memberDefaultsEnsured.current) return;
     memberDefaultsEnsured.current = true;
-    void ensureDefaultRooms(effective, Boolean(defaultRoomId));
+    void ensureDefaultRooms(effective, Boolean(defaultRoomId || inviteLink));
     // Cross-app parity: pull this identity's MARKET rooms (bao.markets API)
     // into the local list so the same rooms follow the user everywhere.
     void syncExternalRooms(effective);
-  }, [signer, defaultRoomId, ensureDefaultRooms, syncExternalRooms]);
-  // Direct invite links: `/chat/join#<fragment>` and `/fal-live/join#<fragment>`
-  // are the same credential the paste box accepts, so opening the URL is the
-  // same action as pasting it - and until now only the paste box existed, with
-  // no route and no shell for the join path at all. importLink validates before
-  // it admits or persists anything (see its fail-closed notes), so a bad or
+  }, [signer, defaultRoomId, inviteLink, ensureDefaultRooms, syncExternalRooms]);
+  // Adopt the invite the page was opened with. importLink validates before it
+  // admits or persists anything (see its fail-closed notes), so a bad or
   // expired fragment leaves a quiet error and no dead room. The fragment stays
   // in the address bar on purpose: re-mounting re-imports the same link, which
   // is idempotent by roomId, so a refresh retries a join that failed in transit.
   const inviteAdopted = React.useRef(false);
   React.useEffect(() => {
-    if (inviteAdopted.current) return;
-    const link = joinLinkFromLocation(window.location.pathname, window.location.hash, window.location.origin);
-    if (!link) return;
+    if (!inviteLink || inviteAdopted.current) return;
     inviteAdopted.current = true;
-    void importLink(link);
-  }, [importLink]);
+    void importLink(inviteLink);
+  }, [inviteLink, importLink]);
   // Signed-out visitors only see the one public door. Rooms already persisted
   // in this browser (from an earlier signed-in session, or invite links) stay
   // out of the guest sidebar until sign-in.
