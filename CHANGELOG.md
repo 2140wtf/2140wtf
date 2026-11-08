@@ -19,6 +19,7 @@
 - Cashu seed decryption errors now explain recovery options and warn before destructive regeneration.
 - Feed events persist in IndexedDB for instant warm and offline loads without false empty states.
 - Paid Cashu invoices poll every four seconds when NUT-17 websocket updates are unavailable.
+- Direct links to a shareable surface no longer bounce through a redirect: the build also writes the flat shell (`dist/bao/markets.html`, which GitHub Pages serves for `/bao/markets`), so a copied URL stays exactly as shared instead of gaining a trailing slash, and the trailing-slash form keeps answering 200.
 
 ### Added
 - ₿AO Court library (frost-court) gained its full session machinery: canonical session binding, DKG/vote/signing phase machines with typed fail-closed errors, NIP-46/NIP-59 signer-backed transport (no raw nsec anywhere), a durable outbox with semantic dedupe and signed acks, a recipient inbox with relay-group policy, keeper designation with reveal verification, an 80-test relay-adversary suite, the encrypted Court host-key lifecycle with attestation and rotation, and certified cross-device recovery envelopes whose restore recomputes every claim from curve math — hardened by an adversarial review (negated-share parity bind, infinity-point typed failures, signer-error sanitization, runtime-private secrets).

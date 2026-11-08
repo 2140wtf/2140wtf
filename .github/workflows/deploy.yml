@@ -87,12 +87,14 @@ jobs:
         run: |
           ROUTES=$(node -e "import('./scripts/spa-route-shells.mjs').then((m) => console.log(m.SPA_ROUTE_SHELLS.join(' ')))")
           for route in $ROUTES; do
-            if [ -f "dist/$route/index.html" ]; then
-              echo "ok: dist/$route/index.html"
-            else
-              echo "::error::dist/$route/index.html is missing — https://2140.wtf/$route would answer 404."
-              exit 1
-            fi
+            for file in "dist/$route.html" "dist/$route/index.html"; do
+              if [ -f "$file" ]; then
+                echo "ok: $file"
+              else
+                echo "::error::$file is missing — https://2140.wtf/$route would not answer 200."
+                exit 1
+              fi
+            done
           done
 
       - name: Setup Pages
