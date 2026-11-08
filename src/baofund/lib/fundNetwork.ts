@@ -22,8 +22,10 @@ export type { FundNetwork };
 export const DEMO_FUND_API_BASE = 'https://relay.bao.network/bao-api';
 
 /** Markets API host for the selected universe. Chat room sync uses this -
- *  market rooms are network-specific even though chat itself is shared. */
-export const TESTNET_MARKETS_API_BASE = 'https://api.testnet.bao.network';
+ *  market rooms are network-specific even though chat itself is shared.
+ *  Hyphenated bao.markets name: the dotted `api.testnet.bao.network` retired
+ *  with the bao.network domain (2026-11-04) and no longer resolves. */
+export const TESTNET_MARKETS_API_BASE = 'https://api-testnet.bao.markets';
 
 export function marketsApiBase(): string {
   return isDemoNetwork() ? DEMO_FUND_API_BASE : TESTNET_MARKETS_API_BASE;
