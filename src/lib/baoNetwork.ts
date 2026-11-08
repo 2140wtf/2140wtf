@@ -28,10 +28,14 @@ const DEMO: BaoNetworkEndpoints = {
   label: 'Demo',
 };
 
+// The dotted `api.testnet.bao.network` / `relay.testnet.bao.network` names
+// retired with the bao.network domain (2026-11-04) and are NXDOMAIN; the
+// hyphenated bao.markets pair is the live testnet deployment. Pointing at the
+// dotted names left the testnet picker with no API and an unconnectable relay.
 const TESTNET: BaoNetworkEndpoints = {
-  api: 'https://api.testnet.bao.network/v1',
-  fundApi: 'https://api.testnet.bao.network',
-  relay: 'wss://relay.testnet.bao.network',
+  api: 'https://api-testnet.bao.markets/v1',
+  fundApi: 'https://api-testnet.bao.markets',
+  relay: 'wss://relay-testnet.bao.markets',
   marketNetwork: 'testnet',
   label: 'Testnet',
 };

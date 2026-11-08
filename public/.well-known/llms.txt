@@ -79,7 +79,7 @@ Every one of these hosts publishes its own `/llms.txt` and its own robots policy
 - [The ₿AO hub](https://bao.network/) — network overview plus the published agent contract: [agent brief](https://bao.network/agent/README.md), [onboarding](https://bao.network/agent/onboarding.md), [catalogs](https://bao.network/.well-known/bao-agent.json), [repo rules](https://bao.network/AGENTS.md).
 - [₿AO Court](https://court.bao.network/) — the FROST threshold oracle for dispute resolution.
 - [₿AO₿AO](https://bao.bao.network/) and [2140 Social](https://2140.social/) — the other two Nostr clients in the family.
-- [Demo Nostr relay](https://relay.bao.network/) (strfry) and [testnet relay](https://relay.testnet.bao.network/); the community chat relay is `wss://relay.bao.fund`.
+- [Demo Nostr relay](https://relay.bao.network/) (strfry) and [testnet relay](https://relay-testnet.bao.markets/); the community chat relay is `wss://relay.bao.fund`.
 
 ## Reference
 - [Changelog](https://2140.wtf/CHANGELOG.md) — every shipped change, newest first.
