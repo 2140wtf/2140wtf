@@ -65,6 +65,18 @@ describe("ConfirmationStatusRow", () => {
     expect(screen.getByText("challenged")).toBeTruthy();
   });
 
+  it("documents the sybil trust note on the confirmation count", () => {
+    // 10k sybil pubkeys can trivially meet the threshold; the count must be
+    // scoped as relay-observed, not claimed to be verified jurors.
+    render(
+      <ConfirmationStatusRow
+        status={status({ stage: "confirmed", confirmations: 10000, threshold: 3 })}
+      />,
+    );
+    const count = screen.getByLabelText("10000 of 3 juror confirmations");
+    expect(count.getAttribute("title")).toMatch(/not verified to be empaneled jurors/);
+  });
+
   it("renders nothing without a status", () => {
     const { container } = render(<ConfirmationStatusRow status={null} />);
     expect(container.firstChild).toBeNull();

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
 import type { NostrEvent } from "@nostrify/nostrify";
@@ -13,7 +13,6 @@ import {
   useCourtConfirmations,
 } from "./useCourtConfirmations";
 import {
-  BAO_COURT_BATCH_ATTESTATION_KIND,
   buildBatchAttestationEvent,
   buildBatchMerkleTree,
   hashBatchManifest,
@@ -94,7 +93,7 @@ function signedBatchEventForCase(finalizedAtSec = nowSec): NostrEvent {
     outcome: "yes",
     supportingEventIds: SUPPORTING,
   });
-  const { root, leaves } = buildBatchMerkleTree([verdictHash]);
+  const { root } = buildBatchMerkleTree([verdictHash]);
   const manifest = hashBatchManifest({
     epoch: 1,
     cohortPubkey: COHORT,
@@ -137,6 +136,13 @@ beforeEach(() => {
   backfillEvents = [];
   liveEvents = [];
   vi.clearAllMocks();
+  // Batches are verified against the PINNED court group pubkey; the tests
+  // sign with the local COHORT key, so pin the env to it.
+  vi.stubEnv("VITE_FUND_COURT_GROUP_PUBKEY", COHORT);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("deriveConfirmationStatus (pure derivation)", () => {
@@ -180,17 +186,29 @@ describe("deriveConfirmationStatus (pure derivation)", () => {
     expect(status.finalReason).toBe("challenge-window");
   });
 
-  it("does NOT reach final via the window while a challenge is observed", () => {
-    const deadline = nowSec - 60;
+  it("does NOT reach final via the window while an in-window challenge is observed", () => {
+    const deadline = nowSec + 60; // challenge lands before the deadline passes
     const events = [
       proposalEvent({ "challenge-deadline": String(deadline) }),
-      challengeEvent(),
+      makeEvent(COURT_CHALLENGE_KIND, [["dispute", CASE_ID]], { created_at: deadline - 10 }),
     ];
     const status = deriveConfirmationStatus(CASE_ID, events, nowSec);
     expect(status.stage).toBe("pending");
     expect(status.challenged).toBe(true);
     expect(status.challengeCount).toBe(1);
     expect(status.finalReason).toBeNull();
+  });
+
+  it("still reaches final via the window when the only challenge was published after the deadline", () => {
+    const deadline = nowSec - 60;
+    const events = [
+      proposalEvent({ "challenge-deadline": String(deadline) }),
+      makeEvent(COURT_CHALLENGE_KIND, [["dispute", CASE_ID]], { created_at: deadline + 10 }),
+    ];
+    const status = deriveConfirmationStatus(CASE_ID, events, nowSec);
+    expect(status.stage).toBe("final");
+    expect(status.finalReason).toBe("challenge-window");
+    expect(status.challenged).toBe(true);
   });
 
   it("does NOT reach final from an unobserved future deadline", () => {
