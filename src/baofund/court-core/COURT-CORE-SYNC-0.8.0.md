@@ -91,3 +91,83 @@ Suite: 124 → 135 passing.
 - `npx vitest run src/baofund/court-core` → 8 files / 135 tests passed
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync — bao-court v0.8.4 (c06d039)
+
+Synced the v0.8.1→v0.8.4 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.8.4** (c06d039; v0.8.2/v0.8.3 were the
+machine-hardening and adversarial-suite commits, v0.8.4 the validator
+security-round-1 hardening) and bumped the npm dep `@bao/court`
+`#v0.8.1` → `#v0.8.4`.
+
+## What changed
+
+**Updated files (adversarial hardening, upstream PRs #36/#37):**
+- `courtCeremonyCore.ts` — adds `isCanonicalUtf8Text` (UTF-8 round-trip
+  check: rejects lone surrogates so two distinct strings cannot share one
+  canonical byte form) and `assertStateArrays` (fail-closed guard for
+  tampered/restored states with non-array ledger fields);
+  `normalizeCeremonyRoster` now rejects a non-array `participantIndices`.
+- `courtVoteMachine.ts` — non-object events fail closed; `assertStateArrays`
+  on `participantIndices`/`allowedOutcomes`/`commits`/`reveals`; outcome
+  canonical-UTF-8 checks in all three hash builders and the ballot
+  construction; unknown event types throw instead of silently returning an
+  unfrozen clock-advanced copy.
+- `courtConfirmationMachine.ts` — same fail-closed pattern (non-object
+  events, `assertStateArrays`, ladder-shape guard, canonical outcome in
+  `assertBoundedOutcome`, unknown-type throw).
+- `courtDkgMachine.ts` — state freeze discipline (`freezeCourtDkgMachineState`)
+  on every transition; non-object events and non-array ledgers fail closed.
+- `courtSigningMachine.ts` — state freeze discipline
+  (`freezeCourtSigningMachineState`); re-derives and pins
+  `signingSessionHash` in `assertSigningRecordInvariants` (a tampered
+  outcome/roster/attempt binding is rejected before any commitment or
+  partial is accepted); canonical outcome check; non-object events fail
+  closed.
+- `validator.ts` — v2 field bounds (`MAX_V2_MARKET_ID_BYTES` 1024 /
+  `MAX_V2_OUTCOME_BYTES` 256 / `MAX_V2_ROUND_BYTES` 64; the frozen v1
+  validator stays byte-compatible and unbounded); enforces the
+  `expectedDisputeEventId` / `expectedMarketId` / `allowedOutcomes` context
+  pins on the v2 path (FINDING-3 — previously declared but never enforced);
+  `validateCourtAttestation` refuses v1-shaped events when v2-only policy
+  fields (`expectedEpoch`/`minTier`/`minThreshold`/`expectedSignerSetRoot`/
+  `signerSet`) are requested (FINDING-1 downgrade refusal).
+
+**New tests vendored:** `__tests__/adversarialMachines.test.ts` (1295 lines,
+four ceremony machines + core adversarial suites) and
+`__tests__/attestationValidator.adversarial.test.ts` (655 lines, v2
+validator replay/downgrade/field-confusion/unicode/signature/threshold
+games). Suite: 135 → 569 passing (the adversarial suites are heavily
+parameterized).
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above (em/en/word-joiner
+   dashes → `-`; box-drawing U+2500 section-rule dividers → `-`; `©`,
+   `→`, `≠`, `≥`, `…` and the tree diagram `├─`/`└─` are kept, matching
+   the existing vendored tree; unicode test-data literals in
+   `attestationValidator.adversarial.test.ts` are kept verbatim — they are
+   the subject of the canonicalization tests).
+2. **jsdom `kp()` fix in `attestationValidator.adversarial.test.ts`:**
+   same adaptation as the v0.8.1 sync — `kp()` wraps `randomBytes(32)` in
+   `Uint8Array.from(...)` (jsdom realm's Uint8Array vs node:crypto Buffer
+   realm; `abytes()` cross-realm check).
+3. **`run()` harness signature in `adversarialMachines.test.ts`:** the
+   events parameter is `readonly unknown[]` (cast to `E` at the reduce
+   call). The client tsconfig typechecks `__tests__` (upstream excludes
+   them from its main tsconfig), and inline event literals widen `type`
+   to `string`, which no longer assigns to the closed machine event
+   unions now that unknown event types fail closed. The harness feeds
+   deliberately hostile events; the runtime guards are the assertion.
+4. No other divergences. The jsdom `kp()` fix in
+   `attestationV2Validator.test.ts` is untouched (that file did not change
+   between v0.8.1 and v0.8.4) and remains in place.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` → 10 files / 569 tests passed
+- `npx vitest run src/hooks src/components/bao-court` → green
+- `npx tsc --noEmit` → exit 0
+- `npx vite build` → exit 0
