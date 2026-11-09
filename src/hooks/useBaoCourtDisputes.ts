@@ -6,9 +6,6 @@ import { isNostrId } from "@/lib/nostrId";
 import { isVerifiedEvent } from "@/lib/nostrEvents";
 import {
   BAO_COURT_DISPUTE_KIND,
-  BAO_COURT_SELECTION_KIND,
-  parseSelectionEvent,
-  validateSelectionEvent,
   type DisputeCase,
 } from "@bao/court";
 
@@ -105,10 +102,6 @@ function parseBaoCourtDispute(event: NostrEvent): BaoCourtDispute | null {
 
 function getDisputesQueryKey() {
   return ["bao-court-disputes"];
-}
-
-function getSelectionQueryKey(disputeId: string) {
-  return ["bao-court-selection", disputeId];
 }
 
 export function useBaoCourtDisputes() {
@@ -242,58 +235,3 @@ export function useBaoCourtDisputes() {
   return query;
 }
 
-/**
- * Query the kind 39002 selection event for a specific dispute.
- *
- * Selection events are trust-sensitive. Callers currently provide a list of
- * trusted coordinator pubkeys for filtering, but a coordinator-based design is
- * NOT the desired end state. The protocol target is a fully independent jury
- * where selection events are validated through roster signatures, not a
- * privileged publisher. Until that replaces the coordinator filter, callers
- * should treat the pubkey list as a temporary compatibility aid.
- */
-export function useBaoCourtSelection(
-  disputeId: string,
-  coordinatorPubkeys?: readonly string[],
-) {
-  return useQuery({
-    queryKey: getSelectionQueryKey(disputeId),
-    queryFn: async ({ signal }) => {
-      const relay = new NRelay1(RELAY);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), QUERY_TIMEOUT_MS);
-
-      if (signal) {
-        signal.addEventListener("abort", () => controller.abort(), { once: true });
-      }
-
-      try {
-        const filter: NostrFilter = {
-          kinds: [BAO_COURT_SELECTION_KIND],
-          authors: coordinatorPubkeys && coordinatorPubkeys.length > 0
-            ? [...coordinatorPubkeys]
-            : undefined,
-          "#dispute": [disputeId],
-          limit: 20,
-        };
-        const events = await relay.query([filter], { signal: controller.signal });
-        for (const event of events) {
-          if (!isVerifiedEvent(event)) continue;
-          const validation = validateSelectionEvent(event, disputeId);
-          if (!validation.valid) continue;
-          const parsed = parseSelectionEvent(event);
-          if (parsed && parsed.disputeId === disputeId) {
-            return parsed;
-          }
-        }
-        return null;
-      } finally {
-        clearTimeout(timeoutId);
-        relay.close().catch(() => {});
-      }
-    },
-    staleTime: 2 * 60 * 1000,
-    gcTime: 5 * 60 * 1000,
-    enabled: disputeId.length > 0,
-  });
-}
