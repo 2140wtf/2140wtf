@@ -50,3 +50,44 @@ the vendored engine to parity.
 - `npx vitest run src/baofund/court-core` → 7 files / 124 tests passed
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync — bao-court v0.8.1 (9590d8a)
+
+Synced the v0.8.1 delta into `src/baofund/court-core/` from `baocommunity/bao-court`
+tag **v0.8.1** (9590d8a, "v2 attestation validation - in-band finality binding
+enforced", PR #35) and bumped the npm dep `@bao/court` `#v0.8.0` → `#v0.8.1`.
+
+## What changed
+
+**Updated files:**
+- `validator.ts` - adds the v2 attestation validator: `hashSignerSetRoot`
+  (canonical signer-set commitment under `BAO-Court/SignerSet/v1`),
+  `AttestationV2ValidationContext` (epoch/tier/threshold/signer-set pins),
+  `validateAttestationEventV2`, and `validateCourtAttestation` (accepts both
+  shapes; v2 detected by the `epoch` tag). The v1 validator remains frozen.
+- `index.ts` - re-exports `COURT_SIGNER_SET_DOMAIN`, `hashSignerSetRoot`,
+  `validateAttestationEventV2`, `validateCourtAttestation`,
+  `AttestationValidationContext`, `AttestationV2ValidationContext`.
+
+**New tests vendored:** `__tests__/attestationV2Validator.test.ts` (11 tests).
+Suite: 124 → 135 passing.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above (em/en/word-joiner dashes
+   and box-drawing U+2500 section rules → ASCII `-`; `©` and `→` are kept,
+   matching the rest of the vendored tree).
+2. **Test env fix in `attestationV2Validator.test.ts`:** `kp()` wraps the
+   `node:crypto` `randomBytes(32)` result in `Uint8Array.from(...)`. Under the
+   client's jsdom vitest environment the Buffer realm's Uint8Array fails the
+   cross-realm `instanceof` check in `@noble/curves`' `abytes()`
+   ("secretKey expected Uint8Array of length 32, got type=object"). Upstream
+   runs tests in a node environment and does not need this.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` → 8 files / 135 tests passed
+- `npx tsc --noEmit` → exit 0
+- `npx vite build` → exit 0

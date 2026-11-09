@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 
 import { useBaoCourtDisputes, type BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
 import { useBaoCourtSelection } from "@/hooks/useBaoCourtSelection";
+import { useCourtConfirmations } from "@/hooks/useCourtConfirmations";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useJurorBadges } from "@/hooks/useJurorBadges";
 import { DisputeCard } from "./DisputeCard";
 import { JurorRegistrationCard } from "./JurorRegistrationCard";
 import { JurorSessionModal } from "./JurorSessionModal";
@@ -35,6 +38,9 @@ interface DemoSession {
 
 export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardProps) {
   const { data: disputes = [], isLoading } = useBaoCourtDisputes();
+  const { statuses: confirmationStatuses } = useCourtConfirmations();
+  const { user } = useCurrentUser();
+  const jurorBadges = useJurorBadges(user?.pubkey);
   const [selectedDispute, setSelectedDispute] = useState<BaoCourtDispute | null>(null);
   const [demoSession, setDemoSession] = useState<DemoSession | null>(null);
   const [sessionOpen, setSessionOpen] = useState(false);
@@ -137,6 +143,7 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
                   key={dispute.disputeId}
                   dispute={dispute}
                   onSelect={handleStartSession}
+                  confirmation={confirmationStatuses.get(dispute.disputeId)}
                 />
               ))}
             </div>
@@ -145,6 +152,16 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
       )}
 
       <TabsContent value="sessions" className="mt-4 space-y-4">
+        {jurorBadges.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2" data-testid="juror-badges">
+            <span className="text-sm text-muted-foreground">Juror badges:</span>
+            {jurorBadges.map((badge) => (
+              <Badge key={badge.eventId} variant="secondary" title={`Awarded ${new Date(badge.awardedAt * 1000).toLocaleString()}`}>
+                {badge.name}
+              </Badge>
+            ))}
+          </div>
+        )}
         {activeSession ? (
           <Card>
             <CardContent className="p-4 space-y-3">
