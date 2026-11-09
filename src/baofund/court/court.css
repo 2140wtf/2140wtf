@@ -21,6 +21,8 @@
   margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-left: 3px solid #b3591e;
   background: rgba(179, 89, 30, 0.08);
 }
+.dispute-status-confirm { margin-top: 0.35rem; font-size: 0.85rem; opacity: 0.85; }
+.dispute-status-confirm[data-stage='final'] { opacity: 1; font-weight: 600; }
 .dispute-status-verdict {
   margin-top: 0.5rem; padding: 0.5rem 0.65rem; border-left: 3px solid #2e6b34;
   background: rgba(46, 107, 52, 0.08);

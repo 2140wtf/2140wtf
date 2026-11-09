@@ -6,11 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { BaoCourtDispute } from "@/hooks/useBaoCourtDisputes";
+import type { CourtConfirmationStatus } from "@/hooks/useCourtConfirmations";
+import { ConfirmationStatusRow } from "./ConfirmationStatusRow";
 
 interface DisputeCardProps {
   dispute: BaoCourtDispute;
   onSelect: (dispute: BaoCourtDispute) => void;
   disabled?: boolean;
+  /** Observed universal-confirmation status, when the caller subscribes. */
+  confirmation?: CourtConfirmationStatus | null;
 }
 
 function formatDeadline(timestamp: number): string {
@@ -27,7 +31,7 @@ function truncatePubkey(pubkey: string): string {
   return `${pubkey.slice(0, 6)}…${pubkey.slice(-6)}`;
 }
 
-export const DisputeCard = memo(function DisputeCard({ dispute, onSelect, disabled }: DisputeCardProps) {
+export const DisputeCard = memo(function DisputeCard({ dispute, onSelect, disabled, confirmation }: DisputeCardProps) {
   return (
     <Card className="flex flex-col hover:border-primary/50 transition-colors">
       <CardHeader>
@@ -65,6 +69,8 @@ export const DisputeCard = memo(function DisputeCard({ dispute, onSelect, disabl
             {formatDeadline(dispute.deadline)}
           </span>
         </div>
+
+        <ConfirmationStatusRow status={confirmation} />
 
         <div className="mt-auto">
           <Button size="sm" className="w-full" onClick={() => onSelect(dispute)} disabled={disabled}>

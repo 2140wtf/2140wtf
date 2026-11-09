@@ -11,6 +11,7 @@
 import React, { useState } from 'react';
 import type { DisputeStatusView } from '../lib/court/disputeStatus';
 import { refundRaceCopy } from '../lib/court/disputeStatus';
+import type { CourtConfirmationStatus } from '@/hooks/useCourtConfirmations';
 
 const PHASE_LABELS: Record<string, string> = {
   dispute: 'Dispute window',
@@ -37,6 +38,7 @@ export function DisputeStatusCard({
   myPubkey,
   viewerRole,
   onExecute,
+  confirmation,
 }: {
   status: DisputeStatusView;
   now: number;
@@ -48,6 +50,8 @@ export function DisputeStatusCard({
   viewerRole: 'donor' | 'founder';
   /** S3 affordance: call the release route with the attestation. Absent = hide. */
   onExecute?: (attestationEventId: string, winnerPubkey: string) => void;
+  /** Observed universal-confirmation status. Absent = row hidden. */
+  confirmation?: CourtConfirmationStatus | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   const { dispute, phases, canStillResolveInTime, terminal } = status;
@@ -89,6 +93,16 @@ export function DisputeStatusCard({
           <span>All phases complete - verdict {terminal.kind === 'verdict' ? 'reached' : 'pending'}</span>
         )}
       </div>
+
+      {/* Observed universal-confirmation status (P1 read path) */}
+      {confirmation && (
+        <div className="dispute-status-confirm" data-stage={confirmation.stage}>
+          <span>Confirmations: {confirmation.stage}</span>
+          <span> · {confirmation.confirmations}/{confirmation.threshold} jurors</span>
+          {confirmation.challenged && <span> · challenged</span>}
+          {confirmation.verified && <span> · batch verified ✓</span>}
+        </div>
+      )}
 
       {/* Refund-race honesty (round-3: role-specific) */}
       {!canStillResolveInTime && terminal.kind === 'active' && (
