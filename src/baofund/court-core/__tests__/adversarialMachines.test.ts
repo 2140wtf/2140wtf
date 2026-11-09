@@ -243,6 +243,11 @@ function confirmationAt(phase: CourtConfirmationMachineState['phase']): CourtCon
   state = reduceCourtConfirmationMachine(state, { type: 'close_ladder_round', now: 400 });
   if (phase === 'ladder_vote_closed') return state;
   state = reduceCourtConfirmationMachine(state, { type: 'resolve_round', now: 401 });
+  if (phase === 'round_resolved') return state;
+  // Round 1 of a maxLadderRounds=2 case parks in round_resolved; reaching
+  // fee_settlement requires the host's explicit concede (or escalate to
+  // round 2 and resolve it).
+  state = reduceCourtConfirmationMachine(state, { type: 'concede', now: 401 });
   if (phase === 'fee_settlement') return state;
   return reduceCourtConfirmationMachine(state, { type: 'finalize', now: 402 }); // final
 }
@@ -1127,6 +1132,8 @@ describe('adversarial: legality matrix - every event at every phase, typed failu
     { type: 'accept_mass_vote', idx: 2, outcome: 'NO', eventId: hexId('f32'), now: 250 },
     { type: 'close_ladder_round', now: 400 },
     { type: 'resolve_round', now: 410 },
+    { type: 'escalate', now: 411 },
+    { type: 'concede', now: 411 },
     { type: 'record_fee', feeEventId: hexId('fe1'), now: 420 },
     { type: 'flag_clawback', idx: 1, reason: 'fuzz', now: 430 },
     { type: 'finalize', now: 440 },
@@ -1141,6 +1148,7 @@ describe('adversarial: legality matrix - every event at every phase, typed failu
     ['ladder_pending', confirmationAt('ladder_pending')],
     ['ladder_vote_open', confirmationAt('ladder_vote_open')],
     ['ladder_vote_closed', confirmationAt('ladder_vote_closed')],
+    ['round_resolved', confirmationAt('round_resolved')],
     ['fee_settlement', confirmationAt('fee_settlement')],
     ['final', confirmationAt('final')],
     ['expired', reduceCourtConfirmationMachine(confirmationMachine(), { type: 'tick', now: 500 })],
@@ -1170,12 +1178,15 @@ describe('adversarial: legality matrix - every event at every phase, typed failu
     expect(final.verdict?.supportingEventIds).toEqual([hexId('f10')]);
 
     // Quorum 2 with 1 confirmation: close is refused, tick expires.
+    // (r3-6 fix, 0.9.1: confirmation rosters must have ≥ 3 members, so this
+    // shortfall case now uses a 3-member roster - the quorum semantics are
+    // unchanged.)
     const shortQuorum = createCourtConfirmationMachine({
       sessionHash: SESSION,
       proposalHash: PROPOSAL,
       proposedOutcome: 'YES',
       allowedOutcomes: ['YES', 'NO'],
-      participantIndices: [1, 2],
+      participantIndices: [1, 2, 3],
       confirmQuorum: 2,
       confirmDeadline: 100,
       challengeDeadline: 200,

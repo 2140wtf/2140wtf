@@ -230,3 +230,77 @@ verdict-domain substitution). Suite: 569 → 592 passing.
 - `npx vitest run src/hooks src/components/bao-court` → 257 passed
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync — bao-court v0.9.1 (6a5f30a)
+
+Synced the v0.8.5→v0.9.1 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.9.1** (6a5f30a; v0.8.6..v0.9.0 were the
+multi-round ladder and property-sweep commits) and bumped the npm dep
+`@bao/court` `#v0.8.5` → `#v0.9.1` (lockfile re-resolved via explicit
+`npm install @bao/court@github:baocommunity/bao-court#v0.9.1`; resolves to the
+exact tag commit 6a5f30a).
+
+## What changed (multi-round ladder machine + round-3 findings fixes)
+
+**Updated files:**
+- `courtConfirmationMachine.ts` - the multi-round ladder machine: a
+  `resolve_round` no longer settles a challenged case directly - it parks in
+  the new `round_resolved` phase, where the host plays `concede` (the round
+  outcome becomes final -> `fee_settlement`) or `escalate` (a new ladder
+  round with an expanded roster, bounded by the new `maxLadderRounds` case
+  param). Roster expansion rules (superset-of-previous allowed, roster >= 3
+  enforced at creation - finding r3-6), per-round `roundFlip` /
+  `outcomeHistory` records, and reputation-weighting across rounds
+  (final-round weight 1.0, earlier rounds decayed).
+- `validator.ts` - typed `CourtSignerSetError` family for `hashSignerSetRoot`
+  (r3-5, message text unchanged); `validateCourtAttestation` guards
+  `event.tags` and answers the typed `{ valid, error }` shape instead of a
+  raw TypeError (r3-3); docstring-only cache-semantics note on the
+  nostr-tools `verifyEvent` memoization (r3-4, no code change).
+- `batchAttestation.ts` - `verifyCaseInBatch` validates the event shape
+  (tags array) BEFORE the proof-leaf recomputation so malformed events get
+  the typed `{ valid, reason }` result, never a raw TypeError (r3-2).
+
+**New tests vendored:** `__tests__/multiRoundLadder.test.ts` (471 lines -
+concede/escalate paths, roster expansion, ladder-cap enforcement),
+`__tests__/propertiesConfirmation.test.ts` (732 lines, seeded property
+sweep PC1-PC6 incl. the r3-6 roster rule), `__tests__/propertiesBatch.test.ts`
+(526 lines, PB1-PB6d), `__tests__/propertiesValidator.test.ts` (465 lines,
+PV1-PV6), `__tests__/r3Findings.test.ts` (178 lines, regression locks for
+r3-2/r3-3/r3-5/r3-6). **Updated tests synced:** `adversarialMachines.test.ts`
++ `courtConfirmationMachine.test.ts` + `adversarialCrossModule.test.ts`
+(concede/`round_resolved` inserted into the phase drivers/legality matrix;
+the quorum-shortfall case moved to a 3-member roster per r3-6) and
+`confirmationPipeline.test.ts` (first time vendored - end-to-end
+confirmation pipeline with real Schnorr signatures).
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above (em/en/word-joiner
+   dashes and box-drawing U+2500 section-rule dividers → `-`; `©`, `→`,
+   `≥`, `…` and the ladder/tree diagram `├─`/`└─`/`┌─`/`─┐` glyphs are
+   kept, matching the existing vendored tree).
+2. **jsdom `kp()` fix, new location `confirmationPipeline.test.ts`:** its
+   `keypair()` wraps the `node:crypto` `randomBytes(32)` in
+   `Uint8Array.from(...)` (same cross-realm `abytes()` issue as the v0.8.1
+   sync - jsdom vitest environment vs node:crypto Buffer realm). The
+   property suites need no fix: they derive keys via `hexToBytes` (fresh
+   jsdom-realm `Uint8Array`) or `finalizeEvent`.
+3. **`run()` harness `readonly unknown[]` typing in
+   `adversarialMachines.test.ts`** re-applied to the updated file (same
+   rationale as v0.8.4 - the client tsconfig typechecks `__tests__`).
+4. **Client hook impact checked:** `useCourtConfirmations` (and the
+   bao-court components) derive status from OBSERVED relay events
+   (kinds 38026/39015/39016/39018) and never reduce machine state, so the
+   new `round_resolved` phase / `escalate`/`concede` events do not affect
+   the read path; `verifyCaseInBatch`'s exported signature is unchanged.
+   Hooks + bao-court suites pass unchanged.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` → 17 files / 674 tests passed
+- `npx vitest run src/hooks src/components/bao-court` → 40 files / 257 passed
+- `npx tsc --noEmit` → exit 0
+- `npx vite build` → exit 0
