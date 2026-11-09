@@ -12,6 +12,8 @@ import { useBaoCourtSelection } from "@/hooks/useBaoCourtSelection";
 import { useCourtConfirmations } from "@/hooks/useCourtConfirmations";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useJurorBadges } from "@/hooks/useJurorBadges";
+import { useMySummons } from "@/hooks/useMySummons";
+import { SummonsNoticeCard } from "./SummonsNoticeCard";
 import { DisputeCard } from "./DisputeCard";
 import { JurorRegistrationCard } from "./JurorRegistrationCard";
 import { JurorSessionModal } from "./JurorSessionModal";
@@ -46,6 +48,7 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
   const [sessionOpen, setSessionOpen] = useState(false);
 
   const realSelection = useBaoCourtSelection(selectedDispute?.disputeId);
+  const mySummons = useMySummons();
 
   const openDisputes = disputes.filter((d) => d.status === "open");
 
@@ -98,12 +101,31 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
           <List className="size-4" />
           <span className="hidden sm:inline">My Jury Duty</span>
           <span className="sm:hidden">Jury</span>
+          {mySummons.unreadCount > 0 && (
+            <Badge className="px-1.5 min-w-5 justify-center bg-amber-500 hover:bg-amber-500 text-black">
+              {mySummons.unreadCount}
+            </Badge>
+          )}
         </TabsTrigger>
         <TabsTrigger value="settings" className="gap-2">
           <Settings className="size-4" />
           <span>Settings</span>
         </TabsTrigger>
       </TabsList>
+
+      {/* R1 summons notification surface: #p-tagged 39002/38026 summons with a
+          one-click §6 ack — rostered jurors no longer discover summons by
+          clicking around. */}
+      <div className="mt-4">
+        <SummonsNoticeCard
+          notices={mySummons.summons}
+          ackedEventIds={mySummons.ackedEventIds}
+          pendingAckEventId={mySummons.pendingAckEventId}
+          ackError={mySummons.ackError}
+          onAck={(notice) => void mySummons.ackSummons(notice)}
+          onDismiss={mySummons.markSeen}
+        />
+      </div>
 
       {settings.demoMode ? (
         <TabsContent value="lobby" className="mt-4 space-y-4">
