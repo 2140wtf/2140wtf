@@ -171,3 +171,62 @@ parameterized).
 - `npx vitest run src/hooks src/components/bao-court` → green
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync — bao-court v0.8.5 (e2d3667)
+
+Synced the v0.8.4→v0.8.5 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.8.5** (e2d3667, "release: v0.8.5 — round-2
+cross-module hardening (PR #41) versioned (#42)") and bumped the npm dep
+`@bao/court` `#v0.8.4` → `#v0.8.5` (lockfile re-resolved via explicit
+`npm install @bao/court@github:baocommunity/bao-court#v0.8.5`; resolves to the
+exact tag commit e2d3667).
+
+## What changed (round-2 cross-module adversarial audit, upstream PR #41)
+
+**Updated files:**
+- `validator.ts` - `AttestationV2ValidationContext` gains
+  `expectedBatchMerkleRoot`: the v2 `batch` tag must be PRESENT and match
+  (fail-closed), added to `V2_ONLY_POLICY_FIELDS` (refused on v1-shaped
+  downgrades); docstring hardening - loud MUST-pin-`expectedGroupPubkey`
+  warnings on `validateAttestationEventV2` / `validateCourtAttestation` /
+  batch context (unpinned consumers accept any valid signature); the
+  v1-downgrade error message now lists `expectedBatchMerkleRoot`.
+- `batchAttestation.ts` - docstring hardening only: group-key MUST-pin note
+  on the batch context, batch-membership scope on `buildBatchMerkleTree`
+  (verdictHash leaves bind no epoch/cohort - consumers MUST dedupe by
+  verdictHash), and what `verifyCaseInBatch` does/does not pin.
+- `courtConfirmationMachine.ts` - ledger re-verification after snapshot
+  restore: new `assertValidConfirmationLedger` (canonical confirmHash
+  recomputation, roster membership, hex well-formedness, per-index and
+  event-id uniqueness for the confirmation AND challenge ledgers) called at
+  `resolve_round` and `finalize`; domain-reuse note on the
+  vote-machine `COURT_VERDICT_DOMAIN` import.
+
+**New tests vendored:** `__tests__/adversarialCrossModule.test.ts` (1015
+lines, six chained cross-module adversarial sequences: epoch-rotation
+replay, batch membership double-counting, foreign-key tier elevation,
+machine-state replay/double-finalize, mass-vote ledger cross-round leakage,
+verdict-domain substitution). Suite: 569 → 592 passing.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above (em/en/word-joiner
+   dashes and box-drawing U+2500 section-rule dividers → `-`; `©`, `→`,
+   `←`, `≠`, `≥`, `…` and the tree diagram `├─`/`└─` are kept, matching the
+   existing vendored tree).
+2. **No other adaptations needed this time:** the new test file derives keys
+   from fixed hex via `hexToBytes` (no `node:crypto` `randomBytes`, so the
+   jsdom `kp()` `Uint8Array.from` fix does not apply) and drives the
+   machines through directly-typed `reduce*` calls (no generic `run()`
+   harness, so the `readonly unknown[]` event-typing adaptation does not
+   apply). The prior jsdom fixes in `attestationV2Validator.test.ts` /
+   `attestationValidator.adversarial.test.ts` are untouched.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` → 11 files / 592 tests passed
+- `npx vitest run src/hooks src/components/bao-court` → 257 passed
+- `npx tsc --noEmit` → exit 0
+- `npx vite build` → exit 0
