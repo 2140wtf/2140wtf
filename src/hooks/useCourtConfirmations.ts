@@ -28,12 +28,16 @@
  *         case verdict with the vendored `verifyCaseInBatch`, OR
  *     (b) the proposal carries an observed `challenge-deadline` tag, that
  *         deadline has passed, and NO kind-39016 challenge was observed for
- *         the case (an observed challenge re-opens the ladder, so a passed
- *         window alone cannot be final while challenges exist).
+ *         the case that was published within the window (an in-window
+ *         challenge re-opens the ladder; a challenge published after the
+ *         deadline is still displayed as `challenged` but cannot re-open a
+ *         passed window).
  *
  * `verified: true` is set ONLY when the batch path (a) succeeded
- * fail-closed; a batch tag without a proof or with a failing proof is
- * reported via `verifyReason` and never counts as finality.
+ * fail-closed against the PINNED court group pubkey
+ * (`fundCourtGroupPubkey()`); a batch attestation signed by any other key
+ * (or a batch tag without a proof, or a failing proof) is reported via
+ * `verifyReason` and never counts as finality.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
@@ -43,6 +47,7 @@ import {
   verifyCaseInBatch,
   type BatchMerkleProof,
 } from "@/baofund/court-core/batchAttestation";
+import { fundCourtGroupPubkey } from "@/baofund/lib/court/courtGroupPubkey";
 
 /** Universal-confirmation outcome proposal (planned kind). */
 export const COURT_OUTCOME_PROPOSAL_KIND = 38026;
@@ -60,6 +65,14 @@ const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
 /** Hard cap on retained events so a runaway relay cannot grow state forever. */
 const MAX_EVENTS = 2_000;
+/**
+ * Ingest size caps. A hostile relay can otherwise park 10MB tag values or
+ * multi-megabyte content in every retained event (2000 events x 10MB = 20GB
+ * of React-reachable memory). Legitimate court events are far smaller.
+ */
+const MAX_EVENT_CONTENT_CHARS = 65_536;
+const MAX_EVENT_TAGS = 256;
+const MAX_EVENT_TAG_VALUE_CHARS = 8_192;
 
 export type CourtConfirmationStage = "pending" | "confirmed" | "final";
 
@@ -98,18 +111,45 @@ function isHex64(value: string | undefined): value is string {
   return typeof value === "string" && /^[0-9a-fA-F]{64}$/.test(value);
 }
 
-/** The dispute/case id an event refers to, or null when it carries none. */
-export function eventCaseId(event: NostrEvent): string | null {
-  const tagged = getTag(event, "dispute");
-  if (tagged) return tagged;
-  try {
-    const content = JSON.parse(event.content || "{}") as Record<string, unknown>;
-    const id = content.disputeId ?? content.caseId;
-    if (typeof id === "string" && id.length > 0) return id;
-  } catch {
-    // Malformed content - fall through.
+/**
+ * An event within the ingest size caps (see MAX_EVENT_* constants), or null
+ * when a hostile relay sent an oversized event.
+ */
+function sizeCapped(event: NostrEvent): NostrEvent | null {
+  if (typeof event.content === "string" && event.content.length > MAX_EVENT_CONTENT_CHARS) {
+    return null;
   }
-  return null;
+  if (!Array.isArray(event.tags) || event.tags.length > MAX_EVENT_TAGS) return null;
+  for (const tag of event.tags) {
+    if (!Array.isArray(tag)) return null;
+    for (const value of tag) {
+      if (typeof value === "string" && value.length > MAX_EVENT_TAG_VALUE_CHARS) return null;
+    }
+  }
+  return event;
+}
+
+/** The dispute/case id an event refers to, or null when it carries none. */
+const caseIdCache = new WeakMap<NostrEvent, string | null>();
+
+export function eventCaseId(event: NostrEvent): string | null {
+  const cached = caseIdCache.get(event);
+  if (cached !== undefined) return cached;
+  let result: string | null = null;
+  const tagged = getTag(event, "dispute");
+  if (tagged) {
+    result = tagged;
+  } else {
+    try {
+      const content = JSON.parse(event.content || "{}") as Record<string, unknown>;
+      const id = content.disputeId ?? content.caseId;
+      if (typeof id === "string" && id.length > 0) result = id;
+    } catch {
+      // Malformed content - fall through.
+    }
+  }
+  caseIdCache.set(event, result);
+  return result;
 }
 
 export interface ObservedBatchProof {
@@ -132,8 +172,11 @@ export function proposalBatchProof(proposal: NostrEvent): ObservedBatchProof | n
   const index = Number(indexRaw);
   if (!Number.isSafeInteger(index) || index < 0) return null;
   // An empty path is valid for a count-1 batch (a single leaf needs no
-  // siblings); any listed sibling must be a 64-hex hash.
+  // siblings); any listed sibling must be a 64-hex hash. The path is capped
+  // defensively: a count<=10000 RFC-6962 tree needs at most ~14 siblings,
+  // so anything longer is hostile padding (bounds the split + fold work).
   const path = pathRaw.split(",").filter((s) => s.length > 0);
+  if (path.length > 64) return null;
   if (!path.every(isHex64)) return null;
   // NB: `proof-leaf` is the domain-hashed BatchLeaf/v1 value (what
   // verifyCaseInBatch calls proof.verdictHash), NOT the raw court verdict
@@ -154,10 +197,24 @@ function caseInputFromProposal(proposal: NostrEvent): {
 }
 
 /**
+ * The court group pubkey every kind-39018 batch attestation MUST be signed
+ * by. Verification is pinned to the empaneled standing FROST group key
+ * (`fundCourtGroupPubkey()`, overridable via VITE_FUND_COURT_GROUP_PUBKEY);
+ * without the pin ANY keypair holder could self-sign a batch attestation
+ * and the client would display "final / batch verified" for a case the
+ * court never finalized.
+ */
+function courtBatchPin(): string | null {
+  const pin = fundCourtGroupPubkey();
+  return typeof pin === "string" && isHex64(pin) ? pin.toLowerCase() : null;
+}
+
+/**
  * Verify every observed kind-39018 batch attestation against one case's
- * verdict using the vendored court-core `verifyCaseInBatch`. Returns the
- * first PASSING verification, else the LAST failure reason (fail-closed:
- * nothing observed means { verified: false }).
+ * verdict using the vendored court-core `verifyCaseInBatch`, pinned to the
+ * court's group pubkey. Returns the first PASSING verification, else the
+ * LAST failure reason (fail-closed: nothing observed means
+ * { verified: false }). Never throws on hostile protocol data.
  */
 export function verifyBatchesForCase(
   caseId: string,
@@ -178,10 +235,15 @@ export function verifyBatchesForCase(
     return { verified: false, batchEventId: observed.batchEventId, reason: "batch attestation not observed" };
   }
 
+  const pin = courtBatchPin();
   let lastReason: string | null = null;
   for (const batch of batches) {
     try {
-      const result = verifyCaseInBatch(batch, { ...caseInput, proof: observed.proof });
+      const result = verifyCaseInBatch(
+        batch,
+        { ...caseInput, proof: observed.proof },
+        pin ? { expectedGroupPubkey: pin } : undefined,
+      );
       if (result.valid) {
         return { verified: true, batchEventId: batch.id, reason: null };
       }
@@ -193,12 +255,24 @@ export function verifyBatchesForCase(
   return { verified: false, batchEventId: observed.batchEventId, reason: lastReason };
 }
 
+/**
+ * The winning kind-38026 proposal for a case: newest created_at wins;
+ * created_at ties break deterministically by the lexicographically smaller
+ * event id, so two clients observing the same hostile event set agree on
+ * the SAME proposal regardless of relay delivery order.
+ */
 function latestProposal(caseId: string, events: readonly NostrEvent[]): NostrEvent | null {
   let latest: NostrEvent | null = null;
   for (const event of events) {
     if (event.kind !== COURT_OUTCOME_PROPOSAL_KIND) continue;
     if (eventCaseId(event) !== caseId) continue;
-    if (!latest || event.created_at >= latest.created_at) latest = event;
+    if (
+      !latest ||
+      event.created_at > latest.created_at ||
+      (event.created_at === latest.created_at && event.id < latest.id)
+    ) {
+      latest = event;
+    }
   }
   return latest;
 }
@@ -219,6 +293,8 @@ export function deriveConfirmationStatus(
 
   const confirmationPubkeys = new Set<string>();
   const challengeIds = new Set<string>();
+  const deadlineRaw = proposal ? getTag(proposal, "challenge-deadline") : undefined;
+  const deadline = deadlineRaw != null && /^[0-9]+$/.test(deadlineRaw) ? Number(deadlineRaw) : null;
   for (const event of relevant) {
     if (event.kind === COURT_JUROR_CONFIRMATION_KIND && isHex64(event.pubkey)) {
       confirmationPubkeys.add(event.pubkey.toLowerCase());
@@ -230,9 +306,20 @@ export function deriveConfirmationStatus(
   const batchRef = proposal ? getTag(proposal, "batch") : undefined;
   const batchCheck = verifyBatchesForCase(caseId, events);
 
-  const deadlineRaw = proposal ? getTag(proposal, "challenge-deadline") : undefined;
-  const deadline = deadlineRaw != null && /^[0-9]+$/.test(deadlineRaw) ? Number(deadlineRaw) : null;
-  const windowPassed = deadline != null && now > deadline && challengeIds.size === 0;
+  // Only challenges published WITHIN the proposal's challenge window block
+  // the window from closing; a challenge published after the deadline is
+  // displayed as observed (`challenged`) but cannot re-open the ladder.
+  const inWindowChallengeCount =
+    deadline == null
+      ? challengeIds.size
+      : relevant.filter(
+          (e) =>
+            e.kind === COURT_CHALLENGE_KIND &&
+            e.id != null &&
+            typeof e.created_at === "number" &&
+            e.created_at <= deadline,
+        ).length;
+  const windowPassed = deadline != null && now > deadline && inWindowChallengeCount === 0;
 
   let stage: CourtConfirmationStage = "pending";
   let finalReason: CourtConfirmationStatus["finalReason"] = null;
@@ -294,6 +381,8 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
       for (const event of incoming) {
         if (!event?.id || seenIds.current.has(event.id)) continue;
         seenIds.current.add(event.id);
+        // Drop oversized hostile events before they can enter state.
+        if (!sizeCapped(event)) continue;
         fresh.push(event);
       }
       if (fresh.length === 0) return;

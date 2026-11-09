@@ -44,7 +44,10 @@ export function ConfirmationStatusRow({
       >
         {STAGE_LABELS[status.stage]}
       </span>
-      <span aria-label={`${status.confirmations} of ${status.threshold} juror confirmations`}>
+      <span
+        aria-label={`${status.confirmations} of ${status.threshold} juror confirmations`}
+        title="Distinct pubkeys observed on the relay; not verified to be empaneled jurors"
+      >
         {status.confirmations}/{status.threshold}
       </span>
       {status.challenged && (

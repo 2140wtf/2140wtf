@@ -154,7 +154,7 @@ export function JurorDashboard({ settings, onSettingsChange }: JurorDashboardPro
       <TabsContent value="sessions" className="mt-4 space-y-4">
         {jurorBadges.length > 0 && (
           <div className="flex flex-wrap items-center gap-2" data-testid="juror-badges">
-            <span className="text-sm text-muted-foreground">Juror badges:</span>
+            <span className="text-sm text-muted-foreground">Juror badges (self-reported):</span>
             {jurorBadges.map((badge) => (
               <Badge key={badge.eventId} variant="secondary" title={`Awarded ${new Date(badge.awardedAt * 1000).toLocaleString()}`}>
                 {badge.name}
