@@ -24,6 +24,7 @@
  * host.
  */
 
+import { CourtError } from './errors';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
@@ -34,15 +35,19 @@ import {
   type CourtEnvironment,
 } from './courtSession';
 
+/** Schema version of the signer-capability encoding (currently `1`). */
 export const COURT_CAPABILITY_VERSION = 1 as const;
+/** Domain string for canonical signer-capability hashes. */
 export const COURT_SIGNER_CAPABILITY_DOMAIN = 'BAO-Court/SignerCapability/v1';
 
 /** Concrete ceremony phases an action can belong to. */
 export const COURT_CEREMONY_PHASES = ['dkg', 'vote', 'signing'] as const;
+/** One ceremony phase a capability may be scoped to: `dkg`, `vote`, or `signing`. */
 export type CourtCeremonyPhase = (typeof COURT_CEREMONY_PHASES)[number];
 
 /** Phase scope granted by a capability; 'all' spans the whole ceremony. */
 export const COURT_CAPABILITY_PHASE_SCOPES = [...COURT_CEREMONY_PHASES, 'all'] as const;
+/** One of the grantable phase scopes: a single phase, or `all`. */
 export type CourtCapabilityPhaseScope = (typeof COURT_CAPABILITY_PHASE_SCOPES)[number];
 
 /**
@@ -86,6 +91,12 @@ export interface CourtCapabilityAction {
   readonly signerPubkey: string;
 }
 
+/**
+ * Machine-readable failure codes for capability enforcement:
+ * `expired`, `not_yet_valid`, `session_mismatch`, `suite_mismatch`,
+ * `network_mismatch`, `kind_not_allowed`, `peer_not_allowed`,
+ * `signer_not_in_roster`, `phase_mismatch`, `malformed`.
+ */
 export type CourtCapabilityErrorCode =
   | 'expired'
   | 'not_yet_valid'
@@ -98,13 +109,16 @@ export type CourtCapabilityErrorCode =
   | 'phase_mismatch'
   | 'malformed';
 
-export class CourtCapabilityError extends Error {
-  readonly code: CourtCapabilityErrorCode;
+/**
+ * Error thrown when a signer request violates its capability. `code` is
+ * always one of {@link CourtCapabilityErrorCode}; there is no permissive
+ * path. See docs/FORMAL_INVARIANTS.md §15 for the taxonomy entry.
+ */
+export class CourtCapabilityError extends CourtError {
+  declare readonly code: CourtCapabilityErrorCode;
 
   constructor(code: CourtCapabilityErrorCode, message: string) {
-    super(message);
-    this.name = 'CourtCapabilityError';
-    this.code = code;
+    super(code, message);
   }
 }
 
@@ -240,6 +254,15 @@ function environmentId(environment: CourtEnvironment): number {
  * subset rule, the kind allowlist, the phase scope, and the validity window
  * (`notAfter` strictly later than `notBefore`). Any violation throws
  * {@link CourtCapabilityError} with code `malformed`.
+ *
+ * @example
+ * ```ts
+ * assertCourtSignerCapability(receivedCapability); // narrows the type
+ * assertCourtCapabilityAction(cap,
+ *   { sessionHash, suite: 'pedpop-v1-experimental', network: 'mainnet',
+ *     kind: 39006, phase: 'signing', signerPubkey },
+ *   nowSec);
+ * ```
  */
 export function assertCourtSignerCapability(
   value: unknown,
@@ -301,6 +324,19 @@ export function assertCourtSignerCapability(
 /**
  * Validate every field and return the capability as a frozen canonical copy.
  * This is the only supported construction path for untrusted input.
+ *
+ * @throws {@link CourtCapabilityError} code `malformed` on any violated
+ *         field rule.
+ *
+ * @example
+ * ```ts
+ * const cap = createCourtCapability({
+ *   version: 1, sessionHash, cryptoSuite: 'pedpop-v1-experimental',
+ *   environment: 'mainnet', roster, allowedPeers: [peerPk],
+ *   allowedKinds: [39005, 39006],
+ *   phaseScope: 'signing', notBefore: t0, notAfter: t0 + 7200,
+ * });
+ * ```
  */
 export function createCourtCapability(params: CourtSignerCapability): CourtSignerCapability {
   assertCourtSignerCapability(params);

@@ -2,8 +2,23 @@
 
 /**
  * FROST threshold signing for the BAO Court / FROST appeal layer.
+ *
+ * Pipeline role: the cryptographic engine behind the signing machine's
+ * `partial_sign` → `aggregate` stages (paper §2, §5) - turns DKG shares +
+ * nonce commitments into a BIP-340 group signature over the attestation
+ * message. The ceremony state machine (`courtSigningMachine.ts`) wraps
+ * these functions; this module is the raw signing layer.
+ *
+ * Purity: signing functions are pure computations over explicit inputs
+ * (shares, nonces, message); the only side effect is the {@link NonceGuard}
+ * consumption marker (in-memory or localStorage), which exists to prevent
+ * catastrophic nonce reuse. No network I/O.
+ *
+ * Invariants: INV-SIGN family in docs/FORMAL_INVARIANTS.md §6; error class
+ * {@link FrostSigningError} (docs/FORMAL_INVARIANTS.md §15).
  */
 
+import { FrostSigningError } from './errors';
 import * as frost from '@vbyte/frost';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { buildAttestationMessage, deriveXOnlyPubkey } from './crypto';
@@ -22,6 +37,26 @@ export interface SigningReveal {
   readonly psig: string;
 }
 
+/** One signer's round-1 FROST commitment package with its identity. */
+export interface SigningCommitment {
+  readonly idx: number;
+  readonly pubkey: string;
+  readonly commit: frost.CommitmentPackage;
+}
+
+/** One signer's round-2 reveal: public nonce + hex partial signature. */
+export interface SigningReveal {
+  readonly idx: number;
+  readonly pubkey: string;
+  readonly pnonce: frost.PublicNonce;
+  readonly psig: string;
+}
+
+/**
+ * Parameters of one FROST signing round: the attestation coordinates
+ * (market, outcome, round, optional dispute id + verdict hash), the DKG
+ * record, the local shares, and the nonce guard.
+ */
 export interface SigningRoundParams {
   readonly marketId: string;
   readonly outcome: string;
@@ -91,7 +126,7 @@ export class LocalStorageNonceGuard implements NonceGuard {
 
   consume(idx: number, binder: string, hidden: string): boolean {
     if (typeof localStorage === 'undefined') {
-      throw new Error('localStorage is not available; provide an in-memory NonceGuard');
+      throw new FrostSigningError('FROST_SIGNING', 'localStorage is not available; provide an in-memory NonceGuard');
     }
     const entry = `${idx}|${binder}|${hidden}`;
     if (this.memory.has(entry)) return false;
@@ -130,6 +165,13 @@ export class LocalStorageNonceGuard implements NonceGuard {
   }
 }
 
+/**
+ * Create the default {@link NonceGuard} for the environment: localStorage-
+ * backed in browsers (persistent across reloads), in-memory elsewhere.
+ *
+ * @param storageKey - Optional localStorage key override for the browser
+ *                     guard.
+ */
 export function createDefaultNonceGuard(storageKey?: string): NonceGuard {
   if (typeof localStorage !== 'undefined') {
     return new LocalStorageNonceGuard(storageKey);
@@ -151,6 +193,10 @@ function getGuard(params: SigningRoundParams): NonceGuard {
   return sharedDefaultGuard;
 }
 
+/**
+ * Create round-1 commitments for every share in the set. O(n) over shares.
+ * Each commitment MUST be consumed at most once (see {@link NonceGuard}).
+ */
 export function createCommitments(
   shares: readonly frost.SecretShare[],
 ): SigningCommitment[] {
@@ -172,6 +218,15 @@ export function createCommitment(share: frost.SecretShare): SigningCommitment {
   };
 }
 
+/**
+ * Create round-2 reveals (public nonce + partial signature) for every share
+ * against the FULL commitment set. Consumes each share's nonce via the
+ * guard - a second signature from the same commitment throws (nonce-reuse
+ * protection). O(n) over shares.
+ *
+ * @throws {@link FrostSigningError} when a nonce commitment was already
+ *         consumed or a share is malformed.
+ */
 export function createRevealsAndPartialSigs(
   params: SigningRoundParams,
   commitments: readonly SigningCommitment[],
@@ -210,7 +265,7 @@ export function createRevealAndPartialSig(
 
   const guard = getGuard(params);
   if (!guard.consume(share.idx, commit.binder_pn, commit.hidden_pn)) {
-    throw new Error(
+    throw new FrostSigningError('FROST_SIGNING', 
       `FROST nonce reuse detected for juror ${share.idx}: this commitment has already been used to sign`,
     );
   }
@@ -224,7 +279,7 @@ export function createRevealAndPartialSig(
     sig.psig,
   );
   if (!valid) {
-    throw new Error(`Partial signature from juror ${share.idx} failed verification`);
+    throw new FrostSigningError('FROST_SIGNING', `Partial signature from juror ${share.idx} failed verification`);
   }
 
   return {
@@ -243,11 +298,30 @@ export function createRevealAndPartialSig(
   };
 }
 
+/**
+ * Aggregate round-2 reveals into the final {@link FrostAttestation} and
+ * verify the group signature before returning it (fail-closed).
+ *
+ * CONTRACT (crypto literature audit 2026-11): `commitments` must be EXACTLY
+ * the set of jurors that produced `reveals` - binding factors and Lagrange
+ * coefficients are indexed by the commitment list, so an over-large
+ * commitment set yields a signature that fails verification. Callers that
+ * collected extra commitments MUST filter them first.
+ *
+ * @throws {@link FrostSigningError} when the aggregated signature fails
+ *         verification or the signer set is inconsistent.
+ */
 export function aggregateAttestation(
   params: SigningRoundParams,
   commitments: readonly SigningCommitment[],
   reveals: readonly SigningReveal[],
 ): FrostAttestation {
+  // CONTRACT (crypto literature audit 2026-11): `commitments` must be EXACTLY
+  // the set of jurors that produced `reveals`. FROST binding factors and the
+  // Lagrange coefficients are indexed by the commitment list, so a reveal
+  // subset over a larger commitment set yields a final signature that fails
+  // `verify_final_sig` below (fail-closed). Callers that collected extra
+  // commitments MUST filter them out before calling this function.
   const message = buildAttestationMessage(
     params.marketId,
     params.outcome,
@@ -263,7 +337,7 @@ export function aggregateAttestation(
   );
 
   if (reveals.length < params.dkg.threshold) {
-    throw new Error(
+    throw new FrostSigningError('FROST_SIGNING', 
       `Insufficient reveals: ${reveals.length} < threshold ${params.dkg.threshold}`,
     );
   }
@@ -271,7 +345,7 @@ export function aggregateAttestation(
   const seenIndices = new Set<number>();
   for (const reveal of reveals) {
     if (seenIndices.has(reveal.idx)) {
-      throw new Error(`Duplicate reveal from juror ${reveal.idx}`);
+      throw new FrostSigningError('FROST_SIGNING', `Duplicate reveal from juror ${reveal.idx}`);
     }
     seenIndices.add(reveal.idx);
 
@@ -286,7 +360,7 @@ export function aggregateAttestation(
       reveal.psig,
     );
     if (!valid) {
-      throw new Error(`Partial signature from juror ${reveal.idx} is invalid`);
+      throw new FrostSigningError('FROST_SIGNING', `Partial signature from juror ${reveal.idx} is invalid`);
     }
   }
 
@@ -303,7 +377,7 @@ export function aggregateAttestation(
     hexToBytes(signatureHex),
   );
   if (!isValid) {
-    throw new Error('Final aggregated signature failed verification');
+    throw new FrostSigningError('FROST_SIGNING', 'Final aggregated signature failed verification');
   }
 
   return {
@@ -320,6 +394,26 @@ export function aggregateAttestation(
   };
 }
 
+/**
+ * Run a complete single-process FROST signing round (commit → reveal →
+ * aggregate): the convenience path used by tests, simulations, and the
+ * in-process court signer. Production deployments split the three steps
+ * across jurors over Nostr instead.
+ *
+ * @returns A verified {@link FrostAttestation} (the aggregate is checked
+ *          before returning; see {@link aggregateAttestation}).
+ * @throws {@link FrostSigningError} on nonce reuse, malformed shares, or a
+ *         failed aggregate verification.
+ *
+ * @example
+ * ```ts
+ * const attestation = runNormalSigningRound({
+ *   marketId, outcome: 'YES', round: 1,
+ *   verdictHash: hashDisputeVerdict({ ... }),
+ *   dkg: record, shares: myShares,
+ * });
+ * ```
+ */
 export function runNormalSigningRound(
   params: SigningRoundParams,
 ): FrostAttestation {

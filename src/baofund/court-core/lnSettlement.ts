@@ -18,19 +18,21 @@
  * kind reservation) - this module emits no network events itself, only JSON-
  * safe protocol records and audit-event templates via {@link buildLnAuditEvent}.
  *
- * @see docs/SETTLEMENT-RAILS-PLAN.md (status internal)
+ * @see docs/SETTLEMENT-RAILS.md
  * @see ADR-001 (docs/architecture/adr/001-juror-escrow-design.md in bao.markets)
  */
 
+import { LnHoldLedgerError } from './errors';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { CanonicalWriter } from './courtSession';
 
-// ── Preimage / payment-hash derivation ───────────────────────────────────────
+// -- Preimage / payment-hash derivation ---------------------------------------
 
 /** Domain tag keeps preimages distinct across use sites (stake, bond, refunds). */
 export const LN_PREIMAGE_DOMAIN = 'BAO-Court/LnPreimage/v1';
 
+/** Participant role for a preimage witness: a juror stake or a disputer bond. */
 export type LnRole = 'juror' | 'disputer';
 
 /** Canonical witness that defines a single hold-invoice preimage. */
@@ -85,8 +87,14 @@ export function deriveHoldInvoicePair(w: LnPreimageWitness): {
   return { preimage, paymentHash: paymentHash(preimage) };
 }
 
-// ── Hold-invoice lifecycle ───────────────────────────────────────────────────
+// -- Hold-invoice lifecycle ---------------------------------------------------
 
+/**
+ * Lifecycle status of one Lightning hold: `offer` (created, not yet held),
+ * `held` (payment pending), `settled` (preimage released), `cancelled`
+ * (incoherent/bond lost - no preimage), `expired` (timed out, refund path),
+ * or `failed` (malformed construction / invalid transition).
+ */
 export type LnHoldStatus =
   | 'offer'      // invoice created (or offer recorded), not yet held
   | 'held'       // payment pending (hold), awaiting settle/cancel/expire
@@ -95,8 +103,14 @@ export type LnHoldStatus =
   | 'expired'    // hold timed out - refund path, no preimage
   | 'failed';    // malformed construction / invalid transition target
 
+/** Court decision on a hold: `settle` (release preimage) or `cancel`. */
 export type LnDecision = 'settle' | 'cancel';
 
+/**
+ * Immutable record of one hold-invoice escrow: witness, deterministic
+ * preimage/payment hash, amount, lifecycle status, timestamps, decision, and
+ * optional host-side invoice id.
+ */
 export interface LnHoldRecord {
   /** Stable id: witness-derived (disputeId|role|pubkey|round). */
   readonly id: string;
@@ -117,6 +131,10 @@ export interface LnHoldRecord {
   readonly invoiceId?: string;
 }
 
+/**
+ * Input to {@link constructHoldOffer}: the witness fields plus amount,
+ * expiry, and optional host invoice id.
+ */
 export interface LnHoldConstruction {
   readonly disputeId: string;
   readonly role: LnRole;
@@ -158,12 +176,28 @@ export function constructHoldOffer(c: LnHoldConstruction): LnHoldRecord {
   };
 }
 
-// ── Deterministic ledger (serializable) ──────────────────────────────────────
+// -- Deterministic ledger (serializable) --------------------------------------
 
+/**
+ * JSON-safe serialization of a ledger: the full list of hold records.
+ * Round-trips through {@link LnHoldLedger.fromSnapshot}.
+ */
 export interface LnLedgerSnapshot {
   readonly holds: readonly LnHoldRecord[];
 }
 
+/**
+ * Deterministic, serializable ledger of Lightning hold-invoice escrows.
+ *
+ * Pure bookkeeping: it derives preimages, tracks lifecycle transitions, and
+ * refuses duplicate ids, invalid transitions, and expired settles/cancels.
+ * It performs no I/O and talks to no node - hosts inject {@link LnRail} for
+ * actual invoice handling and persist snapshots for auditability. All
+ * methods are O(1) except `all()`/`snapshot()` (O(n)).
+ *
+ * @throws {@link LnHoldLedgerError} code `LN_LEDGER` on duplicate ids,
+ *         unknown ids, or illegal transitions.
+ */
 export class LnHoldLedger {
   private readonly byId = new Map<string, LnHoldRecord>();
 
@@ -171,7 +205,7 @@ export class LnHoldLedger {
     const seen = new Set<string>();
     for (const h of initial) {
       if (seen.has(h.id)) {
-        throw new Error(`LnHoldLedger: duplicate hold id ${h.id} in snapshot`);
+        throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: duplicate hold id ${h.id} in snapshot`);
       }
       seen.add(h.id);
       this.byId.set(h.id, h);
@@ -198,7 +232,7 @@ export class LnHoldLedger {
   offer(c: LnHoldConstruction): LnHoldRecord {
     const rec = constructHoldOffer(c);
     if (this.byId.has(rec.id)) {
-      throw new Error(`LnHoldLedger: duplicate hold id ${rec.id}`);
+      throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: duplicate hold id ${rec.id}`);
     }
     this.byId.set(rec.id, rec);
     return rec;
@@ -214,8 +248,8 @@ export class LnHoldLedger {
    */
   hold(id: string, now = Math.floor(Date.now() / 1000)): LnHoldRecord {
     const r = this.require(id);
-    if (r.status !== 'offer') throw new Error(`LnHoldLedger: cannot hold ${r.status} ${id}`);
-    if (now > r.expiresAt) throw new Error(`LnHoldLedger: hold ${id} already expired at ${r.expiresAt}`);
+    if (r.status !== 'offer') throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: cannot hold ${r.status} ${id}`);
+    if (now > r.expiresAt) throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: hold ${id} already expired at ${r.expiresAt}`);
     const next: LnHoldRecord = { ...r, status: 'held', heldAt: now };
     this.byId.set(id, next);
     return next;
@@ -224,8 +258,8 @@ export class LnHoldLedger {
   /** Decision path: settle (release preimage) or cancel. */
   decide(id: string, decision: LnDecision, now = Math.floor(Date.now() / 1000)): LnHoldRecord {
     const r = this.require(id);
-    if (r.status !== 'held') throw new Error(`LnHoldLedger: cannot decide ${r.status} ${id}`);
-    if (now > r.expiresAt) throw new Error(`LnHoldLedger: hold ${id} expired; refund path, not ${decision}`);
+    if (r.status !== 'held') throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: cannot decide ${r.status} ${id}`);
+    if (now > r.expiresAt) throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: hold ${id} expired; refund path, not ${decision}`);
     const status: LnHoldStatus = decision === 'settle' ? 'settled' : 'cancelled';
     const next: LnHoldRecord = { ...r, status, decision, resolvedAt: now };
     this.byId.set(id, next);
@@ -236,7 +270,7 @@ export class LnHoldLedger {
   expire(id: string, now = Math.floor(Date.now() / 1000)): LnHoldRecord {
     const r = this.require(id);
     if (r.status !== 'held' && r.status !== 'offer') {
-      throw new Error(`LnHoldLedger: cannot expire ${r.status} ${id}`);
+      throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: cannot expire ${r.status} ${id}`);
     }
     const next: LnHoldRecord = { ...r, status: 'expired', resolvedAt: now };
     this.byId.set(id, next);
@@ -245,15 +279,20 @@ export class LnHoldLedger {
 
   private require(id: string): LnHoldRecord {
     const r = this.byId.get(id);
-    if (!r) throw new Error(`LnHoldLedger: unknown hold ${id}`);
+    if (!r) throw new LnHoldLedgerError('LN_LEDGER', `LnHoldLedger: unknown hold ${id}`);
     return r;
   }
 }
 
-// ── Settle/cancel decision mapping from the redistribution plan ─────────────
+// -- Settle/cancel decision mapping from the redistribution plan -------------
 
 import type { StakeRedistribution, RedistributionPlan } from './escrow';
 
+/**
+ * Result of mapping a redistribution plan onto hold records: the
+ * id → settle/cancel decisions for every in-scope hold, plus the ids of
+ * holds the plan does not mention (host refund/reclaim path).
+ */
 export interface LnDecisionPlan {
   /** id → decision, for every record found in the redistribution plan. */
   readonly decisions: Record<string, LnDecision>;
@@ -303,7 +342,7 @@ export function planDecisionsForHolds(
     // tampered record would otherwise settle/cancel a DIFFERENT invoice.
     const { paymentHash: expectedPaymentHash } = deriveHoldInvoicePair(h.witness);
     if (h.paymentHash !== expectedPaymentHash) {
-      throw new Error(`LnSettlement: hold ${h.id} payment hash does not match its witness`);
+      throw new LnHoldLedgerError('LN_LEDGER', `LnSettlement: hold ${h.id} payment hash does not match its witness`);
     }
     // Bond holds: only the plan's disputer may be decided by the bond
     // outcome - a hold from any other "disputer" pubkey is out of scope.
@@ -323,7 +362,7 @@ export function planDecisionsForHolds(
       continue;
     }
     if (h.amountSats !== rec.stakeAmount) {
-      throw new Error(
+      throw new LnHoldLedgerError('LN_LEDGER', 
         `LnSettlement: hold ${h.id} amount ${h.amountSats} does not match the plan stake ${rec.stakeAmount}`,
       );
     }
@@ -355,14 +394,19 @@ export function planDecisionsForHolds(
   return { decisions, unsettled };
 }
 
-// ── Audit event templates (host-owned kinds) ────────────────────────────────
+// -- Audit event templates (host-owned kinds) --------------------------------
 
+/**
+ * JSON-safe audit event template for a hold transition. The host finalizes
+ * with its own kind and channel; this package emits templates only.
+ */
 export interface LnAuditEventTemplate {
   readonly kind: number;
   readonly tags: string[][];
   readonly content: string;
 }
 
+/** Domain string used in LN audit-event content hashing. */
 export const LN_AUDIT_DOMAIN = 'BAO-Court/LnAudit/v1';
 
 /**

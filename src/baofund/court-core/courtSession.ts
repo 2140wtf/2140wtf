@@ -6,16 +6,33 @@
  * This module deliberately contains no React, relay, signer, or secret-key
  * logic. Browser clients, agents, and future cryptographic adapters must all
  * derive the same session hash from the same validated public parameters.
+ *
+ * Pipeline role: identity layer under every ceremony stage - the validated
+ * session parameters and their canonical hash bind votes, signatures,
+ * attestations, and transcripts to exactly one ceremony (paper §3, §11;
+ * CanonicalWriter grammar normative in docs/FORMAL_INVARIANTS.md §1.2).
+ *
+ * Purity: encoding, hashing, and validation are pure functions; no I/O, no
+ * randomness, no clock. The only `Error` subtype is
+ * {@link CourtSessionValidationError} (fail-closed, code-bearing).
  */
 
+import { CourtError } from './errors';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
+/** Schema version of the session-parameters encoding (currently `1`). */
 export const COURT_SESSION_VERSION = 1 as const;
+/** Domain string prefixing canonical session-parameter hashes. */
 export const COURT_SESSION_DOMAIN = 'BAO-Court/SessionParameters/v1';
 
+/**
+ * The deployment environments a session may target. `mainnet` restricts
+ * crypto suites (see {@link COURT_CRYPTO_SUITES}).
+ */
 export const COURT_ENVIRONMENTS = ['demo', 'signet', 'mainnet'] as const;
+/** One of the deployment environments in {@link COURT_ENVIRONMENTS}. */
 export type CourtEnvironment = (typeof COURT_ENVIRONMENTS)[number];
 
 /**
@@ -27,10 +44,20 @@ export const COURT_CRYPTO_SUITES = [
   'pedpop-v1-experimental',
   'chilldkg-0.3+bip445-draft',
 ] as const;
+/**
+ * One of the DKG crypto-suite identifiers in {@link COURT_CRYPTO_SUITES}.
+ * Only `pedpop-v1-experimental` is currently exercised by the Pedersen
+ * adapter; the ChillDKG identifier is reserved.
+ */
 export type CourtCryptoSuite = (typeof COURT_CRYPTO_SUITES)[number];
 
+/** Role of a session participant: plain juror, or juror that coordinates the attempt. */
 export type CourtParticipantRole = 'juror' | 'juror-coordinator';
 
+/**
+ * One ceremony participant: FROST index, Nostr key, Court host key, bond
+ * reference, and role. All keys are validated lowercase hex of exact length.
+ */
 export interface CourtSessionParticipant {
   /** Sequential, one-based FROST participant index. */
   readonly idx: number;
@@ -44,6 +71,11 @@ export interface CourtSessionParticipant {
   readonly role: CourtParticipantRole;
 }
 
+/**
+ * The full validated public parameter set of one ceremony attempt - the
+ * canonical preimage of the session hash. Every field is shape-, length-, and
+ * cross-consistency-checked by {@link assertCourtSessionParameters}.
+ */
 export interface CourtSessionParameters {
   readonly version: typeof COURT_SESSION_VERSION;
   readonly environment: CourtEnvironment;
@@ -66,6 +98,17 @@ export interface CourtSessionParameters {
   readonly deadline: number;
 }
 
+/**
+ * Machine-readable failure codes for session-parameter validation
+ * (`invalid_shape`, `unsupported_version`, `unsupported_environment`,
+ * `unsupported_suite`, `suite_not_allowed_on_mainnet`,
+ * `invalid_identifier`, `invalid_hex`, `invalid_number`,
+ * `invalid_participant_count`, `invalid_participant_index`,
+ * `invalid_participant_key`, `duplicate_participant_key`,
+ * `duplicate_bond`, `invalid_coordinator_count`, `invalid_threshold`,
+ * `invalid_outcome`, `duplicate_outcome`, `invalid_deadline`,
+ * `participant_not_found`, `participant_binding_mismatch`).
+ */
 export type CourtSessionValidationCode =
   | 'invalid_shape'
   | 'unsupported_version'
@@ -88,13 +131,16 @@ export type CourtSessionValidationCode =
   | 'participant_not_found'
   | 'participant_binding_mismatch';
 
-export class CourtSessionValidationError extends Error {
-  readonly code: CourtSessionValidationCode;
+/**
+ * Error thrown when session parameters or participant bindings fail
+ * validation. `code` is always one of {@link CourtSessionValidationCode};
+ * see docs/FORMAL_INVARIANTS.md §15 for the taxonomy entry.
+ */
+export class CourtSessionValidationError extends CourtError {
+  declare readonly code: CourtSessionValidationCode;
 
   constructor(code: CourtSessionValidationCode, message: string) {
-    super(message);
-    this.name = 'CourtSessionValidationError';
-    this.code = code;
+    super(code, message);
   }
 }
 
@@ -247,6 +293,23 @@ function validateParticipant(
  *
  * Mainnet is deliberately rejected until a suite passes the rollout gates.
  */
+/**
+ * Validate an unknown value as a complete {@link CourtSessionParameters}
+ * record: exact key set, supported version/environment/suite, hex-shaped
+ * identifiers, canonical participant list (≤ 1000, unique keys, exactly one
+ * coordinator), threshold within roster bounds, bounded unique outcomes, and
+ * consistent deadlines. O(n) over participants + outcomes.
+ *
+ * @throws {@link CourtSessionValidationError} with a
+ *         {@link CourtSessionValidationCode} on the first violated rule.
+ *
+ * @example
+ * ```ts
+ * const params = JSON.parse(serialized);
+ * assertCourtSessionParameters(params); // narrows the type
+ * const sessionHash = hashCourtSessionParameters(params);
+ * ```
+ */
 export function assertCourtSessionParameters(
   value: unknown,
 ): asserts value is CourtSessionParameters {
@@ -385,9 +448,29 @@ export function assertCourtSessionParameters(
 /**
  * Length-prefixed canonical binary writer shared by every Court hash domain.
  * Delimiter-joined attacker-controlled strings must never be hashed directly.
+ *
+ * Encoding contract (differential-parity pinned): byte output is IDENTICAL to
+ * the original chunk-list implementation - this is a performance re-implementation
+ * that writes into one pre-sized, geometrically-grown buffer instead of
+ * allocating a chunk per field and concatenating in {@link finish}. The
+ * validation behaviour (fail-closed ranges, hex checks) is unchanged.
  */
 export class CanonicalWriter {
-  private readonly chunks: Uint8Array[] = [];
+  private buf: Uint8Array = new Uint8Array(128);
+  private view: DataView = new DataView(this.buf.buffer);
+  private len: number = 0;
+
+  /** Grow the backing buffer geometrically so `len + need` bytes fit. */
+  private ensure(need: number): void {
+    const required = this.len + need;
+    if (required <= this.buf.length) return;
+    let capacity = this.buf.length * 2;
+    while (capacity < required) capacity *= 2;
+    const next = new Uint8Array(capacity);
+    next.set(this.buf.subarray(0, this.len), 0);
+    this.buf = next;
+    this.view = new DataView(next.buffer);
+  }
 
   u8(value: number): void {
     if (!Number.isInteger(value) || value < 0 || value > 0xff) {
@@ -396,7 +479,9 @@ export class CanonicalWriter {
         'u8 field must be an integer in [0, 255]',
       );
     }
-    this.chunks.push(Uint8Array.of(value));
+    this.ensure(1);
+    this.buf[this.len] = value;
+    this.len += 1;
   }
 
   u32(value: number): void {
@@ -406,9 +491,9 @@ export class CanonicalWriter {
         'u32 field must be an integer in [0, 4294967295]',
       );
     }
-    const bytes = new Uint8Array(4);
-    new DataView(bytes.buffer).setUint32(0, value, false);
-    this.chunks.push(bytes);
+    this.ensure(4);
+    this.view.setUint32(this.len, value, false);
+    this.len += 4;
   }
 
   u64(value: number): void {
@@ -420,14 +505,19 @@ export class CanonicalWriter {
         'u64 field must be a safe non-negative integer',
       );
     }
-    const bytes = new Uint8Array(8);
-    new DataView(bytes.buffer).setBigUint64(0, BigInt(value), false);
-    this.chunks.push(bytes);
+    this.ensure(8);
+    // Big-endian hi/lo split - byte-identical to setBigUint64(BigInt(value))
+    // for every safe non-negative integer, without the BigInt allocation.
+    this.view.setUint32(this.len, Math.floor(value / 0x1_0000_0000), false);
+    this.view.setUint32(this.len + 4, value % 0x1_0000_0000, false);
+    this.len += 8;
   }
 
   bytes(value: Uint8Array): void {
     this.u32(value.length);
-    this.chunks.push(value);
+    this.ensure(value.length);
+    this.buf.set(value, this.len);
+    this.len += value.length;
   }
 
   text(value: string): void {
@@ -439,14 +529,10 @@ export class CanonicalWriter {
   }
 
   finish(): Uint8Array {
-    const length = this.chunks.reduce((total, chunk) => total + chunk.length, 0);
-    const output = new Uint8Array(length);
-    let offset = 0;
-    for (const chunk of this.chunks) {
-      output.set(chunk, offset);
-      offset += chunk.length;
-    }
-    return output;
+    // Exact-size copy: same shape as the original implementation's output
+    // (a fresh, exactly-length array), never an interior view of the
+    // growable buffer - callers may hold or mutate the result freely.
+    return this.buf.slice(0, this.len);
   }
 }
 
@@ -466,7 +552,15 @@ const ROLE_IDS: Readonly<Record<CourtParticipantRole, number>> = {
   'juror-coordinator': 1,
 };
 
-/** Return the canonical binary encoding used by the Court session hash. */
+/**
+ * Derive the canonical binary encoding of validated session parameters -
+ * the exact preimage of the Court session hash (paper §3; CanonicalWriter
+ * grammar, docs/FORMAL_INVARIANTS.md §1.2). Deterministic across runtimes;
+ * O(n) over participants + outcomes.
+ *
+ * @throws {@link CourtSessionValidationError} when the parameters are
+ *         invalid (validation runs before encoding).
+ */
 export function encodeCourtSessionParameters(value: CourtSessionParameters): Uint8Array {
   assertCourtSessionParameters(value);
   const writer = new CanonicalWriter();
@@ -497,7 +591,27 @@ export function encodeCourtSessionParameters(value: CourtSessionParameters): Uin
   return writer.finish();
 }
 
-/** Derive the lowercase SHA-256 Court session identifier. */
+/**
+ * Derive the canonical Court session identifier:
+ * `SHA-256(SessionParameters/v1 ‖ encode(params))` - the 32-byte lowercase
+ * hex string every ceremony event, vote, signature, and attestation binds
+ * to. Pure; O(n) over participants + outcomes.
+ *
+ * @throws {@link CourtSessionValidationError} when the parameters are
+ *         invalid.
+ *
+ * @example
+ * ```ts
+ * const sessionHash = hashCourtSessionParameters(params);
+ * const machine = createCourtVoteMachine({
+ *   sessionHash,
+ *   participantIndices: params.participants.map(p => p.idx),
+ *   allowedOutcomes: params.allowedOutcomes,
+ *   commitDeadline: params.createdAt + 3600,
+ *   revealDeadline: params.deadline,
+ * });
+ * ```
+ */
 export function hashCourtSessionParameters(value: CourtSessionParameters): string {
   const encoded = encodeCourtSessionParameters(value);
   const domain = textEncoder.encode(COURT_SESSION_DOMAIN);

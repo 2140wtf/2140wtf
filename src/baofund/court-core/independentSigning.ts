@@ -8,6 +8,7 @@
  * threshold partial signatures into the final attestation.
  */
 
+import { CourtArgumentError, IndependentSigningError } from './errors';
 import * as frost from '@vbyte/frost';
 import { buildAttestationMessage, isValidSecp256k1Point } from './crypto';
 import {
@@ -133,12 +134,12 @@ export class IndependentSigningSession {
 
   private applySnapshot(snapshot: IndependentSigningSnapshot): void {
     if (snapshot.version !== 1) {
-      throw new Error(
+      throw new CourtArgumentError('ISIGN_ARGUMENT', 
         `Unsupported signing snapshot version: ${snapshot.version}`,
       );
     }
     if (snapshot.message !== this.message) {
-      throw new Error(
+      throw new IndependentSigningError('ISIGN_STATE', 
         'Signing snapshot message does not match this session; possible stale or wrong-round data',
       );
     }
@@ -151,7 +152,7 @@ export class IndependentSigningSession {
         !isValidSecp256k1Point(c.binder_pn)
         || !isValidSecp256k1Point(c.hidden_pn)
       ) {
-        throw new Error('Signing snapshot contains a malformed nonce commitment');
+        throw new IndependentSigningError('ISIGN_STATE', 'Signing snapshot contains a malformed nonce commitment');
       }
       this.commitments.set(c.idx, {
         idx: c.idx,
@@ -174,7 +175,7 @@ export class IndependentSigningSession {
         !isValidSecp256k1Point(r.binder_pn)
         || !isValidSecp256k1Point(r.hidden_pn)
       ) {
-        throw new Error('Signing snapshot contains a malformed reveal nonce');
+        throw new IndependentSigningError('ISIGN_STATE', 'Signing snapshot contains a malformed reveal nonce');
       }
       this.reveals.set(r.idx, {
         idx: r.idx,
@@ -307,6 +308,16 @@ export class IndependentSigningSession {
 
   /**
    * True once enough commitments have been collected to reveal.
+   *
+   * FROST binding factors are computed over the ENTIRE commitment list passed
+   * to the signing context, and the Lagrange coefficients (`interpolate_x`)
+   * are indexed by that same list. A partial signature is therefore only
+   * aggregatable within the exact commitment set it was computed against -
+   * verified empirically for @vbyte/frost 1.1.5: aggregating threshold
+   * reveals over a LARGER commitment set yields a final signature that fails
+   * `verify_final_sig` (fail-closed liveness loss, not a forgery). This
+   * session signs against the full qualified roster, so every roster member
+   * who commits must also reveal before aggregation is possible.
    */
   hasEnoughCommitments(): boolean {
     const qualified = this.dkg.verificationShares.map((v) => v.idx);
@@ -321,7 +332,7 @@ export class IndependentSigningSession {
     event: ReturnType<typeof buildFrostRevealEvent>;
   } {
     if (!this.hasEnoughCommitments()) {
-      throw new Error('Cannot reveal: missing peer commitments');
+      throw new IndependentSigningError('ISIGN_STATE', 'Cannot reveal: missing peer commitments');
     }
 
     const signingCommitments = Array.from(this.commitments.values()).map((c) =>
@@ -427,9 +438,20 @@ export class IndependentSigningSession {
 
   /**
    * True once threshold reveals have been collected.
+   *
+   * Additionally requires the reveal set to EQUAL the commitment set: the
+   * signing context (and therefore every partial's Lagrange coefficient) was
+   * built over the full commitment list, and @vbyte/frost 1.1.5 produces a
+   * final signature that fails verification when the revealing subset is
+   * strictly smaller than the commitment set (see
+   * {@link hasEnoughCommitments}). Without this guard a juror whose peer
+   * commits but never reveals would aggregate a signature that only fails at
+   * the final check, wasting a nonce commitment; failing here is the same
+   * outcome, earlier and with a precise reason.
    */
   canAggregate(): boolean {
-    return this.reveals.size >= this.dkg.threshold;
+    if (this.reveals.size < this.dkg.threshold) return false;
+    return this.reveals.size === this.commitments.size;
   }
 
   /**
@@ -442,8 +464,10 @@ export class IndependentSigningSession {
   aggregate(marketEventId?: string): FrostAttestation {
     void marketEventId;
     if (!this.canAggregate()) {
-      throw new Error(
-        `Cannot aggregate: ${this.reveals.size} reveals, threshold ${this.dkg.threshold}`,
+      throw new IndependentSigningError('ISIGN_STATE', 
+        `Cannot aggregate: ${this.reveals.size} reveals vs ${this.commitments.size} commitments ` +
+          `(threshold ${this.dkg.threshold}). The reveal set must equal the commitment set - ` +
+          `every juror that committed must reveal, or the attempt must restart with a new signer set.`,
       );
     }
 

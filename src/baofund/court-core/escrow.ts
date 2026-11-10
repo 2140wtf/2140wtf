@@ -10,17 +10,18 @@
  * function is pure and deterministic so any observer derives the same result.
  * Event kinds for pledges/slash evidence are owned by the host protocol layer
  * (bao.markets uses Kind 38034 for pledging; see
- * FROST_THRESHOLD_ORACLE_PLAN.md for the kind space).
+ * docs/FROST_COURT_ORACLE_PAPER.md for the protocol and kind space).
  *
  * @see docs/ESCROW-SLASHING.md
  */
 
+import { CourtArgumentError, EscrowLedgerError } from './errors';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { CanonicalWriter } from './courtSession';
 
-// ── Escrow lifecycle ─────────────────────────────────────────────────────────
+// -- Escrow lifecycle ---------------------------------------------------------
 
 /**
  * Lifecycle status of a single juror stake / challenger bond deposit.
@@ -35,8 +36,17 @@ export type EscrowStatus =
   | 'redistributed' // Slashed funds sent to coherent pool
   | 'failed';       // Deposit proof rejected
 
+/**
+ * What an escrow deposit is for: a disputer's challenge bond, or a juror's
+ * stake.
+ */
 export type EscrowPurpose = 'dispute_bond' | 'juror_stake';
 
+/**
+ * Terminal reason recorded for an escrow deposit: coherent/incoherent/
+ * non_reveal/double_vote for juror stakes, bond_won/bond_lost for dispute
+ * bonds, treasury for dust-guard sweeps.
+ */
 export type EscrowReason =
   | 'coherent'
   | 'incoherent'
@@ -46,6 +56,11 @@ export type EscrowReason =
   | 'bond_lost'
   | 'treasury';
 
+/**
+ * One escrowed deposit (juror stake or dispute bond) with its claimed bond
+ * evidence and lifecycle status. The court verifies the evidence; the host
+ * moves the actual sats (paper §8).
+ */
 export interface EscrowDeposit {
   /** Book-keeping identifier (disputeId|purpose|pubkey). */
   readonly id: string;
@@ -72,7 +87,7 @@ export interface EscrowDeposit {
   readonly reason?: EscrowReason;
 }
 
-// ── Slashing constants ───────────────────────────────────────────────────────
+// -- Slashing constants -------------------------------------------------------
 
 /** Rate for incoherent jurors (voted against the winning outcome). */
 export const ALPHA_INCOHERENT = 0.5;
@@ -81,7 +96,7 @@ export const ALPHA_NON_REVEAL = 1.0;
 /** Rate for double-voting jurors (multiple reveals / commit mismatch). */
 export const ALPHA_DOUBLE_VOTE = 1.0;
 
-// ── Amount calculations ──────────────────────────────────────────────────────
+// -- Amount calculations ------------------------------------------------------
 
 /**
  * Normalize an appeal round for amount math. Round 0 is treated as round 1
@@ -90,7 +105,7 @@ export const ALPHA_DOUBLE_VOTE = 1.0;
  */
 function normalizeRound(round: number): number {
   if (!Number.isSafeInteger(round) || round < 0) {
-    throw new Error('round must be a non-negative integer');
+    throw new CourtArgumentError('ESCROW_ARGUMENT', 'round must be a non-negative integer');
   }
   return Math.max(1, round);
 }
@@ -102,13 +117,13 @@ function normalizeRound(round: number): number {
 export function calculateBondAmount(marketVolumeSats: number, round: number): number {
   const r = normalizeRound(round);
   if (!Number.isSafeInteger(marketVolumeSats) || marketVolumeSats < 0) {
-    throw new Error('marketVolumeSats must be a non-negative integer');
+    throw new CourtArgumentError('ESCROW_ARGUMENT', 'marketVolumeSats must be a non-negative integer');
   }
   const baseBond = Math.max(Math.floor(marketVolumeSats * 0.05), 10_000);
   const multiplier = Math.pow(2, r - 1);
   const amount = baseBond * multiplier;
   if (!Number.isSafeInteger(amount)) {
-    throw new Error(`bond amount overflows for round ${round}`);
+    throw new CourtArgumentError('ESCROW_ARGUMENT', `bond amount overflows for round ${round}`);
   }
   return amount;
 }
@@ -120,13 +135,13 @@ export function calculateBondAmount(marketVolumeSats: number, round: number): nu
 export function calculateJurorStake(marketVolumeSats: number, round: number): number {
   const r = normalizeRound(round);
   if (!Number.isSafeInteger(marketVolumeSats) || marketVolumeSats < 0) {
-    throw new Error('marketVolumeSats must be a non-negative integer');
+    throw new CourtArgumentError('ESCROW_ARGUMENT', 'marketVolumeSats must be a non-negative integer');
   }
   const baseStake = Math.max(Math.floor(marketVolumeSats * 0.02), 5_000);
   const multiplier = Math.pow(2, r - 1);
   const amount = baseStake * multiplier;
   if (!Number.isSafeInteger(amount)) {
-    throw new Error(`stake amount overflows for round ${round}`);
+    throw new CourtArgumentError('ESCROW_ARGUMENT', `stake amount overflows for round ${round}`);
   }
   return amount;
 }
@@ -140,8 +155,12 @@ export function calculateTotalAtStake(
   return stakePerJuror * jurorCount + bondAmount;
 }
 
-// ── Deterministic slashing plan ──────────────────────────────────────────────
+// -- Deterministic slashing plan ----------------------------------------------
 
+/**
+ * Per-participant outcome of a slashing plan: stake returned vs slashed,
+ * terminal reason, and the rail receipt the host fills in on execution.
+ */
 export interface StakeRedistribution {
   readonly pubkey: string;
   readonly stakeAmount: number;
@@ -152,6 +171,13 @@ export interface StakeRedistribution {
   readonly returnProof?: string;
 }
 
+/**
+ * The deterministic slashing/redistribution plan for one dispute round:
+ * slashed pool, per-participant records, and bond outcome. Produced only by
+ * {@link computeRedistributionPlan}; verified by
+ * {@link verifyRedistributionIntegrity} and consumable by
+ * `planDecisionsForHolds` (LN settlement).
+ */
 export interface RedistributionPlan {
   readonly marketId: string;
   readonly disputeId: string;
@@ -165,6 +191,11 @@ export interface RedistributionPlan {
   readonly disputerPubkey: string;
 }
 
+/**
+ * Inputs to {@link computeRedistributionPlan}: dispute coordinates, per-juror
+ * stake, the classified juror lists (coherent / incoherent / non-reveal /
+ * double-voting), whether the dispute was upheld, and the bond parameters.
+ */
 export interface RedistributionParams {
   readonly marketId: string;
   readonly disputeId: string;
@@ -189,6 +220,20 @@ export interface RedistributionParams {
  * - Double-voting jurors: lose 100%.
  * - Dispute bond: returned if dispute upheld, forfeited if rejected.
  * - No coherent jurors -> slashed pool goes to the treasury (dust guard).
+ *
+ * Pure and deterministic: every observer derives the identical plan from
+ * the same classification; O(n) over jurors. Verify with
+ * {@link verifyRedistributionIntegrity} and execute via the host rail.
+ *
+ * @example
+ * ```ts
+ * const plan = computeRedistributionPlan({
+ *   marketId, disputeId, round: 1, stakePerJuror: 10_000,
+ *   coherentJurors: [pk1, pk2], incoherentJurors: [pk3],
+ *   nonRevealJurors: [], disputeUpheld: false,
+ *   bondAmount: 20_000, disputerPubkey,
+ * });
+ * ```
  */
 export function computeRedistributionPlan(
   params: RedistributionParams,
@@ -294,10 +339,15 @@ export function verifyRedistributionIntegrity(plan: RedistributionPlan): {
   };
 }
 
-// ── Bond ownership proof (closes the coordinator's ownership TODO) ──────────
+// -- Bond ownership proof (closes the coordinator's ownership TODO) ----------
 
+/** Domain string for canonical bond-ownership challenge/proof hashing. */
 export const BOND_OWNERSHIP_DOMAIN = 'BAO-Court/BondOwnership/v1';
 
+/**
+ * Fields bound into a bond-ownership challenge: the exact bond UTXO
+ * (txid + vout), the dispute, the juror, and an anti-replay nonce.
+ */
 export interface BondOwnershipChallengeInput {
   readonly bondTxid: string;
   readonly bondVout: number;
@@ -402,8 +452,12 @@ export function verifyBondOwnershipForScript(
     : { valid: false, error: 'bond ownership signature does not match the bond script' };
 }
 
-// ── Escrow ledger state machine (deterministic, serializable) ────────────────
+// -- Escrow ledger state machine (deterministic, serializable) ----------------
 
+/**
+ * JSON-safe serialization of an {@link EscrowLedger}: the full deposit list.
+ * Round-trips through the ledger constructor.
+ */
 export interface EscrowLedgerSnapshot {
   readonly deposits: readonly EscrowDeposit[];
 }
@@ -411,6 +465,16 @@ export interface EscrowLedgerSnapshot {
 /**
  * Deterministic escrow ledger. Transitions are pure; the host persists the
  * snapshot and applies it to the rail. No sats move inside this class.
+ *
+ * Example:
+ * ```ts
+ * const ledger = new EscrowLedger();
+ * ledger.record(depositFields);            // record bond evidence
+ * ledger.lock(deposit.id, proofOk);        // after rail verification
+ * const plan = computeRedistributionPlan(params);
+ * ledger.applyPlan(plan);                  // terminal statuses + reasons
+ * persist(ledger.snapshot());
+ * ```
  */
 export class EscrowLedger {
   private readonly depositsByKey = new Map<string, EscrowDeposit>();
@@ -419,7 +483,7 @@ export class EscrowLedger {
     const seen = new Set<string>();
     for (const d of initial) {
       if (seen.has(d.id)) {
-        throw new Error(`EscrowLedger: duplicate deposit id ${d.id} in snapshot`);
+        throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: duplicate deposit id ${d.id} in snapshot`);
       }
       seen.add(d.id);
       this.depositsByKey.set(d.id, d);
@@ -448,7 +512,7 @@ export class EscrowLedger {
   record(deposit: Omit<EscrowDeposit, 'id' | 'status'> & { readonly id?: string }): EscrowDeposit {
     const id = deposit.id ?? `${deposit.disputeId}|${deposit.purpose}|${deposit.depositorPubkey}`;
     if (this.depositsByKey.has(id)) {
-      throw new Error(`EscrowLedger: duplicate deposit id ${id}`);
+      throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: duplicate deposit id ${id}`);
     }
     const entry: EscrowDeposit = {
       ...deposit,
@@ -469,7 +533,7 @@ export class EscrowLedger {
    */
   lock(id: string, proofOk: boolean, now = Math.floor(Date.now() / 1000)): EscrowDeposit {
     const d = this.require(id);
-    if (d.status !== 'pending') throw new Error(`EscrowLedger: cannot lock ${d.status} deposit ${id}`);
+    if (d.status !== 'pending') throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: cannot lock ${d.status} deposit ${id}`);
     const next: EscrowDeposit = proofOk
       ? { ...d, status: 'locked' }
       : { ...d, status: 'failed', resolvedAt: now };
@@ -480,7 +544,7 @@ export class EscrowLedger {
   /** Return a locked deposit in full (coherent juror / upheld bond). */
   returnDeposit(id: string, reason: EscrowReason = 'coherent', now = Math.floor(Date.now() / 1000)): EscrowDeposit {
     const d = this.require(id);
-    if (d.status !== 'locked') throw new Error(`EscrowLedger: cannot return ${d.status} deposit ${id}`);
+    if (d.status !== 'locked') throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: cannot return ${d.status} deposit ${id}`);
     const next: EscrowDeposit = { ...d, status: 'returned', reason, resolvedAt: now };
     this.depositsByKey.set(id, next);
     return next;
@@ -489,7 +553,7 @@ export class EscrowLedger {
   /** Slash a locked deposit (incoherent 50%, non-reveal/double-vote 100%). */
   slash(id: string, reason: 'incoherent' | 'non_reveal' | 'double_vote', now = Math.floor(Date.now() / 1000)): EscrowDeposit {
     const d = this.require(id);
-    if (d.status !== 'locked') throw new Error(`EscrowLedger: cannot slash ${d.status} deposit ${id}`);
+    if (d.status !== 'locked') throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: cannot slash ${d.status} deposit ${id}`);
     const status: EscrowStatus = reason === 'incoherent' ? 'slashed_50' : 'slashed_100';
     const next: EscrowDeposit = { ...d, status, reason, resolvedAt: now };
     this.depositsByKey.set(id, next);
@@ -503,7 +567,7 @@ export class EscrowLedger {
    */
   forfeitBond(id: string, now = Math.floor(Date.now() / 1000)): EscrowDeposit {
     const d = this.require(id);
-    if (d.status !== 'locked') throw new Error(`EscrowLedger: cannot forfeit ${d.status} bond ${id}`);
+    if (d.status !== 'locked') throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: cannot forfeit ${d.status} bond ${id}`);
     const next: EscrowDeposit = { ...d, status: 'slashed_100', reason: 'bond_lost', resolvedAt: now };
     this.depositsByKey.set(id, next);
     return next;
@@ -513,7 +577,7 @@ export class EscrowLedger {
   redistribute(id: string, now = Math.floor(Date.now() / 1000)): EscrowDeposit {
     const d = this.require(id);
     if (d.status !== 'slashed_50' && d.status !== 'slashed_100') {
-      throw new Error(`EscrowLedger: cannot redistribute ${d.status} deposit ${id}`);
+      throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: cannot redistribute ${d.status} deposit ${id}`);
     }
     const next: EscrowDeposit = { ...d, status: 'redistributed', resolvedAt: now };
     this.depositsByKey.set(id, next);
@@ -551,7 +615,7 @@ export class EscrowLedger {
 
   private require(id: string): EscrowDeposit {
     const d = this.depositsByKey.get(id);
-    if (!d) throw new Error(`EscrowLedger: unknown deposit ${id}`);
+    if (!d) throw new EscrowLedgerError('ESCROW_LEDGER', `EscrowLedger: unknown deposit ${id}`);
     return d;
   }
 }

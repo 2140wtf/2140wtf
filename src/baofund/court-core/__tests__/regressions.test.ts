@@ -45,23 +45,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 const Point = secp256k1.Point;
 
-function makeJuror(idx: number, pubkey?: string): SelectedJuror {
-  return {
-    idx,
-    nostrPubkey: pubkey ?? '0'.repeat(63) + String(idx),
-    stakeCapacitySats: 10_000,
-    stakeCommitment: {
-      amountSats: 10_000,
-      bondAddress: 'bc1q...',
-      status: 'confirmed',
-      committedAt: 1_700_000_000,
-    },
-    wotScore: 80,
-    categories: ['world'],
-    registeredAt: 1_700_000_000,
-    priority: idx,
-  };
-}
+import { juror as makeJuror } from './helpers/fixtures';
 
 describe('regression: DKG refresh with non-contiguous juror indices', () => {
   it('refreshShares works after a disqualification leaves gaps in the index set', () => {
@@ -644,7 +628,7 @@ describe('regression: IndependentDkgSession roster binding', () => {
   });
 });
 
-// ── Canonical hashing: delimiter-free field encoding (2026-08-18 audit) ─────
+// -- Canonical hashing: delimiter-free field encoding (2026-08-18 audit) -----
 // Under the old delimiter-joined encoding, a field value containing the
 // delimiter aliased the next field: two DISTINCT tuples hashed to the same
 // digest. The canonical length-prefixed encoding (CanonicalWriter) must

@@ -39,7 +39,9 @@
  * subscription stream, tagging each event with the relay that delivered it.
  */
 
+import { CourtError } from './errors';
 import type { Event as NostrEvent } from 'nostr-tools/pure';
+import { getEventHash } from 'nostr-tools/pure';
 import {
   assertCourtSessionParameters,
   hashCourtSessionParameters,
@@ -89,6 +91,13 @@ export const COURT_INBOX_PUBLIC_KINDS = [
 const HEX_32 = /^[0-9a-f]{64}$/;
 const HEX_64 = /^[0-9a-f]{128}$/;
 const MAX_NOSTR_KIND = 65_535;
+// Memory sizing note (round-16 review, finding C-3): the capacity bounds are
+// in RECORDS, not bytes - worst case is MAX_RECORDS × MAX_WRAP_CONTENT_BYTES
+// ≈ 100_000 × 256 KB ≈ 25.6 GB of in-memory record content, plus a transient
+// ~2× during snapshot()'s JSON deep-copy. Hosts must size memory by BYTES
+// (relay-served wraps can legitimately approach the 256 KB per-wrap cap), not
+// by record count, and should prefer incremental persistence over whole-map
+// snapshots at scale.
 const MAX_RECORDS = 100_000;
 const MAX_RELAYS_PER_RECORD = 64;
 const MAX_RELAY_URL_BYTES = 512;
@@ -107,13 +116,11 @@ export type CourtInboxErrorCode =
   | 'corrupt_snapshot';
 
 /** Error thrown by every fail-closed inbox gate. */
-export class CourtInboxError extends Error {
-  readonly code: CourtInboxErrorCode;
+export class CourtInboxError extends CourtError {
+  declare readonly code: CourtInboxErrorCode;
 
   constructor(code: CourtInboxErrorCode, message: string) {
-    super(message);
-    this.name = 'CourtInboxError';
-    this.code = code;
+    super(code, message);
   }
 }
 
@@ -532,6 +539,23 @@ function assertWrapShape(value: unknown): asserts value is NostrEvent {
   if (typeof value.sig !== 'string' || !HEX_64.test(value.sig)) {
     fail('malformed', 'wrap.sig must be 64-byte lowercase hex');
   }
+  // The wrap id is the dedupe identity across every relay in the group, so it
+  // must commit to the exact ingested bytes (NIP-01 serialization). Without
+  // this check a hostile relay could serve a same-id different-content wrap
+  // that (a) poisons the stored record when it wins the delivery race, or
+  // (b) dedupes the real wrap away on redelivery - and drain permanently
+  // drops junk, so the message would be lost either way.
+  if (
+    getEventHash({
+      pubkey: value.pubkey,
+      created_at: value.created_at,
+      kind: value.kind,
+      tags: value.tags,
+      content: value.content,
+    } as NostrEvent) !== value.id
+  ) {
+    fail('malformed', 'wrap.id does not commit to the wrap contents');
+  }
   if (!Number.isSafeInteger(value.created_at) || (value.created_at as number) < 0) {
     fail('malformed', 'wrap.created_at must be a non-negative Unix timestamp');
   }
@@ -590,6 +614,13 @@ function compareRecords(a: CourtInboxRecord, b: CourtInboxRecord): number {
  * `myPubkey` before they are stored - so no code path can ever attempt to
  * decrypt a wrap addressed to someone else. Drain then re-checks the address
  * through the signer-backed NIP-59 unwrap, which verifies every layer.
+ *
+ * Example:
+ * ```ts
+ * const inbox = createCourtInbox({ myPubkey });
+ * inbox.ingest(event, 'wss://relay.example', nowSec);
+ * const messages = await inbox.drain(signerCrypto); // rejects are dropped, marked drained
+ * ```
  */
 export class CourtInbox {
   private readonly myPubkey: string;

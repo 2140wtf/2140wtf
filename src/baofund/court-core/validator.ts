@@ -2,8 +2,24 @@
 
 /**
  * FROST attestation validator for the BAO Court / FROST appeal layer.
+ *
+ * Pipeline role: the verification gate for published verdicts (paper §5,
+ * §10) - takes a kind-89/39007 attestation event, checks its Nostr
+ * signature, reconstructs the signed message (v1 or v2), and verifies the
+ * FROST/Schnorr signature against the empaneled group key and any pinned
+ * expectations (dispute id, market, outcomes, epoch/tier/threshold/
+ * signer-set root, batch root).
+ *
+ * Purity: validation is a pure predicate over (event, context); the only
+ * external work is cryptographic verification (CPU) and nostr-tools'
+ * event-object verdict memoization (see the cache note below). No network.
+ *
+ * Invariants: INV-VAL-1 … INV-VAL-16 in docs/FORMAL_INVARIANTS.md §10.
+ * Errors: {@link CourtSignerSetError} (code `SIGNER_SET`); validation
+ * itself returns {@link ValidationResult} rather than throwing.
  */
 
+import { CourtError, CourtErrorOptions } from './errors';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import type { Event as NostrEvent } from 'nostr-tools/pure';
@@ -12,6 +28,10 @@ import { BAO_COURT_ATTESTATION_KIND } from './events';
 import { buildAttestationMessage, buildAttestationMessageV2 } from './crypto';
 import { hashDisputeVerdict } from './courtVoteMachine';
 
+/**
+ * Outcome of an attestation validation: validity, the signing pubkey, the
+ * parsed outcome/message/dispute id, and a failure reason when invalid.
+ */
 export interface ValidationResult {
   readonly valid: boolean;
   readonly pubkey: string;
@@ -21,6 +41,11 @@ export interface ValidationResult {
   readonly error?: string;
 }
 
+/**
+ * Caller-pinned expectations for a v1 attestation validation: group pubkey,
+ * dispute id, market id, allowed outcomes, and trusted publishers. All
+ * fields optional; an omitted field is simply not checked.
+ */
 export interface AttestationValidationContext {
   readonly expectedGroupPubkey?: string;
   readonly expectedDisputeEventId?: string;
@@ -35,7 +60,8 @@ function uniqueTag(event: Pick<NostrEvent, 'tags'>, name: string): string | null
   return matches[0][1];
 }
 
-function isHex64(value: string): boolean {
+function isHex64(value: string | null | undefined): boolean {
+  if (value === null || value === undefined) return false;
   return /^[0-9a-fA-F]{64}$/.test(value);
 }
 
@@ -54,6 +80,29 @@ function isHex64(value: string): boolean {
  * OLD bytes - such callers must re-run validation on a fresh object rather
  * than mutate a verified one.
  */
+/**
+ * Validate a v1 FROST attestation event (kind 89/39007) end-to-end:
+ * Nostr event signature, tag/content structure, message reconstruction
+ * (`buildAttestationMessage`), Schnorr verification against the group
+ * pubkey, and the caller's pinned expectations (F-2: an empty pin is a
+ * misconfiguration and fails closed, never "no pin"). O(1) cryptographic
+ * work plus O(tags).
+ *
+ * @param event   - The raw Nostr event.
+ * @param expected - A group pubkey shorthand or a full
+ *                  {@link AttestationValidationContext}.
+ * @returns A {@link ValidationResult}; never throws for invalid events.
+ *
+ * @example
+ * ```ts
+ * const result = validateAttestationEvent(rawEvent, {
+ *   expectedGroupPubkey: empaneledKey,
+ *   expectedDisputeEventId: disputeId,
+ *   allowedOutcomes: ['YES', 'NO'],
+ * });
+ * if (result.valid) applyOutcome(result.outcome!);
+ * ```
+ */
 export function validateAttestationEvent(
   event: NostrEvent,
   expected?: string | AttestationValidationContext,
@@ -61,6 +110,17 @@ export function validateAttestationEvent(
   const context = typeof expected === 'string'
     ? { expectedGroupPubkey: expected }
     : (expected ?? {});
+  // F-2: a present-but-empty pin is a caller misconfiguration (e.g. an unset
+  // config value joined into ''), NOT "no pin" - treating it as absent would
+  // silently disable the group-key pin (fail-open by omission). Fail closed:
+  // a pin must be a real pubkey or absent.
+  if (context.expectedGroupPubkey !== undefined && context.expectedGroupPubkey.length === 0) {
+    return {
+      valid: false,
+      pubkey: '',
+      error: 'expectedGroupPubkey pin must be a non-empty group pubkey',
+    };
+  }
   if (event.kind !== 89 && event.kind !== BAO_COURT_ATTESTATION_KIND) {
     return { valid: false, pubkey: '', error: `Not a Kind 89 or ${BAO_COURT_ATTESTATION_KIND} attestation` };
   }
@@ -229,6 +289,12 @@ export function validateAttestationEvent(
   }
 }
 
+/**
+ * Verify a raw BIP-340 Schnorr signature over a hex message.
+ *
+ * @returns `true` when valid; `false` on any failure including malformed
+ *          inputs (never throws). O(1) cryptographic work.
+ */
 export function verifyRawSignature(
   pubkeyHex: string,
   messageHex: string,
@@ -259,6 +325,7 @@ import { CanonicalWriter } from './courtSession';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
+/** Domain string prefixing canonical signer-set commitment hashes. */
 export const COURT_SIGNER_SET_DOMAIN = 'BAO-Court/SignerSet/v1';
 
 /**
@@ -267,10 +334,9 @@ export const COURT_SIGNER_SET_DOMAIN = 'BAO-Court/SignerSet/v1';
  * distinguish malformed signer-set input from any other failure. Messages
  * are unchanged from the pre-0.9.1 plain-Error text.
  */
-export class CourtSignerSetError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CourtSignerSetError';
+export class CourtSignerSetError extends CourtError {
+  constructor(message: string, options?: CourtErrorOptions) {
+    super('SIGNER_SET', message, options);
   }
 }
 
@@ -311,6 +377,11 @@ export function hashSignerSetRoot(indices: readonly number[]): string {
   return bytesToHex(sha256(input));
 }
 
+/**
+ * Extended expectations for a v2 attestation: everything from the v1
+ * context plus epoch pinning, minimum tier, minimum signer threshold, and
+ * signer-set / batch Merkle-root pins (the in-band finality binding).
+ */
 export interface AttestationV2ValidationContext {
   readonly expectedGroupPubkey?: string;
   readonly expectedDisputeEventId?: string;
@@ -339,8 +410,8 @@ export interface AttestationV2ValidationContext {
   readonly signerSet?: readonly number[];
 }
 
-function parseV2Int(value: string, max: number, label: string): number | null {
-  if (!/^[0-9]+$/.test(value)) return null;
+function parseV2Int(value: string | null, max: number, label: string): number | null {
+  if (value === null || !/^[0-9]+$/.test(value)) return null;
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > max) return null;
   void label;
@@ -382,162 +453,194 @@ function v2FieldByteLength(value: string): number {
  * (SEQUENCE-1) - the `batch` tag carries only the root, not the batch's
  * epoch or cohort binding.
  */
-export function validateAttestationEventV2(
-  event: NostrEvent,
-  context: AttestationV2ValidationContext = {},
-): ValidationResult {
-  if (event.kind !== 89 && event.kind !== BAO_COURT_ATTESTATION_KIND) {
-    return { valid: false, pubkey: '', error: `Not a Kind 89 or ${BAO_COURT_ATTESTATION_KIND} attestation` };
-  }
-  if (!verifyEvent(event)) {
-    return { valid: false, pubkey: '', error: 'Invalid Nostr event signature or id' };
-  }
-  if (
-    context.trustedPublisherPubkeys &&
-    !context.trustedPublisherPubkeys.includes(event.pubkey)
-  ) {
-    return { valid: false, pubkey: '', error: 'Untrusted attestation publisher' };
-  }
+/** Tag values extracted from a v2 attestation event, by tag name. */
+interface V2AttestationTags {
+  readonly pubkey: string;
+  readonly signature: string;
+  readonly nonce: string;
+  readonly outcome: string;
+  readonly disputeEventId: string | null;
+  readonly marketId: string;
+  readonly round: string;
+  readonly verdictHash: string | null;
+  readonly epochTag: string | null;
+  readonly tierTag: string | null;
+  readonly thresholdTag: string | null;
+  readonly signersTag: string | null;
+  readonly attemptTag: string | null;
+  readonly batchTag: string | null;
+}
 
-  const pubkey = uniqueTag(event, 'p');
-  const signature = uniqueTag(event, 'sig');
-  const nonce = uniqueTag(event, 'nonce');
-  const outcome = uniqueTag(event, 'outcome');
-  const disputeEventId = uniqueTag(event, 'dispute');
-  const marketId = uniqueTag(event, 'm');
-  const round = uniqueTag(event, 'round');
-  const verdictHash = uniqueTag(event, 'verdict');
-  const epochTag = uniqueTag(event, 'epoch');
-  const tierTag = uniqueTag(event, 'tier');
-  const thresholdTag = uniqueTag(event, 'threshold');
-  const signersTag = uniqueTag(event, 'signers');
-  const attemptTag = uniqueTag(event, 'attempt');
-  const batchTag = uniqueTag(event, 'batch');
+/** Parsed v2 finality fields (epoch/tier/threshold + optional attempt/batch). */
+interface V2FinalityFields {
+  readonly epochId: number;
+  readonly tier: number;
+  readonly threshold: number;
+  readonly attempt: number | undefined;
+  readonly batchMerkleRoot: string | undefined;
+}
 
-  if (!pubkey || !signature || !nonce || !outcome || !marketId || !round) {
-    return { valid: false, pubkey: '', error: 'Missing required tags' };
-  }
-  if (
-    v2FieldByteLength(marketId) > MAX_V2_MARKET_ID_BYTES
-    || v2FieldByteLength(outcome) > MAX_V2_OUTCOME_BYTES
-    || v2FieldByteLength(round) > MAX_V2_ROUND_BYTES
-  ) {
-    return { valid: false, pubkey: '', error: 'marketId/outcome/round too long (v2 field bounds exceeded)' };
-  }
-  // v2 REQUIRED finality tags: a v2-shaped event missing any of these is invalid.
-  if (!epochTag || !tierTag || !thresholdTag || !signersTag) {
-    return { valid: false, pubkey: pubkey ?? '', error: 'Missing v2 finality tags (epoch/tier/threshold/signers)' };
-  }
-  if (!isHex64(pubkey) || !/^[0-9a-fA-F]{128}$/.test(signature) || !isHex64(nonce)) {
-    return { valid: false, pubkey: pubkey ?? '', error: 'Invalid group pubkey, signature, or nonce' };
-  }
-  if (nonce !== signature.slice(0, 64)) {
-    return { valid: false, pubkey, error: 'Nonce tag does not match signature' };
-  }
-  if (event.kind === BAO_COURT_ATTESTATION_KIND) {
-    if (!disputeEventId) {
-      return { valid: false, pubkey, error: 'Missing dispute tag on dispute attestation' };
-    }
-    if (!verdictHash || !isHex64(verdictHash)) {
-      return { valid: false, pubkey, error: 'Missing or invalid verdict hash on dispute attestation' };
-    }
-    const supportingIds = event.tags
-      .filter((t) => t[0] === 'e' && t[3] === 'mention')
-      .map((t) => t[1]);
-    if (supportingIds.length === 0 || supportingIds.length > 10_000) {
-      return { valid: false, pubkey, error: 'Dispute attestation must carry 1..10000 supporting event IDs' };
-    }
-    if (supportingIds.some((id) => !isHex64(id))) {
-      return { valid: false, pubkey, error: 'Supporting event IDs must be 32-byte hex' };
-    }
-    if (new Set(supportingIds).size !== supportingIds.length) {
-      return { valid: false, pubkey, error: 'Duplicate supporting event IDs' };
-    }
-    // The verdict commitment must recompute from the event's own dispute,
-    // outcome, and supporting ids - same rule as the frozen v1 path.
-    let expectedVerdictHash: string;
-    try {
-      expectedVerdictHash = hashDisputeVerdict({
-        disputeId: disputeEventId.toLowerCase(),
-        outcome,
-        supportingEventIds: supportingIds.map((id) => id.toLowerCase()),
-      });
-    } catch {
-      return { valid: false, pubkey, error: 'Verdict hash does not match the dispute verdict inputs' };
-    }
-    if (verdictHash.toLowerCase() !== expectedVerdictHash) {
-      return { valid: false, pubkey, error: 'Verdict hash does not match the dispute verdict inputs' };
-    }
-  }
+/** Either a typed failure or the successfully parsed value. */
+type V2StepResult<T> = { readonly error: ValidationResult } | { readonly value: T };
 
+function extractV2AttestationTags(event: NostrEvent): V2AttestationTags {
+  return {
+    pubkey: uniqueTag(event, 'p') ?? '',
+    signature: uniqueTag(event, 'sig') ?? '',
+    nonce: uniqueTag(event, 'nonce') ?? '',
+    outcome: uniqueTag(event, 'outcome') ?? '',
+    disputeEventId: uniqueTag(event, 'dispute'),
+    marketId: uniqueTag(event, 'm') ?? '',
+    round: uniqueTag(event, 'round') ?? '',
+    verdictHash: uniqueTag(event, 'verdict'),
+    epochTag: uniqueTag(event, 'epoch'),
+    tierTag: uniqueTag(event, 'tier'),
+    thresholdTag: uniqueTag(event, 'threshold'),
+    signersTag: uniqueTag(event, 'signers'),
+    attemptTag: uniqueTag(event, 'attempt'),
+    batchTag: uniqueTag(event, 'batch'),
+  };
+}
+
+/**
+ * Dispute-attestation extra checks (kind 39007 only): the verdict commitment
+ * must recompute from the event's own dispute, outcome, and supporting ids -
+ * same rule as the frozen v1 path.
+ */
+function verifyDisputeAttestationVerdictHash(params: {
+  readonly event: NostrEvent;
+  readonly tags: V2AttestationTags;
+}): V2StepResult<undefined> {
+  const { event, tags } = params;
+  const { disputeEventId, outcome, verdictHash, pubkey } = tags;
+  if (!disputeEventId) {
+    return { error: { valid: false, pubkey, error: 'Missing dispute tag on dispute attestation' } };
+  }
+  if (!verdictHash || !isHex64(verdictHash)) {
+    return { error: { valid: false, pubkey, error: 'Missing or invalid verdict hash on dispute attestation' } };
+  }
+  const supportingIds = event.tags
+    .filter((t) => t[0] === 'e' && t[3] === 'mention')
+    .map((t) => t[1]);
+  if (supportingIds.length === 0 || supportingIds.length > 10_000) {
+    return { error: { valid: false, pubkey, error: 'Dispute attestation must carry 1..10000 supporting event IDs' } };
+  }
+  if (supportingIds.some((id) => !isHex64(id))) {
+    return { error: { valid: false, pubkey, error: 'Supporting event IDs must be 32-byte hex' } };
+  }
+  if (new Set(supportingIds).size !== supportingIds.length) {
+    return { error: { valid: false, pubkey, error: 'Duplicate supporting event IDs' } };
+  }
+  let expectedVerdictHash: string;
+  try {
+    expectedVerdictHash = hashDisputeVerdict({
+      disputeId: disputeEventId.toLowerCase(),
+      outcome,
+      supportingEventIds: supportingIds.map((id) => id.toLowerCase()),
+    });
+  } catch {
+    return { error: { valid: false, pubkey, error: 'Verdict hash does not match the dispute verdict inputs' } };
+  }
+  if (verdictHash.toLowerCase() !== expectedVerdictHash) {
+    return { error: { valid: false, pubkey, error: 'Verdict hash does not match the dispute verdict inputs' } };
+  }
+  return { value: undefined };
+}
+
+/**
+ * Parse the v2 REQUIRED finality tags (epoch/tier/threshold/signers) and the
+ * optional attempt/batch tags.
+ */
+function parseV2FinalityFields(tags: V2AttestationTags): V2StepResult<V2FinalityFields> {
+  const { epochTag, tierTag, thresholdTag, signersTag, attemptTag, batchTag, pubkey } = tags;
   const epochId = parseV2Int(epochTag, 0xffff_ffff, 'epoch');
   const tier = parseV2Int(tierTag, 0xff, 'tier');
   const threshold = parseV2Int(thresholdTag, 0xffff_ffff, 'threshold');
   if (epochId === null || tier === null || threshold === null || threshold < 1) {
-    return { valid: false, pubkey, error: 'Malformed v2 finality tags' };
+    return { error: { valid: false, pubkey, error: 'Malformed v2 finality tags' } };
   }
-  if (!isHex64(signersTag)) {
-    return { valid: false, pubkey, error: 'signers tag must be a 32-byte hex signer-set root' };
+  if (!isHex64(signersTag ?? undefined)) {
+    return { error: { valid: false, pubkey, error: 'signers tag must be a 32-byte hex signer-set root' } };
   }
   let attempt: number | undefined;
   if (attemptTag) {
     const parsed = parseV2Int(attemptTag, 0xffff_ffff, 'attempt');
     if (parsed === null || parsed === undefined) {
-      return { valid: false, pubkey, error: 'Malformed attempt tag' };
+      return { error: { valid: false, pubkey, error: 'Malformed attempt tag' } };
     }
     attempt = parsed;
   }
   const batchMerkleRoot = batchTag ?? undefined;
   if (batchTag && !isHex64(batchTag)) {
-    return { valid: false, pubkey, error: 'batch tag must be a 32-byte hex Merkle root' };
+    return { error: { valid: false, pubkey, error: 'batch tag must be a 32-byte hex Merkle root' } };
   }
+  return { value: { epochId, tier, threshold, attempt, batchMerkleRoot } };
+}
 
+/**
+ * Caller-supplied scope pins (FINDING-3, security round 1): these context
+ * pins are declared on AttestationV2ValidationContext and enforced here with
+ * the same scope checks as the frozen v1 path.
+ */
+function enforceV2ContextPins(params: {
+  readonly context: AttestationV2ValidationContext;
+  readonly tags: V2AttestationTags;
+  readonly fields: V2FinalityFields;
+}): V2StepResult<undefined> {
+  const { context, tags, fields } = params;
+  const { pubkey, outcome, disputeEventId, marketId, signersTag, batchTag } = tags;
   if (context.expectedGroupPubkey && pubkey !== context.expectedGroupPubkey) {
-    return { valid: false, pubkey, error: `Pubkey mismatch: expected ${context.expectedGroupPubkey}, got ${pubkey}` };
+    return { error: { valid: false, pubkey, error: `Pubkey mismatch: expected ${context.expectedGroupPubkey}, got ${pubkey}` } };
   }
-  // FINDING-3 (security round 1): these three context pins are declared on
-  // AttestationV2ValidationContext but were never enforced on the v2 path -
-  // an attestation for a different market, dispute, or a non-allowed
-  // outcome validated. Enforce the same scope checks as the frozen v1 path.
   if (context.expectedDisputeEventId && disputeEventId !== context.expectedDisputeEventId) {
-    return { valid: false, pubkey, error: 'Dispute id mismatch' };
+    return { error: { valid: false, pubkey, error: 'Dispute id mismatch' } };
   }
   if (context.expectedMarketId && marketId !== context.expectedMarketId) {
-    return { valid: false, pubkey, error: 'Market id mismatch' };
+    return { error: { valid: false, pubkey, error: 'Market id mismatch' } };
   }
   if (context.allowedOutcomes && !context.allowedOutcomes.includes(outcome)) {
-    return { valid: false, pubkey, error: 'Outcome is not allowed' };
+    return { error: { valid: false, pubkey, error: 'Outcome is not allowed' } };
   }
-  if (context.expectedEpoch !== undefined && epochId !== context.expectedEpoch) {
-    return { valid: false, pubkey, error: `Epoch mismatch: expected ${context.expectedEpoch}, got ${epochId}` };
+  if (context.expectedEpoch !== undefined && fields.epochId !== context.expectedEpoch) {
+    return { error: { valid: false, pubkey, error: `Epoch mismatch: expected ${context.expectedEpoch}, got ${fields.epochId}` } };
   }
-  if (context.minTier !== undefined && tier < context.minTier) {
-    return { valid: false, pubkey, error: `Tier ${tier} below finality policy minimum ${context.minTier}` };
+  if (context.minTier !== undefined && fields.tier < context.minTier) {
+    return { error: { valid: false, pubkey, error: `Tier ${fields.tier} below finality policy minimum ${context.minTier}` } };
   }
-  if (context.minThreshold !== undefined && threshold < context.minThreshold) {
-    return { valid: false, pubkey, error: `Threshold ${threshold} below finality policy minimum ${context.minThreshold}` };
+  if (context.minThreshold !== undefined && fields.threshold < context.minThreshold) {
+    return { error: { valid: false, pubkey, error: `Threshold ${fields.threshold} below finality policy minimum ${context.minThreshold}` } };
   }
   if (context.expectedSignerSetRoot && signersTag !== context.expectedSignerSetRoot) {
-    return { valid: false, pubkey, error: 'Signer-set root mismatch' };
+    return { error: { valid: false, pubkey, error: 'Signer-set root mismatch' } };
   }
   if (context.expectedBatchMerkleRoot !== undefined && (batchTag ?? undefined) !== context.expectedBatchMerkleRoot) {
-    return { valid: false, pubkey, error: 'Batch Merkle root mismatch' };
+    return { error: { valid: false, pubkey, error: 'Batch Merkle root mismatch' } };
   }
   if (context.signerSet) {
     let recomputed: string;
     try {
       recomputed = hashSignerSetRoot(context.signerSet);
     } catch (err) {
-      return { valid: false, pubkey, error: `Invalid signer set: ${err instanceof Error ? err.message : String(err)}` };
+      return { error: { valid: false, pubkey, error: `Invalid signer set: ${err instanceof Error ? err.message : String(err)}` } };
     }
     if (recomputed !== signersTag) {
-      return { valid: false, pubkey, error: 'Provided signer set does not hash to the signers tag' };
+      return { error: { valid: false, pubkey, error: 'Provided signer set does not hash to the signers tag' } };
     }
-    if (context.signerSet.length !== threshold) {
-      return { valid: false, pubkey, error: `Signer set size ${context.signerSet.length} does not match threshold ${threshold}` };
+    if (context.signerSet.length !== fields.threshold) {
+      return { error: { valid: false, pubkey, error: `Signer set size ${context.signerSet.length} does not match threshold ${fields.threshold}` } };
     }
   }
+  return { value: undefined };
+}
 
+/** Final step: content/message consistency, then the Schnorr verification. */
+function verifyV2ContentAndSignature(params: {
+  readonly event: NostrEvent;
+  readonly tags: V2AttestationTags;
+  readonly fields: V2FinalityFields;
+}): ValidationResult {
+  const { event, tags, fields } = params;
+  const { pubkey, signature, outcome, disputeEventId, marketId, round, verdictHash, epochTag, tierTag, thresholdTag, signersTag, attemptTag, batchTag } = tags;
   try {
     const content = JSON.parse(event.content || '{}') as Record<string, unknown>;
     const message = String(content.message || '');
@@ -552,10 +655,10 @@ export function validateAttestationEventV2(
       ['round', round, String(content.round ?? '')],
       ['disputeEventId', disputeEventId ?? undefined, contentStr('disputeEventId')],
       ['verdictHash', verdictHash ?? undefined, contentStr('verdictHash')],
-      ['epoch', epochTag, contentStr('epoch')],
-      ['tier', tierTag, contentStr('tier')],
-      ['threshold', thresholdTag, contentStr('threshold')],
-      ['signerSetRoot', signersTag, contentStr('signerSetRoot')],
+      ['epoch', epochTag ?? undefined, contentStr('epoch')],
+      ['tier', tierTag ?? undefined, contentStr('tier')],
+      ['threshold', thresholdTag ?? undefined, contentStr('threshold')],
+      ['signerSetRoot', signersTag ?? undefined, contentStr('signerSetRoot')],
       ['attempt', attemptTag ?? undefined, contentStr('attempt')],
       ['batchMerkleRoot', batchTag ?? undefined, contentStr('batchMerkleRoot')],
     ];
@@ -570,12 +673,12 @@ export function validateAttestationEventV2(
       round,
       disputeEventId: disputeEventId ?? undefined,
       verdictHash: verdictHash ?? undefined,
-      epochId,
-      tier,
-      threshold,
-      signerSetRoot: signersTag,
-      attempt,
-      batchMerkleRoot,
+      epochId: fields.epochId,
+      tier: fields.tier,
+      threshold: fields.threshold,
+      signerSetRoot: signersTag ?? undefined,
+      attempt: fields.attempt,
+      batchMerkleRoot: fields.batchMerkleRoot,
     });
     if (message !== expectedMessage) {
       return { valid: false, pubkey, error: 'Attestation message does not bind v2 finality fields' };
@@ -595,6 +698,69 @@ export function validateAttestationEventV2(
       error: `Validation exception: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+export function validateAttestationEventV2(
+  event: NostrEvent,
+  context: AttestationV2ValidationContext = {},
+): ValidationResult {
+  // F-2: a present-but-empty pin is a caller misconfiguration, NOT "no pin"
+  // - fail closed instead of silently disabling the group-key pin.
+  if (context.expectedGroupPubkey !== undefined && context.expectedGroupPubkey.length === 0) {
+    return {
+      valid: false,
+      pubkey: '',
+      error: 'expectedGroupPubkey pin must be a non-empty group pubkey',
+    };
+  }
+  if (event.kind !== 89 && event.kind !== BAO_COURT_ATTESTATION_KIND) {
+    return { valid: false, pubkey: '', error: `Not a Kind 89 or ${BAO_COURT_ATTESTATION_KIND} attestation` };
+  }
+  if (!verifyEvent(event)) {
+    return { valid: false, pubkey: '', error: 'Invalid Nostr event signature or id' };
+  }
+  if (
+    context.trustedPublisherPubkeys &&
+    !context.trustedPublisherPubkeys.includes(event.pubkey)
+  ) {
+    return { valid: false, pubkey: '', error: 'Untrusted attestation publisher' };
+  }
+
+  const tags = extractV2AttestationTags(event);
+  const { pubkey, signature, nonce, outcome, marketId, round } = tags;
+
+  if (!pubkey || !signature || !nonce || !outcome || !marketId || !round) {
+    return { valid: false, pubkey: '', error: 'Missing required tags' };
+  }
+  if (
+    v2FieldByteLength(marketId) > MAX_V2_MARKET_ID_BYTES
+    || v2FieldByteLength(outcome) > MAX_V2_OUTCOME_BYTES
+    || v2FieldByteLength(round) > MAX_V2_ROUND_BYTES
+  ) {
+    return { valid: false, pubkey: '', error: 'marketId/outcome/round too long (v2 field bounds exceeded)' };
+  }
+  // v2 REQUIRED finality tags: a v2-shaped event missing any of these is invalid.
+  if (!tags.epochTag || !tags.tierTag || !tags.thresholdTag || !tags.signersTag) {
+    return { valid: false, pubkey: pubkey ?? '', error: 'Missing v2 finality tags (epoch/tier/threshold/signers)' };
+  }
+  if (!isHex64(pubkey) || !/^[0-9a-fA-F]{128}$/.test(signature) || !isHex64(nonce)) {
+    return { valid: false, pubkey: pubkey ?? '', error: 'Invalid group pubkey, signature, or nonce' };
+  }
+  if (nonce !== signature.slice(0, 64)) {
+    return { valid: false, pubkey, error: 'Nonce tag does not match signature' };
+  }
+  if (event.kind === BAO_COURT_ATTESTATION_KIND) {
+    const dispute = verifyDisputeAttestationVerdictHash({ event, tags });
+    if ('error' in dispute) return dispute.error;
+  }
+
+  const finality = parseV2FinalityFields(tags);
+  if ('error' in finality) return finality.error;
+
+  const pins = enforceV2ContextPins({ context, tags, fields: finality.value });
+  if ('error' in pins) return pins.error;
+
+  return verifyV2ContentAndSignature({ event, tags, fields: finality.value });
 }
 
 /**
@@ -630,6 +796,21 @@ const V2_ONLY_POLICY_FIELDS = [
  * or low-tier legacy attestation validate under v2 policy it never satisfied.
  * The dispatcher therefore fails closed: v2 policy on a v1-shaped event is a
  * downgrade and is rejected, not ignored.
+ */
+/**
+ * Validate a v1 OR v2 attestation event - the recommended entry point.
+ * Dispatches on the presence of an `epoch` tag (v2 in-band finality
+ * binding); v2-only policy fields requested against a v1 event fail closed.
+ * Malformed events return a typed `{ valid: false }` result, never a raw
+ * TypeError (r3-3).
+ *
+ * @example
+ * ```ts
+ * const result = validateCourtAttestation(rawEvent, {
+ *   expectedGroupPubkey: empaneledKey,
+ *   expectedEpoch: 7, minTier: 2, // enforced on v2 only
+ * });
+ * ```
  */
 export function validateCourtAttestation(
   event: NostrEvent,

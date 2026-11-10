@@ -42,6 +42,7 @@
  * randomness source directly.
  */
 
+import { CourtError } from './errors';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
@@ -107,13 +108,11 @@ export type CourtRecoveryErrorCode =
   | 'certificate_mismatch';
 
 /** Error thrown by every fail-closed recovery gate. */
-export class CourtRecoveryError extends Error {
-  readonly code: CourtRecoveryErrorCode;
+export class CourtRecoveryError extends CourtError {
+  declare readonly code: CourtRecoveryErrorCode;
 
   constructor(code: CourtRecoveryErrorCode, message: string) {
-    super(message);
-    this.name = 'CourtRecoveryError';
-    this.code = code;
+    super(code, message);
   }
 }
 
@@ -1004,6 +1003,22 @@ export async function createCourtRecoveryEnvelope(params: {
  * selection / block events) - NEVER taken from the envelope. `params.now` is
  * the required injected clock. The recovered share is the only secret output;
  * see the warning on {@link CourtRecoveredShare}.
+ *
+ * @throws {@link CourtRecoveryError} (typed codes - see
+ *         {@link CourtRecoveryErrorCode}: `wrong_identity`,
+ *         `decrypt_failed`, `integrity_mismatch`,
+ *         `group_key_mismatch`, `certificate_mismatch`, …) on the first
+ *         failed check - nothing is partially trusted.
+ *
+ * @example
+ * ```ts
+ * const recovered = await restoreCourtRecovery(envelope, {
+ *   signer,                      // NIP-46/NIP-07 session of the SAME juror
+ *   sessionParameters,           // independently reconstructed + validated
+ *   now: nowSec,
+ * });
+ * // recovered.dkg → rejoin the cohort; never log recovered.share.
+ * ```
  */
 export async function restoreCourtRecovery(
   envelope: unknown,

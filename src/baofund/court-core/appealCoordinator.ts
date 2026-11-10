@@ -21,6 +21,7 @@
  * full ceremony in-process - events are signed but not broadcast.
  */
 
+import { AppealError } from './errors';
 import type { Event as NostrEvent, Filter } from 'nostr-tools';
 import { verifyEvent } from 'nostr-tools/pure';
 import {
@@ -50,8 +51,18 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { computePhaseBounds, getActivePhase, TEST_APPEAL_TIMINGS, DEFAULT_APPEAL_TIMINGS } from './appealTiming';
 import type { AppealPhase, AppealTimings, DkgRecord, DisputeCase, FrostAttestation, JurorProfile, SelectedJuror, StakeCommitment } from './types';
 
+/**
+ * Coordinator deployment environment: `test` (short timings, vote
+ * simulation allowed), `demo`, or `prod` (bond verification and full
+ * signature checking enforced).
+ */
 export type FrostEnvironment = 'test' | 'demo' | 'prod';
 
+/**
+ * Lifecycle phase of one appeal: `pending` → `opt_in` → `selection` →
+ * `dkg` → `vote_commit` → `vote_reveal` → `signing` →
+ * `attestation_published` → terminal `settled` / `refund`.
+ */
 export type FrostAppealPhase =
   | 'pending'
   | 'opt_in'
@@ -64,6 +75,12 @@ export type FrostAppealPhase =
   | 'settled'
   | 'refund';
 
+/**
+ * Full in-memory state of one appeal: dispute case, phase, candidacies,
+ * selected jury, DKG record, vote ledger, signing artifacts, and settlement
+ * bookkeeping. Mutable by design (single-process coordinator); snapshots
+ * are the host's responsibility.
+ */
 export interface FrostAppealState {
   readonly disputeId: string;
   readonly marketId: string;
@@ -113,6 +130,10 @@ export interface FrostAppealState {
   reselectionDeadline: number;
 }
 
+/**
+ * Host-injected event signer: finalizes an event template into a signed
+ * Nostr event (NIP-07, NIP-46 bunker, or a local key).
+ */
 export type NostrEventSigner = (event: {
   kind: number;
   tags: string[][];
@@ -130,6 +151,12 @@ export interface FrostRelayPool {
   querySync(relayUrls: string[], filter: Filter): Promise<NostrEvent[]>;
 }
 
+/**
+ * Construction options for the appeal coordinator. Transport (relayPool +
+ * relayUrls), signer injection, timings, DKG adapter, eligibility floors,
+ * and the bond-verification wiring are all host policy; the coordinator
+ * never opens sockets or holds keys itself.
+ */
 export interface FrostAppealCoordinatorConfig {
   readonly relayUrls: string[];
   /** Host-injected relay transport. Without it the ceremony runs in-process
@@ -186,6 +213,10 @@ export interface FrostAppealCoordinatorConfig {
   readonly empaneledGroupKeys?: readonly string[];
 }
 
+/**
+ * Notification emitted on coordinator lifecycle transitions (phase change,
+ * settlement, refund), for host UI/logging hooks.
+ */
 export interface FrostAppealCoordinatorEvent {
   readonly type: string;
   readonly disputeId: string;
@@ -195,6 +226,10 @@ export interface FrostAppealCoordinatorEvent {
   readonly timestamp: number;
 }
 
+/**
+ * The coordinator handle: polling lifecycle, appeal registry, event
+ * subscription, and settlement from a validated attestation.
+ */
 export interface FrostAppealCoordinator {
   start(): void;
   stop(): void;
@@ -220,6 +255,32 @@ const KIND_FROST_COMMIT = 39005;
 const KIND_FROST_REVEAL = 39006;
 const KIND_ATTESTATION = 39007;
 
+/**
+ * Create the single-process appeal coordinator that runs the full JIT
+ * ceremony (paper §5): listen for disputes, collect candidacies, publish
+ * the selection, run DKG, tally commit/reveal votes, run FROST signing,
+ * publish the attestation.
+ *
+ * Transport and signing are host-injected; without a relayPool the ceremony
+ * runs in-process (events signed but never broadcast). Vote simulation is
+ * test-environment-only and can never fabricate a prod verdict.
+ *
+ * Failure modes: {@link AppealError} (code `APPEAL_STATE` and friends) on
+ * illegal lifecycle operations; bond/settlement failures fail closed - a
+ * settlement without a locally stored DKG record and a matching
+ * empaneled-key allow-list entry is rejected.
+ *
+ * @example
+ * ```ts
+ * const coord = createFrostAppealCoordinator({
+ *   relayUrls: ['wss://relay.example'],
+ *   relayPool: new SimplePool(),
+ *   environment: 'prod',
+ *   signer: nip07Signer,
+ * });
+ * coord.start();
+ * ```
+ */
 export function createFrostAppealCoordinator(
   config: FrostAppealCoordinatorConfig,
 ): FrostAppealCoordinator {
@@ -317,7 +378,7 @@ export function createFrostAppealCoordinator(
     if (nip07?.signEvent) {
       return async (e) => nip07.signEvent(e);
     }
-    throw new Error('No signer available');
+    throw new AppealError('APPEAL_STATE', 'No signer available');
   }
 
   async function publishEvent(template: { kind: number; tags: string[][]; content: string }): Promise<NostrEvent> {
@@ -583,7 +644,7 @@ export function createFrostAppealCoordinator(
           if (existing && existing.commitHash !== parsed.commitHash) {
             // Equivocation: two different commits from the same selected
             // juror. Fail closed - abort the attempt, never pick one.
-            maybeReselect(appeal, 'vote_equivocation', new Error('conflicting vote commits'));
+            maybeReselect(appeal, 'vote_equivocation', new AppealError('conflicting vote commits'));
             break;
           }
           appeal.voteCommits.set(parsed.jurorIdx, {
@@ -650,7 +711,7 @@ export function createFrostAppealCoordinator(
         if (!verdict.outcome) {
           // No valid reveal among the signed commits: never attest a claim
           // or an empty outcome.
-          maybeReselect(appeal, 'vote_failed', new Error('no_valid_reveals: cannot tally a verdict'));
+          maybeReselect(appeal, 'vote_failed', new AppealError('no_valid_reveals: cannot tally a verdict'));
           break;
         }
         appeal.verdictOutcome = verdict.outcome;
@@ -691,7 +752,7 @@ export function createFrostAppealCoordinator(
             // Same fail-closed path as any other signing failure: reselect
             // from backups or refund - never attest a claim or an empty
             // outcome.
-            maybeReselect(appeal, 'signing_failed', new Error('no_verdict: cannot sign without a tally winner'));
+            maybeReselect(appeal, 'signing_failed', new AppealError('no_verdict: cannot sign without a tally winner'));
             break;
           }
           const commitments = createCommitments(signingShares);
@@ -834,7 +895,7 @@ export function createFrostAppealCoordinator(
     // must never be used for draw inputs. (Node >= 19 and all browsers
     // expose the WebCrypto global.)
     if (typeof globalThis === 'undefined' || typeof globalThis.crypto === 'undefined' || typeof globalThis.crypto.getRandomValues !== 'function') {
-      throw new Error('No CSPRNG (crypto.getRandomValues) available for Court coordinator');
+      throw new AppealError('APPEAL_STATE', 'No CSPRNG (crypto.getRandomValues) available for Court coordinator');
     }
     const out = new Uint8Array(n);
     globalThis.crypto.getRandomValues(out);

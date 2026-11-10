@@ -36,6 +36,7 @@ export {
   verifyFinalSignature,
   verifySchnorr,
   createProofOfKnowledge,
+  dkgPokDomain,
   verifyProofOfKnowledge,
   frost,
 } from './crypto';
@@ -513,6 +514,7 @@ export {
   deriveSelectionSeed,
   jurorRandomValue,
   quadraticPriority,
+  weightedPriority,
   filterEligibleJurors,
   selectJury,
   selectJuryWithBackups,
@@ -583,6 +585,7 @@ export {
   BAO_COURT_BATCH_ATTESTATION_KIND,
   buildBatchMerkleTree,
   buildBatchMerkleProof,
+  buildBatchMerkleProofs,
   hashBatchManifest,
   buildBatchAttestationEvent,
   validateBatchAttestationEvent,
@@ -607,3 +610,24 @@ export {
   buildAttestationMessageV2,
   type AttestationV2Field,
 } from './crypto';
+
+// --- Unified error taxonomy (v0.10.1) ----------------------------------------
+
+export {
+  CourtError,
+  CourtArgumentError,
+  CourtDkgError,
+  IndependentDkgError,
+  IndependentSigningError,
+  FrostSigningError,
+  CourtSelectionError,
+  EscrowLedgerError,
+  LnHoldLedgerError,
+  LnRailError,
+  LiquidEscrowError,
+  TaprootSpendError,
+  CourtCryptoError,
+  CourtSignerError,
+  AppealError,
+} from './errors';
+export type { CourtErrorOptions } from './errors';

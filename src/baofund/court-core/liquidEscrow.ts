@@ -14,17 +14,28 @@
  * The script does NOT read the tally (ADR-001 negative): enforcement is
  * economic - the court signs the branch matching its verdict, hosts execute.
  *
- * @see docs/SETTLEMENT-RAILS-PLAN.md (status internal)
+ * @see docs/SETTLEMENT-RAILS.md
  * @see ADR-001 (docs/architecture/adr/001-juror-escrow-design.md in bao.markets)
  */
 
+import { CourtArgumentError, LiquidEscrowError } from './errors';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes as nobleHexToBytes } from '@noble/hashes/utils.js';
+
+/** Boundary-safe hex decode: malformed hex surfaces as CourtArgumentError
+ * (docs/FORMAL_INVARIANTS.md §15.3), never as the decoder's raw Error. */
+function hexToBytes(hex: string): Uint8Array {
+  try {
+    return nobleHexToBytes(hex);
+  } catch (cause) {
+    throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: malformed hex string', { cause });
+  }
+}
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 
 const Point = secp256k1.Point;
 
-// ── Micro helpers: pushdata + bech32 (no external deps) ─────────────────────
+// -- Micro helpers: pushdata + bech32 (no external deps) ---------------------
 
 const textEncoder = new TextEncoder();
 
@@ -72,12 +83,16 @@ function concatBytes(...arrs: Uint8Array[]): Uint8Array {
 
 /** OP_N for 1..16 (0 is FALSE/empty). */
 function opN(n: number): number {
-  if (n < 1 || n > 16) throw new Error(`liquidEscrow: OP_N out of range ${n}`);
+  if (n < 1 || n > 16) throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: OP_N out of range ${n}`);
   return OP.OP_1 + (n - 1);
 }
 
-// ── Script trees ─────────────────────────────────────────────────────────────
+// -- Script trees -------------------------------------------------------------
 
+/**
+ * Parameters of the P2WSH M-of-N multisig lock: 1-15 compressed or x-only
+ * pubkeys and threshold `m` with 1 ≤ m ≤ n.
+ */
 export interface MultiSigParams {
   /** Compressed 33-byte or x-only 32-byte hex pubkeys, 1..15 of them. */
   readonly pubkeys: readonly string[];
@@ -92,13 +107,13 @@ export interface MultiSigParams {
 export function buildMultisigScript(params: MultiSigParams): string {
   const { pubkeys, threshold } = params;
   if (!Number.isInteger(threshold) || threshold < 1) {
-    throw new Error(`liquidEscrow: threshold must be >= 1, got ${threshold}`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: threshold must be >= 1, got ${threshold}`);
   }
   if (pubkeys.length < threshold) {
-    throw new Error(`liquidEscrow: pubkey count ${pubkeys.length} < threshold ${threshold}`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: pubkey count ${pubkeys.length} < threshold ${threshold}`);
   }
   if (pubkeys.length > 15) {
-    throw new Error('liquidEscrow: at most 15 pubkeys (16-ary limit)');
+    throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: at most 15 pubkeys (16-ary limit)');
   }
   // normalize each pubkey to 33-byte compressed when x-only given
   const normalized: Uint8Array[] = pubkeys.map((pk) => {
@@ -108,7 +123,7 @@ export function buildMultisigScript(params: MultiSigParams): string {
       const point = pointFromXOnly(b);
       return hexToBytes(point.toHex(true)); // 33-byte compressed
     }
-    if (b.length !== 33) throw new Error(`liquidEscrow: pubkey length ${b.length}`);
+    if (b.length !== 33) throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: pubkey length ${b.length}`);
     return b;
   });
 
@@ -130,9 +145,13 @@ function pointFromXOnly(xOnly: Uint8Array): ReturnType<typeof Point.fromHex> {
       // wrong parity, try next
     }
   }
-  throw new Error('liquidEscrow: cannot lift x-only pubkey to curve point');
+  throw new LiquidEscrowError('LIQUID_STATE', 'liquidEscrow: cannot lift x-only pubkey to curve point');
 }
 
+/**
+ * Parameters of the taproot escrow tree (paper §6.1): winner key, oracle
+ * key, funder/refund key, and the refund CLTV locktime.
+ */
 export interface TaprootEscrowParams {
   /** Winner pubkey (32-byte x-only hex). */
   readonly winnerXOnly: string;
@@ -181,7 +200,7 @@ export function buildTaprootLeaves(params: TaprootEscrowParams): {
  */
 export function locktimeToPush(locktime: number): Uint8Array {
   if (!Number.isInteger(locktime) || locktime < 0 || locktime > 0xffffffff) {
-    throw new Error(`liquidEscrow: invalid locktime ${locktime}`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: invalid locktime ${locktime}`);
   }
   if (locktime === 0) return new Uint8Array([OP.FALSE]);
   const bytes: number[] = [];
@@ -195,13 +214,13 @@ export function locktimeToPush(locktime: number): Uint8Array {
   return pushHex(bytesToHex(Uint8Array.from(bytes)));
 }
 
-// ── Address derivation ───────────────────────────────────────────────────────
+// -- Address derivation -------------------------------------------------------
 
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 
 /** Convert 5-bit groups to characters. `bech32m` selects the v1 constant. */
 function encodeBech32(hrp: string, data: Uint8Array, limit: number, bech32m = false): string {
-  if (data.length > limit) throw new Error('bech32: data too long');
+  if (data.length > limit) throw new CourtArgumentError('LIQUID_ARGUMENT', 'bech32: data too long');
   const CONST = bech32m ? 0x2bc830a3 : 1;
   const gen = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
   // polymod over hrp-expanded || data || [0;6]
@@ -233,6 +252,9 @@ function polymodStep(pm: number, v: number, gen: readonly number[]): number {
   return p >>> 0;
 }
 
+/**
+ * Bech32/bech32m HRPs for one Liquid-style network (P2WSH + taproot).
+ */
 export interface LiquidNetworkParams {
   /** Human-readable part for P2WSH (e.g. 'tex' for Liquid testnet, 'tlb' signet-ish). */
   readonly p2wshHrp: string;
@@ -242,6 +264,7 @@ export interface LiquidNetworkParams {
 
 /** Widely-used HRPs: Liquid mainnet uses 'ex'/'lq', testnet 'tex'/'tq', signet varies. */
 export const LIQUID_MAINNET: LiquidNetworkParams = { p2wshHrp: 'ex', taprootHrp: 'lq' };
+/** Liquid testnet HRPs: P2WSH `tex`, taproot `tq`. */
 export const LIQUID_TESTNET: LiquidNetworkParams = { p2wshHrp: 'tex', taprootHrp: 'tq' };
 /** BAO signet Liquid uses the testnet HRPs with signet asset ids on-chain. */
 export const BAO_SIGNET: LiquidNetworkParams = { p2wshHrp: 'tex', taprootHrp: 'tq' };
@@ -272,8 +295,8 @@ function to5BitWords(bytes: Uint8Array): number[] {
 
 /** 32-byte program body + witness version word (0..16) → bech32 word array. */
 function programToWords(programBody: Uint8Array, versionWord: number): Uint8Array {
-  if (programBody.length !== 32) throw new Error(`liquidEscrow: program body must be 32 bytes, got ${programBody.length}`);
-  if (versionWord < 0 || versionWord > 16) throw new Error(`liquidEscrow: bad witness version ${versionWord}`);
+  if (programBody.length !== 32) throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: program body must be 32 bytes, got ${programBody.length}`);
+  if (versionWord < 0 || versionWord > 16) throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: bad witness version ${versionWord}`);
   const words = to5BitWords(programBody);
   return Uint8Array.from([versionWord, ...words]);
 }
@@ -347,7 +370,7 @@ export function tapMerkleRoot(leaves: readonly string[]): string {
 
   function merkle(list: Uint8Array[]): Uint8Array {
     if (list.length === 0) {
-      throw new Error('liquidEscrow: cannot compute merkle root of an empty leaf list');
+      throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: cannot compute merkle root of an empty leaf list');
     }
     if (list.length === 1) return list[0];
     // Bitcoin Core's taproot_tree_helper splits at len // 2, NOT at the
@@ -364,10 +387,10 @@ export function tapMerkleRoot(leaves: readonly string[]): string {
 /** Taproot v1 program from the internal key (x-only) - script path via merkle root. */
 export function taprootProgram(internalKeyXOnly: string, merkleRootHex?: string): Uint8Array {
   const key = hexToBytes(internalKeyXOnly);
-  if (key.length !== 32) throw new Error('liquidEscrow: taproot internal key must be 32-byte x-only');
+  if (key.length !== 32) throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: taproot internal key must be 32-byte x-only');
   const merkle = merkleRootHex === undefined ? new Uint8Array(0) : hexToBytes(merkleRootHex);
   if (merkleRootHex !== undefined && merkle.length !== 32) {
-    throw new Error('liquidEscrow: merkle root must be 32 bytes');
+    throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: merkle root must be 32 bytes');
   }
   const P = pointFromXOnly(key);
   // BIP-341: t = int(hash_TapTweak(P || h)); h is empty when there is no
@@ -378,7 +401,7 @@ export function taprootProgram(internalKeyXOnly: string, merkleRootHex?: string)
   const tweakHash = taggedHash('TapTweak/elements', key, merkle);
   const t = bytesToScalar(tweakHash);
   if (t >= Point.Fn.ORDER) {
-    throw new Error('liquidEscrow: taproot tweak exceeds the curve order');
+    throw new LiquidEscrowError('LIQUID_STATE', 'liquidEscrow: taproot tweak exceeds the curve order');
   }
   // Q = P + t*G, x-only. BIP-341 does NOT force even Y on Q: the parity of Q
   // is carried in the script-path control block (and for key-path spending
@@ -403,8 +426,9 @@ export function taprootAddress(internalKeyXOnly: string, merkleRootHex: string |
   return encodeBech32(net.taprootHrp, words, 84, true);
 }
 
-// ── Transaction skeleton ─────────────────────────────────────────────────────
+// -- Transaction skeleton -----------------------------------------------------
 
+/** One escrow-funding UTXO (court-side skeleton view). */
 export interface LiquidUtxo {
   readonly txid: string;
   readonly vout: number;
@@ -414,11 +438,17 @@ export interface LiquidUtxo {
   readonly scriptHex: string;
 }
 
+/** One release output: recipient script + amount in sats. */
 export interface LiquidRecipient {
   readonly scriptHex: string;
   readonly amountSats: number;
 }
 
+/**
+ * Court-side release transaction skeleton: inputs, recipients, totals, and
+ * the implied fee. The host confirms outpoints, adds change, and
+ * broadcasts; this is a plan, not a signed transaction.
+ */
 export interface ReleaseSkeleton {
   /** Inputs (host confirms outpoints). */
   readonly inputs: readonly LiquidUtxo[];
@@ -442,21 +472,21 @@ export function buildReleaseSkeleton(
   recipients: readonly LiquidRecipient[],
   minFeeSats = 1_000,
 ): ReleaseSkeleton {
-  if (inputs.length === 0) throw new Error('liquidEscrow: no inputs');
-  if (recipients.length === 0) throw new Error('liquidEscrow: no recipients');
+  if (inputs.length === 0) throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: no inputs');
+  if (recipients.length === 0) throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: no recipients');
   for (const r of recipients) {
     if (!Number.isInteger(r.amountSats) || r.amountSats <= 0) {
-      throw new Error(`liquidEscrow: invalid recipient amount ${r.amountSats}`);
+      throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: invalid recipient amount ${r.amountSats}`);
     }
     if (r.scriptHex.length === 0 || r.scriptHex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(r.scriptHex)) {
-      throw new Error('liquidEscrow: recipient script must be even-length hex');
+      throw new CourtArgumentError('LIQUID_ARGUMENT', 'liquidEscrow: recipient script must be even-length hex');
     }
   }
   const inSats = inputs.reduce((n, u) => n + u.amountSats, 0);
   const outSats = recipients.reduce((n, r) => n + r.amountSats, 0);
   const feeSats = inSats - outSats;
   if (feeSats < minFeeSats) {
-    throw new Error(`liquidEscrow: fee ${feeSats} < min ${minFeeSats}`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: fee ${feeSats} < min ${minFeeSats}`);
   }
   return { inputs, recipients, inSats, outSats, feeSats };
 }
@@ -471,17 +501,17 @@ export function assembleMultisigWitness(
   threshold: number,
 ): string[] {
   if (partialSigs.length < threshold) {
-    throw new Error(`liquidEscrow: ${partialSigs.length} sigs < threshold ${threshold}`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: ${partialSigs.length} sigs < threshold ${threshold}`);
   }
   return ['', ...partialSigs];
 }
 
-// ── Assertion: script length sanity + known vectors guard ───────────────────
+// -- Assertion: script length sanity + known vectors guard -------------------
 
 /** Sanity: any built script must fit in a P2WSH (well below 10k limit). */
 export function assertScriptSane(scriptHex: string, maxLength = 10_000): void {
   const b = hexToBytes(scriptHex);
   if (b.length === 0 || b.length > maxLength) {
-    throw new Error(`liquidEscrow: script length ${b.length} out of sane range`);
+    throw new CourtArgumentError('LIQUID_ARGUMENT', `liquidEscrow: script length ${b.length} out of sane range`);
   }
 }
