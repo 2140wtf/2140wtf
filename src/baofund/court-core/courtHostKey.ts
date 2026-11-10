@@ -39,6 +39,7 @@
  *   it can and dropping references immediately.
  */
 
+import { CourtError } from './errors';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
@@ -97,13 +98,11 @@ export type CourtHostKeyErrorCode =
   | 'destroyed';
 
 /** Typed error for every host-key failure; `code` is the machine-readable reason. */
-export class CourtHostKeyError extends Error {
-  readonly code: CourtHostKeyErrorCode;
+export class CourtHostKeyError extends CourtError {
+  declare readonly code: CourtHostKeyErrorCode;
 
   constructor(code: CourtHostKeyErrorCode, message: string) {
-    super(message);
-    this.name = 'CourtHostKeyError';
-    this.code = code;
+    super(code, message);
   }
 }
 
@@ -536,6 +535,13 @@ function freezeEnvelope(
  * `signer`. The secret transits as plaintext only inside the signer's NIP-44
  * session-key derivation; intermediate byte copies are zeroized before
  * return (see the module header for the honest JS guarantee limits).
+ *
+ * @example
+ * ```ts
+ * const key = generateCourtHostKey({ now: nowSec });
+ * const envelope = await createCourtHostKeyBackup(key, signer);
+ * await persist(envelope); // host-owned durable storage
+ * ```
  */
 export async function createCourtHostKeyBackup(
   key: CourtHostKey,

@@ -2,8 +2,20 @@
 
 /**
  * Dispute override signing for the BAO Court / FROST appeal layer.
+ *
+ * Pipeline role: the legacy/simulation-side companion to the ceremony
+ * pipeline - tallies a commit/reveal vote ledger directly (the imperative
+ * path, vs the `courtVoteMachine` machine path) and runs the FROST signing
+ * round that produces a dispute attestation (paper §5). The legacy commit
+ * format is domain-separated (`BAO-Court/LegacyVoteCommit/v1`) so the two
+ * paths cannot be confused.
+ *
+ * Purity: all functions are pure over their inputs; `runDisputeOverrideSigning`
+ * delegates to `signing.ts` (whose only side effect is nonce-guard
+ * consumption). No I/O, no clock.
  */
 
+import { CourtArgumentError } from './errors';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
@@ -30,10 +42,10 @@ export function hashCommit(outcome: string, salt: string): string {
   // machine path's 32-byte hex salt) so pre-existing integrations keep working.
   const outcomeBytes = new TextEncoder().encode(String(outcome));
   if (typeof outcome !== 'string' || outcome.length === 0 || outcomeBytes.length > 256) {
-    throw new Error('outcome must be a non-empty string of at most 256 bytes');
+    throw new CourtArgumentError('DISPUTE_ARGUMENT', 'outcome must be a non-empty string of at most 256 bytes');
   }
   if (typeof salt !== 'string' || salt.length === 0) {
-    throw new Error('salt must be a non-empty string');
+    throw new CourtArgumentError('DISPUTE_ARGUMENT', 'salt must be a non-empty string');
   }
   const writer = new CanonicalWriter();
   writer.text(outcome);
@@ -47,6 +59,11 @@ export function hashCommit(outcome: string, salt: string): string {
   return (Number.parseInt(digest[0], 16) & LEGACY_COMMIT_VERSION_MASK).toString(16) + digest.slice(1);
 }
 
+/**
+ * Result of a legacy-path tally: winning outcome, the supporting revealed
+ * votes, and the commit-mismatched reveals (excluded from the count,
+ * surfaced as slashing evidence).
+ */
 export interface TallyResult {
   readonly outcome: string;
   readonly supportingVotes: JurorVote[];
@@ -59,6 +76,19 @@ export interface TallyResult {
   readonly invalidReveals: JurorVote[];
 }
 
+/**
+ * Tally a legacy commit/reveal vote ledger: verify each reveal against its
+ * commit (`hashCommit`), count valid votes per outcome, and pick the winner
+ * with the canonical UTF-8 byte-order tie-break (identical to
+ * `courtVoteMachine.finalize_tally`, so both paths agree on the verdict).
+ * A mismatched reveal never aborts the count. O(n) over votes.
+ *
+ * @example
+ * ```ts
+ * const { outcome, supportingVotes, invalidReveals } = tallyVotes(votes);
+ * if (invalidReveals.length) flagForSlashing(invalidReveals);
+ * ```
+ */
 export function tallyVotes(
   votes: readonly JurorVote[],
 ): TallyResult {
@@ -104,11 +134,27 @@ export function tallyVotes(
  * attestation signatures - anyone could sign for it. It exists for demo
  * contracts that need a deterministic dispute key; keep it out of any path
  * that authenticates real value.
+ *
+ * Domain separation note (crypto literature audit 2026-11): the digest input
+ * is the raw concatenation `groupPubkey ‖ disputeId` - deliberately outside
+ * the CanonicalWriter grammar for demo-data continuity. Injectivity of the
+ * concatenation is guaranteed by CONTRACT, not by encoding: the group pubkey
+ * is enforced to be exactly 64 chars (any bytes - hex-ness is not required
+ * for injectivity, only the fixed width) below, so the boundary between the
+ * two fields is fixed and no (groupPubkey, disputeId) pair can alias
+ * another. The v1 attestation validator never trusts this key (the
+ * docstring's warning), so a misbinding here cannot forge attestations.
  */
 export function deriveDisputeGroupPubkey(
   normalGroupPubkey: string,
   disputeId: string,
 ): string {
+  if (typeof normalGroupPubkey !== 'string' || normalGroupPubkey.length !== 64) {
+    throw new CourtArgumentError('DISPUTE_ARGUMENT', 'normalGroupPubkey must be exactly 64 chars (fixed-width concat boundary)');
+  }
+  if (typeof disputeId !== 'string' || disputeId.length === 0 || disputeId.length > 512) {
+    throw new CourtArgumentError('DISPUTE_ARGUMENT', 'disputeId must be a non-empty string of at most 512 chars');
+  }
   const order = secp256k1.Point.Fn.ORDER;
   let digest = sha256(new TextEncoder().encode(normalGroupPubkey + disputeId));
   let scalar = bytesToNumberBE(digest) % order;
@@ -122,6 +168,12 @@ export function deriveDisputeGroupPubkey(
   return bytesToHex(pk);
 }
 
+/**
+ * Inputs to dispute override signing: the dispute case, the DKG record and
+ * the caller's shares, the outcome (defaults to the dispute's proposed
+ * outcome), the dispute verdict commitment (required for real
+ * attestations), and the supporting reveal event ids.
+ */
 export interface DisputeSigningParams {
   readonly dispute: DisputeCase;
   readonly dkg: DkgRecord;
@@ -137,6 +189,14 @@ export interface DisputeSigningParams {
   readonly supportingEventIds?: readonly string[];
 }
 
+/**
+ * Run the full dispute-override signing round: FROST-sign the attestation
+ * message (round 1, dispute-bound) and decorate the result with
+ * kind 39007, the dispute event id, verdict hash, and supporting ids.
+ *
+ * @throws {@link FrostSigningError} (from {@link runNormalSigningRound}) on
+ *         nonce reuse, malformed shares, or a failed aggregate check.
+ */
 export function runDisputeOverrideSigning(
   params: DisputeSigningParams,
 ): FrostAttestation {

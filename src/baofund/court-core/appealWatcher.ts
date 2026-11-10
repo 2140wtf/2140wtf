@@ -14,6 +14,7 @@
  * (`handleEvent`/`handleEvents`) works without any pool.
  */
 
+import { AppealError } from './errors';
 import type { Event as NostrEvent, Filter } from 'nostr-tools';
 import { validateAttestationEvent } from './validator';
 
@@ -31,6 +32,11 @@ export interface FrostWatcherRelayPool {
   ): { close(): void };
 }
 
+/**
+ * Construction options for the appeal watcher: relays, the host-injected
+ * relay pool, an optional group-pubkey resolver for unwatched markets, and
+ * the `watchAll` mode.
+ */
 export interface FrostAppealWatcherConfig {
   readonly relays: string[];
   /**
@@ -51,6 +57,10 @@ export interface FrostAppealWatcherConfig {
   watchAll?: boolean;
 }
 
+/**
+ * A validated appeal resolution ready for host settlement: market, outcome,
+ * dispute event id, signing group key, and the attestation event id.
+ */
 export interface FrostAppealResolution {
   readonly marketId: string;
   readonly outcome: string;
@@ -59,11 +69,29 @@ export interface FrostAppealResolution {
   readonly eventId: string;
 }
 
+/**
+ * Host callbacks: `onResolution` fires once per accepted attestation
+ * (deduplicated by event id, including in-flight redeliveries);
+ * `onError` receives validation errors with the offending event.
+ */
 export interface FrostAppealWatcherCallbacks {
   readonly onResolution?: (resolution: FrostAppealResolution) => void | Promise<void>;
   readonly onError?: (error: Error, event: NostrEvent) => void;
 }
 
+/**
+ * Listens for Kind 39007 FROST attestations and routes validated override
+ * outcomes into the host settlement flow (paper §5).
+ *
+ * Every event is validated through {@link validateAttestationEvent} against
+ * the market's pinned group pubkey before any callback fires; duplicates are
+ * deduplicated by event id (including concurrent redeliveries). Transport
+ * is host-injected - subscription methods need a pool, direct
+ * `handleEvent`/`handleEvents` do not.
+ *
+ * LIMIT: the watcher validates attestations but performs NO settlement
+ * itself; hosts own fund movement.
+ */
 export class FrostAppealWatcher {
   private readonly relays: string[];
   private readonly pool?: FrostWatcherRelayPool;
@@ -219,13 +247,22 @@ export class FrostAppealWatcher {
       const validation = validateAttestationEvent(event, groupPubkey);
       if (!validation.valid) {
         this.callbacks.onError?.(
-          new Error(validation.error ?? 'Invalid FROST attestation'),
+          new AppealError(validation.error ?? 'Invalid FROST attestation'),
           event,
         );
         return null;
       }
 
-      const outcome = event.tags.find((t) => t[0] === 'o' || t[0] === 'outcome')?.[1];
+      // R8 adversarial-nostr round: the reported outcome must be the tag the
+      // validator authenticated. The previous read preferred the single-letter
+      // `o` tag, which is NOT part of any kind-39007 builder's tag set - a
+      // hostile re-publisher of a valid attestation could append an extra
+      // ['o', <anything>] tag and steer the reported resolution outcome away
+      // from the FROST-certified one (the event's own signature only proves
+      // the untrusted publisher signed it). validation.outcome is
+      // uniqueTag-checked, mirrored in content, and bound into the signed
+      // attestation message.
+      const outcome = validation.outcome;
       if (!outcome) return null;
 
       const disputeEventId = event.tags.find((t) => t[0] === 'dispute')?.[1] ?? '';
@@ -256,7 +293,7 @@ export class FrostAppealWatcher {
     }
     if (this.marketGroupPubkeys.size === 0 && !this.watchAllMarkets) return;
     if (!this.pool) {
-      throw new Error(
+      throw new AppealError('APPEAL_STATE', 
         'FrostAppealWatcher: live subscriptions require a host-injected SimplePool (config.pool)',
       );
     }

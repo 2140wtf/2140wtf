@@ -21,6 +21,7 @@
  * tampered or malformed protocol data - only malformed call arguments throw).
  */
 
+import { CourtError, CourtErrorOptions } from './errors';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -30,10 +31,14 @@ import { HEX_32 } from './courtCeremonyCore';
 import { CanonicalWriter } from './courtSession';
 import { hashCourtVerdict } from './courtVoteMachine';
 
+/** Kind number for batch attestation events (one signature per epoch cohort). */
 export const BAO_COURT_BATCH_ATTESTATION_KIND = 39018;
 
+/** Domain string for batch leaf digests (per-verdict). */
 export const BATCH_LEAF_DOMAIN = 'BAO-Court/BatchLeaf/v1';
+/** Domain string for batch internal-node digests. */
 export const BATCH_NODE_DOMAIN = 'BAO-Court/BatchNode/v1';
+/** Domain string for the signed batch-manifest hash. */
 export const BATCH_MANIFEST_DOMAIN = 'BAO-Court/BatchManifest/v1';
 
 /** Maximum verdicts per batch - bounds tree/proof recursion resource use. */
@@ -49,11 +54,21 @@ export interface BatchMerkleProof {
   readonly path: readonly string[];
 }
 
+/**
+ * Outcome of a batch-attestation structural check: validity and a failure
+ * reason when invalid.
+ */
 export interface BatchAttestationValidationResult {
   readonly valid: boolean;
   readonly reason?: string;
 }
 
+/**
+ * Caller-pinned expectations for batch-attestation validation. Note the
+ * contract on `expectedGroupPubkey`: every consumer that derives reputation
+ * or settlement from a batch MUST pin the cohort key, otherwise any key can
+ * sign a self-selected manifest.
+ */
 export interface BatchAttestationValidationContext {
   /**
    * Pin the signing cohort's group key. MUST be set by every consumer that
@@ -74,10 +89,14 @@ export interface BatchAttestationValidationContext {
   readonly now?: number;
 }
 
-export class BatchAttestationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'BatchAttestationError';
+/**
+ * Error thrown on malformed batch-attestation inputs (bad hex, oversized
+ * batches, invalid trees/proofs). Code: `BATCH_ATTESTATION`
+ * (docs/FORMAL_INVARIANTS.md §15).
+ */
+export class BatchAttestationError extends CourtError {
+  constructor(message: string, options?: CourtErrorOptions) {
+    super('BATCH_ATTESTATION', message, options);
   }
 }
 
@@ -245,6 +264,7 @@ export function buildBatchMerkleTree(verdictHashes: readonly string[]): {
     if (seen.has(hash)) {
       throw new BatchAttestationError(
         'duplicate verdictHash makes batch proofs ambiguous',
+        { invariant: 'INV-BATCH-3' },
       );
     }
     seen.add(hash);
@@ -274,6 +294,85 @@ export function buildBatchMerkleProof(
     verdictHash: leaves[index]!,
     path: buildPath(leaves, 0, leaves.length, index),
   };
+}
+
+/**
+ * Build authentication paths for ALL leaves of an already-hashed (sorted)
+ * leaf array in one pass - O(n) node hashes + O(n log n) path slots, versus
+ * ~O(n²) node hashes for calling {@link buildBatchMerkleProof} per leaf.
+ *
+ * Technique: the RFC-6962 split recursion visits exactly 2n−1 distinct
+ * (lo, hi) subtrees, so hashing the full tree once into a node table (memo)
+ * costs O(n) `batchNode` calls; every proof then reads its O(log n) sibling
+ * hashes straight out of that table. The RFC-6962 unbalanced split means
+ * sibling subtrees have distinct (lo, hi) ranges per proof level, which the
+ * table keys on - no re-hash of any subtree ever happens.
+ *
+ * Memory trade (deliberate, shared): the node table is O(n) entries (2n−1:
+ * leaves + interior nodes) and every proof's path entries REFERENCE the same
+ * string objects (no copies),
+ * so the full proof set for 10k leaves costs ~O(n) retained hash material
+ * (~2n path slots ≈ a few MB) instead of materialising 2n−1 fresh strings
+ * per proof. Callers that keep the full set should treat the returned array
+ * as the proof material cache the BASELINE.md findings recommend building at
+ * batch-attest time.
+ *
+ * Output parity: for every index, the returned proof is identical (same
+ * index, same verdictHash, same path array contents and order) to
+ * {@link buildBatchMerkleProof} - pinned by the differential-parity suite,
+ * which verifies every production proof under the independent reference
+ * verifier for n = 1..128.
+ */
+export function buildBatchMerkleProofs(
+  leaves: readonly string[],
+): BatchMerkleProof[] {
+  assertLeafArray(leaves, 'leaves');
+  const n = leaves.length;
+  // Full node table. Key packs (lo, hi) injectively: lo * (n + 1) + hi ≤
+  // n * (n + 1) + n < 2^53 for every n ≤ MAX_BATCH_VERDICTS, so the packing
+  // is exact integer arithmetic (no float collision possible).
+  const stride = n + 1;
+  const nodes = new Map<number, string>();
+  const subtreeRootAt = (lo: number, hi: number): string => {
+    const key = lo * stride + hi;
+    let root = nodes.get(key);
+    if (root === undefined) {
+      if (hi - lo === 1) {
+        // Leaf level: memoize too, so every sibling lookup in the descent
+        // below hits the table (leaf entries reference the same string as
+        // the leaves array - no extra hash material).
+        root = leaves[lo]!;
+      } else {
+        const k = splitPoint(hi - lo);
+        root = batchNode(subtreeRootAt(lo, lo + k), subtreeRootAt(lo + k, hi));
+      }
+      nodes.set(key, root);
+    }
+    return root;
+  };
+  subtreeRootAt(0, n);
+  const proofs: BatchMerkleProof[] = new Array(n);
+  for (let index = 0; index < n; index += 1) {
+    // The path contract is NEAREST-THE-LEAF-FIRST (see buildPath), while this
+    // descent walks root → leaf - so fill the pre-sized array from the back.
+    const path: string[] = new Array(expectedPathLength(n, index));
+    let pos = path.length - 1;
+    let lo = 0;
+    let hi = n;
+    let target = index;
+    while (hi - lo > 1) {
+      const k = splitPoint(hi - lo);
+      if (target - lo < k) {
+        path[pos--] = nodes.get((lo + k) * stride + hi)!;
+        hi = lo + k;
+      } else {
+        path[pos--] = nodes.get(lo * stride + (lo + k))!;
+        lo += k;
+      }
+    }
+    proofs[index] = { index, verdictHash: leaves[index]!, path };
+  }
+  return proofs;
 }
 
 /**
@@ -330,6 +429,19 @@ function parseTagNumber(value: string | null): number | null {
  * The event id is the NIP-01 canonical serialization hash - the same
  * convention events.ts callers finalize with (getEventHash) - so the id
  * additionally commits to every tag, including the cohort signature.
+ *
+ * @throws {@link BatchAttestationError} on malformed epoch/cohort/root/
+ *         signature fields.
+ *
+ * @example
+ * ```ts
+ * const event = buildBatchAttestationEvent({
+ *   epoch: 7, cohortPubkey, batchIndex: 0, count: verdictHashes.length,
+ *   root: buildBatchMerkleTree(verdictHashes).root,
+ *   finalizedAtSec: nowSec, signature: aggregateHex,
+ *   createdAt: nowSec,
+ * });
+ * ```
  */
 export function buildBatchAttestationEvent(params: {
   readonly epoch: number;
@@ -402,6 +514,14 @@ export function validateBatchAttestationEvent(
   try {
     if (typeof event !== 'object' || event === null || !Array.isArray(event.tags)) {
       return { valid: false, reason: 'malformed event' };
+    }
+    // F-2: a present-but-empty group-key pin is a caller misconfiguration,
+    // NOT "no pin" - fail closed instead of silently disabling the pin.
+    if (ctx?.expectedGroupPubkey !== undefined && ctx.expectedGroupPubkey.length === 0) {
+      return {
+        valid: false,
+        reason: 'expectedGroupPubkey pin must be a non-empty group pubkey',
+      };
     }
     if (event.kind !== BAO_COURT_BATCH_ATTESTATION_KIND) {
       return {
@@ -548,6 +668,15 @@ export function validateBatchAttestationEvent(
  * is per-batch: the same verdictHash may appear in multiple epoch batches
  * and each verification is independent - deduplicate by verdictHash before
  * deriving reputation (SEQUENCE-2).
+ *
+ * @example
+ * ```ts
+ * const proof = buildBatchMerkleProof(verdictHashes, index);
+ * const check = verifyCaseInBatch(batchEvent, {
+ *   sessionHash, outcome, supportingEventIds, proof,
+ * }, { expectedGroupPubkey });
+ * if (!check.valid) rejectBatch(check.reason);
+ * ```
  */
 export function verifyCaseInBatch(
   event: NostrEvent,

@@ -304,3 +304,93 @@ confirmation pipeline with real Schnorr signatures).
 - `npx vitest run src/hooks src/components/bao-court` → 40 files / 257 passed
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync — bao-court v0.10.2 + PR #73 (a66baa4)
+
+Synced the v0.9.1→v0.10.2 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.10.2** (8910a88) plus main `a66baa4`
+(PR #73, docs/proofs only — no engine surface) and bumped the npm dep
+`@bao/court` `#v0.9.1` → `#v0.10.2` (lockfile re-resolved via explicit
+`npm install @bao/court@github:baocommunity/bao-court#v0.10.2`; resolves to
+the exact tag commit 8910a88). The upstream delta spans v0.9.2..v0.10.2:
+clock ledgers (F-12), crypto-literature audit (A-1/A-2/A-3), adversarial
+nostr/parser hardening, the unified error taxonomy (errors.ts), the
+complexity pass machine/event splits, the shared test-helpers kit, and the
+JSDoc/documentation rounds.
+
+## What changed
+
+**New modules (copied in clean):**
+- `errors.ts` — unified `CourtError` taxonomy (code + invariant); 176 plain
+  `throw new Error` sites upstream are now typed domain errors. Consumer
+  impact: additive (names/messages unchanged; `instanceof CourtError` new).
+- `eventsCommon.ts` + `eventsParse.ts` — `events.ts` split (parser
+  hardening; `events.ts` keeps the public surface, imports unchanged).
+- `confirmationMachineTypes.ts` / `confirmationMachineCore.ts` /
+  `confirmationMachineHandlers.ts` — `courtConfirmationMachine.ts` split
+  (reducer dispatch tables); public surface unchanged.
+
+**Updated files:** all other engine modules refreshed to a66baa4
+(crypto.ts PoK domain/concat-boundary hardening, courtSigningMachine/
+courtDkgMachine monotonic clock ledgers, validator v2 pin enforcement +
+dispatch tables, selection/signing/escrow/liquidEscrow/lnSettlement
+reorganizations, index.ts re-exports).
+
+**New tests vendored:** `invariantAssertions.test.ts` (v0.9.2),
+`cryptoLiteratureAudit.test.ts` (v0.9.3), `adversarialNostr.test.ts`
+(v0.9.4), `modelChecking.test.ts` + `modelCheckingCore.ts` +
+`differentialParity.test.ts` + `reference/*` + `errorTaxonomy.test.ts`
+(v0.10.1), `adversarialParserFuzz.test.ts` (v0.10.2, upstream rename of
+`courtFuzz.test.ts` which this engine never vendored), the shared
+`__tests__/helpers/` kit (#61) and `__fixtures__/model-check-summary.json`
+(read by modelChecking.test.ts; upstream path layout works unmodified).
+
+**Updated tests synced:** adversarialMachines, adversarialCrossModule,
+attestationV2Validator, attestationValidator.adversarial, batchAttestation,
+confirmationPipeline, courtConfirmationMachine, epochCohort, independentDkg,
+multiRoundLadder, properties{Batch,Confirmation,Validator}, r3Findings,
+regressions (all re-based onto the helpers kit where upstream did).
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above (em/en/word-joiner
+   dashes → `-`; box-drawing U+2500 SECTION-RULE runs → `-`, tree-diagram
+   glyphs `├─ └─ ┌─ ─┐ ┤` kept; `©`, `→`, `≤`, `≥`, `…`, `§` kept).
+   `differentialParity.test.ts` carries raw binary fixture bytes and is
+   copied byte-exact with NO normalization.
+2. **jsdom `kp()` fix, relocated to `__tests__/helpers/keys.ts`:** upstream
+   consolidated the keypair helpers into `schnorrKeypair()` /
+   `schnorrKeypairHex()` (node:crypto `randomBytes`); both now wrap in
+   `Uint8Array.from(...)` (same cross-realm `abytes()` issue as v0.8.1).
+   With the consolidation, the per-file fixes from earlier syncs
+   (attestationV2Validator, attestationValidator.adversarial,
+   confirmationPipeline) are absorbed into the shared helper — those files
+   now import `schnorrKeypair as kp` from helpers and need no local edit.
+   `adversarialNostr.test.ts` `finalizeEvent(template, randomBytes(32))`
+   got the same wrap at its call site.
+3. **`run()` harness typing, relocated to `__tests__/helpers/machines.ts`:**
+   upstream's `drive()` keeps `readonly E[]`; the client version is
+   `readonly unknown[]` with a cast at the reduce call (same rationale as
+   v0.8.4 — the client tsconfig typechecks `__tests__`, inline event
+   literals widen `type` to `string`).
+4. **Fixture path in `__tests__/helpers/fixtures.ts`:** upstream reads the
+   fixture with `new URL('../../__fixtures__/…', import.meta.url)`; under
+   the client's jsdom vitest environment `new URL` does not resolve
+   relative hrefs against a `file:` base (it re-resolves against the
+   document URL → ERR_INVALID_URL_SCHEME). Rewritten to the client pattern
+   `dirname(fileURLToPath(import.meta.url))` + `join(...)`.
+5. **Not vendored (unchanged policy):** upstream `docs/`, `scripts/`
+   (reproduce.sh, cross-check.mjs, model-check.mjs, bench helpers), `bench/`
+   — the engine carries code + tests + the committed model-check fixture
+   only. The model-check EXPLORER script stays in bao-court; the committed
+   fixture pins the full-sweep results for the vitest side.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` → 24 files / 838 tests passed
+  (was 17 files / 674)
+- `npx vitest run src/hooks src/components/bao-court` → 43 files / 277 passed
+- `npx tsc --noEmit` → exit 0
+- `npx vite build` → exit 0

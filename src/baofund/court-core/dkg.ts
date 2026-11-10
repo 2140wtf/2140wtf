@@ -28,11 +28,12 @@
  * (browser/mobile/desktop) with encrypted peer-to-peer channels.
  */
 
+import { CourtArgumentError, CourtDkgError } from './errors';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import * as frost from '@vbyte/frost';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
-import { createProofOfKnowledge, deriveXOnlyPubkey, randomScalar, scalarToHex, seededScalar, verifyProofOfKnowledge } from './crypto';
+import { createProofOfKnowledge, deriveXOnlyPubkey, dkgPokDomain, randomScalar, scalarToHex, seededScalar, verifyProofOfKnowledge } from './crypto';
 import type { DkgRecord, SelectedJuror } from './types';
 
 const Point = secp256k1.Point;
@@ -41,6 +42,13 @@ const N = secp256k1.Point.Fn.ORDER;
 type CurvePoint = InstanceType<typeof Point>;
 const MAX_DKG_PARTICIPANTS = 10_000;
 
+/**
+ * Reduce a scalar modulo the secp256k1 group order, mapping into
+ * `[0, N)` (negative inputs wrap to their positive residue).
+ *
+ * @param x - Any bigint (may be negative).
+ * @returns `x mod N`, always in `[0, N)`. O(1).
+ */
 export function modN(x: bigint): bigint {
   const r = x % N;
   return r < 0n ? r + N : r;
@@ -98,7 +106,7 @@ export function mergeRefreshCommitments(
   refreshCommits: readonly string[],
 ): string[] {
   if (refreshCommits.length !== originalCommits.length - 1) {
-    throw new Error('Refresh commitment count must be one less than the threshold');
+    throw new CourtArgumentError('DKG_ARGUMENT', 'Refresh commitment count must be one less than the threshold');
   }
   const orig = originalCommits.map((c) => Point.fromHex(c));
   const refr = refreshCommits.map((c) => Point.fromHex(c));
@@ -109,6 +117,12 @@ export function mergeRefreshCommitments(
   return merged.map((p) => p.toHex(true));
 }
 
+/**
+ * Encode a curve point as a 66-char BIP-340 x-only hex string (the 02/03
+ * parity prefix of the compressed form is dropped).
+ *
+ * @returns Lowercase x-only hex. O(1).
+ */
 export function pointToXOnlyHex(point: CurvePoint): string {
   // Drop the 02/03 prefix from the compressed encoding to obtain a BIP340 x-only pubkey.
   return point.toHex(true).slice(2);
@@ -132,10 +146,10 @@ export function generateRefreshShares(
   recipientIdxs: readonly number[],
 ): { vss_commits: string[]; idx: number; shares: frost.SecretShare[] } {
   if (threshold < 2) {
-    throw new Error('Threshold must be at least 2');
+    throw new CourtArgumentError('DKG_ARGUMENT', 'Threshold must be at least 2');
   }
   if (recipientIdxs.length === 0 || recipientIdxs.some((i) => !Number.isInteger(i) || i < 1)) {
-    throw new Error('Recipient indices must be positive integers');
+    throw new CourtArgumentError('DKG_ARGUMENT', 'Recipient indices must be positive integers');
   }
   const subCoeffs = Array.from({ length: threshold - 1 }, () => randomScalar());
   const coeffs = [0n, ...subCoeffs];
@@ -147,6 +161,10 @@ export function generateRefreshShares(
   return { vss_commits, idx: senderIdx, shares };
 }
 
+/**
+ * Construction options for {@link PedersenDkgAdapter}. All non-default
+ * options are test-only.
+ */
 export interface PedersenDkgOptions {
   /**
    * When true, enables test/demo-only features: deterministic `seed` keygen
@@ -167,6 +185,12 @@ export interface PedersenDkgOptions {
   readonly corruptPok?: { readonly accused: number };
 }
 
+/**
+ * One participant's local DKG state: their juror record, private polynomial
+ * coefficients, public Feldman commitments, and proof of knowledge of the
+ * constant coefficient. Contains secrets - never serialize to public
+ * channels.
+ */
 export interface ParticipantState {
   readonly juror: SelectedJuror;
   readonly coeffs: readonly bigint[];
@@ -174,6 +198,10 @@ export interface ParticipantState {
   readonly pok: ReturnType<typeof createProofOfKnowledge>;
 }
 
+/**
+ * Inputs to a DKG keygen run: market (and optional dispute) scope, threshold
+ * `t`, the selected jurors, and - test-only - a deterministic seed.
+ */
 export interface KeygenParams {
   readonly marketId: string;
   /** Optional dispute id (2140wtf scopes DKG to a dispute). */
@@ -188,16 +216,27 @@ export interface KeygenParams {
   readonly seed?: string | Uint8Array;
 }
 
+/**
+ * Output of a DKG keygen run: the public {@link DkgRecord} (commitments,
+ * group pubkey, participant state) and the per-participant secret shares.
+ * Shares are secrets - distribute them over encrypted channels only.
+ */
 export interface KeygenResult {
   readonly record: DkgRecord;
   readonly shares: frost.SecretShare[];
 }
 
+/** Inputs to a proactive share refresh: the existing record and all shares. */
 export interface RefreshParams {
   readonly record: DkgRecord;
   readonly shares: readonly frost.SecretShare[];
 }
 
+/**
+ * Output of a share refresh: the updated {@link DkgRecord} (refresh
+ * commitments merged) and the new shares. Old shares are void after a
+ * successful refresh.
+ */
 export interface RefreshResult {
   readonly record: DkgRecord;
   readonly shares: frost.SecretShare[];
@@ -210,6 +249,25 @@ export interface DkgAdapter {
   readonly run: (params: KeygenParams) => KeygenResult;
   readonly refreshShares: (params: RefreshParams) => RefreshResult;
 }
+/**
+ * Pedersen (Feldman-VSS + proofs of knowledge) DKG adapter.
+ *
+ * Simulates the full multi-party DKG in one local process; every juror
+ * contributes a degree-`(t-1)` polynomial, publishes Feldman commitments and
+ * a Schnorr proof of knowledge, and verifies every received share
+ * (complaint/defense/disqualification via `dkgMessages.ts`). The group
+ * secret is never materialized in one place. Complexity: O(n²·t) share
+ * generation/verification for n participants, threshold t.
+ *
+ * Failure modes: {@link CourtDkgError} (code `DKG_STATE`, plus
+ * complaint-related codes) on verification failures; {@link CourtArgumentError}
+ * (code `DKG_ARGUMENT`) on malformed parameters. Test-only fault injection
+ * (`corruptShare`/`corruptPok`) requires `unsafeTestMode: true`.
+ *
+ * Limits: single-process simulation of the protocol - a production
+ * deployment must distribute share exchange over encrypted peer-to-peer
+ * channels (see `independentDkg.ts` and the module header note).
+ */
 export class PedersenDkgAdapter implements DkgAdapter {
   private readonly unsafeTestMode: boolean;
   private readonly corruptShare?: {
@@ -222,7 +280,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
   constructor(options?: PedersenDkgOptions) {
     this.unsafeTestMode = options?.unsafeTestMode ?? false;
     if ((options?.corruptShare || options?.corruptPok) && !this.unsafeTestMode) {
-      throw new Error('corruptShare/corruptPok require unsafeTestMode: true');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'corruptShare/corruptPok require unsafeTestMode: true');
     }
     this.corruptShare = options?.corruptShare;
     this.corruptPok = options?.corruptPok;
@@ -231,14 +289,14 @@ export class PedersenDkgAdapter implements DkgAdapter {
   private proofDomain(idx: number): string {
     const marketId = this.paramsForProofDomain?.marketId ?? '';
     const disputeId = this.paramsForProofDomain?.disputeId ?? '';
-    return `market=${marketId}|dispute=${disputeId}|juror=${idx}`;
+    return dkgPokDomain(marketId, disputeId, idx);
   }
 
   run(params: KeygenParams): KeygenResult {
     this.validateParams(params);
 
     if (params.seed && !this.unsafeTestMode) {
-      throw new Error(
+      throw new CourtArgumentError('DKG_ARGUMENT', 
         'Deterministic DKG seed is only allowed in unsafeTestMode. ' +
           'A shared seed in production lets any juror reconstruct the group secret.',
       );
@@ -254,7 +312,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
     );
 
     if (qualifiedParticipants.length < threshold) {
-      throw new Error(
+      throw new CourtDkgError('DKG_STATE', 
         `Pedersen DKG failed: ${qualifiedParticipants.length} qualified participants remain, ` +
           `but threshold is ${threshold}`,
       );
@@ -293,7 +351,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
       const expected = deriveXOnlyPubkey(share.seckey);
       const actual = verificationShares.find((v) => v.idx === share.idx)?.pubkey;
       if (actual !== expected) {
-        throw new Error(
+        throw new CourtDkgError('DKG_STATE', 
           `Pedersen DKG internal error: verification share mismatch for juror ${share.idx}`,
         );
       }
@@ -357,7 +415,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
     const refreshedShares = jurors.map((juror) => {
       const current = shares.find((s) => s.idx === juror.idx);
       if (!current) {
-        throw new Error(`Missing current share for juror ${juror.idx}`);
+        throw new CourtDkgError('DKG_STATE', `Missing current share for juror ${juror.idx}`);
       }
       const refreshShares = refreshPackages.map((pkg) =>
         frost.Lib.get_share(pkg.shares, juror.idx),
@@ -369,7 +427,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
     const mergedVssCommitments = jurors.map((juror, i) => {
       const original = record.vssCommitments.find((c) => c.idx === juror.idx);
       if (!original) {
-        throw new Error(`Missing original commitments for juror ${juror.idx}`);
+        throw new CourtDkgError('DKG_STATE', `Missing original commitments for juror ${juror.idx}`);
       }
       return {
         idx: juror.idx,
@@ -392,7 +450,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
       const expected = deriveXOnlyPubkey(share.seckey);
       const actual = verificationShares.find((v) => v.idx === share.idx)?.pubkey;
       if (actual !== expected) {
-        throw new Error(
+        throw new CourtDkgError('DKG_STATE', 
           `Refresh internal error: verification share mismatch for juror ${share.idx}`,
         );
       }
@@ -406,7 +464,7 @@ export class PedersenDkgAdapter implements DkgAdapter {
     const groupPubkeyXOnly = pointToXOnlyHex(groupPoint);
 
     if (groupPubkey !== record.groupPubkey) {
-      throw new Error('Refresh changed the group public key');
+      throw new CourtDkgError('DKG_STATE', 'Refresh changed the group public key');
     }
 
     const newRecord: DkgRecord = {
@@ -422,62 +480,62 @@ export class PedersenDkgAdapter implements DkgAdapter {
 
   private validateRefreshParams(params: RefreshParams): void {
     if (!Number.isSafeInteger(params.record.participants) || params.record.participants < 1) {
-      throw new Error('Record must specify a positive participant count');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Record must specify a positive participant count');
     }
     if (params.shares.length !== params.record.participants) {
-      throw new Error('Share count does not match record participants');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Share count does not match record participants');
     }
     if (!Number.isSafeInteger(params.record.threshold) || params.record.threshold < 2) {
-      throw new Error('Threshold must be a safe integer of at least 2');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Threshold must be a safe integer of at least 2');
     }
     if (params.record.threshold > MAX_DKG_PARTICIPANTS) {
-      throw new Error(`Threshold must be at most ${MAX_DKG_PARTICIPANTS}`);
+      throw new CourtArgumentError('DKG_ARGUMENT', `Threshold must be at most ${MAX_DKG_PARTICIPANTS}`);
     }
     const indices = new Set(params.shares.map((s) => s.idx));
     if (indices.size !== params.shares.length) {
-      throw new Error('Duplicate share indices');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Duplicate share indices');
     }
     for (const share of params.shares) {
       if (!Number.isSafeInteger(share.idx) || share.idx < 1) {
-        throw new Error(`Share index ${share.idx} is not a valid positive integer`);
+        throw new CourtArgumentError('DKG_ARGUMENT', `Share index ${share.idx} is not a valid positive integer`);
       }
       const vss = params.record.vssCommitments.find((c) => c.idx === share.idx);
       if (!vss) {
-        throw new Error(`No commitment found for share index ${share.idx}`);
+        throw new CourtArgumentError('DKG_ARGUMENT', `No commitment found for share index ${share.idx}`);
       }
     }
   }
 
   private validateParams(params: KeygenParams): void {
     if (!Number.isSafeInteger(params.threshold) || params.threshold < 2) {
-      throw new Error('Threshold must be a safe integer of at least 2');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Threshold must be a safe integer of at least 2');
     }
     if (params.threshold > MAX_DKG_PARTICIPANTS) {
-      throw new Error(`Threshold must be at most ${MAX_DKG_PARTICIPANTS}`);
+      throw new CourtArgumentError('DKG_ARGUMENT', `Threshold must be at most ${MAX_DKG_PARTICIPANTS}`);
     }
     if (params.jurors.length > MAX_DKG_PARTICIPANTS) {
-      throw new Error(`Participants must be at most ${MAX_DKG_PARTICIPANTS}`);
+      throw new CourtArgumentError('DKG_ARGUMENT', `Participants must be at most ${MAX_DKG_PARTICIPANTS}`);
     }
     if (params.jurors.length < params.threshold) {
-      throw new Error('Participants cannot be less than threshold');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Participants cannot be less than threshold');
     }
     const indices = new Set(params.jurors.map((j) => j.idx));
     if (indices.size !== params.jurors.length) {
-      throw new Error('Duplicate juror indices');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Duplicate juror indices');
     }
     // Reject duplicate public keys: two jurors with the same pubkey could
     // split the threshold and control multiple shares.
     const pubkeys = new Set(params.jurors.map((j) => j.nostrPubkey));
     if (pubkeys.size !== params.jurors.length) {
-      throw new Error('Duplicate juror public keys');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Duplicate juror public keys');
     }
     for (const juror of params.jurors) {
       if (!/^[0-9a-f]{64}$/.test(juror.nostrPubkey)) {
-        throw new Error('Juror public keys must be canonical 32-byte lowercase hex');
+        throw new CourtArgumentError('DKG_ARGUMENT', 'Juror public keys must be canonical 32-byte lowercase hex');
       }
     }
     if (!Number.isSafeInteger(params.jurors[0]?.idx) || params.jurors.some((j) => j.idx < 1)) {
-      throw new Error('Juror indices must be positive safe integers');
+      throw new CourtArgumentError('DKG_ARGUMENT', 'Juror indices must be positive safe integers');
     }
   }
 
@@ -621,19 +679,19 @@ export function verifyRefreshShare(
  */
 export function combineShares(shares: readonly { idx: number; shareHex: string }[]): frost.SecretShare {
   if (shares.length === 0) {
-    throw new Error('combineShares requires at least one share');
+    throw new CourtArgumentError('DKG_ARGUMENT', 'combineShares requires at least one share');
   }
   const idx = shares[0].idx;
   if (!Number.isInteger(idx) || idx < 1) {
-    throw new Error(`Invalid recipient index: ${idx}`);
+    throw new CourtArgumentError('DKG_ARGUMENT', `Invalid recipient index: ${idx}`);
   }
   if (shares.some((s) => s.idx !== idx)) {
-    throw new Error('All shares must belong to the same recipient index');
+    throw new CourtArgumentError('DKG_ARGUMENT', 'All shares must belong to the same recipient index');
   }
   let secret = 0n;
   for (const s of shares) {
     if (!/^[0-9a-fA-F]{1,64}$/.test(s.shareHex)) {
-      throw new Error(`Invalid share hex from sender index ${s.idx}`);
+      throw new CourtArgumentError('DKG_ARGUMENT', `Invalid share hex from sender index ${s.idx}`);
     }
     secret = modN(secret + BigInt('0x' + s.shareHex));
   }
@@ -641,7 +699,16 @@ export function combineShares(shares: readonly { idx: number; shareHex: string }
 }
 
 /**
- * Default keygen - Pedersen DKG.
+ * Default keygen - Pedersen DKG ({@link PedersenDkgAdapter} with default
+ * options). Convenience wrapper; construct the adapter directly when you
+ * need fault-injection or a swappable {@link DkgAdapter}.
+ *
+ * @example
+ * ```ts
+ * const { record, shares } = generateFrostKeys({
+ *   marketId, threshold: 3, jurors: selectedJury,
+ * });
+ * ```
  */
 export function generateFrostKeys(params: KeygenParams): KeygenResult {
   return new PedersenDkgAdapter().run(params);

@@ -1,5 +1,6 @@
 // Copyright © 2026 baocommunity - licenced under AGPL-3.0 (see LICENSE.txt).
 
+import { CourtArgumentError } from './errors';
 import { nip44 } from 'nostr-tools';
 import { hexToBytes } from '@noble/hashes/utils.js';
 
@@ -9,6 +10,14 @@ import { hexToBytes } from '@noble/hashes/utils.js';
  * Implementations may be backed by a raw secret key (e.g. nsec stored locally)
  * or by an external signer such as a browser extension or NIP-46 bunker that
  * never exposes the private key.
+ *
+ * Pipeline role: the crypto seam beneath the NIP-59 transport
+ * (`nip59.ts`, `courtSigner.ts`) and the share-backup/recovery envelopes -
+ * wherever gift-wrapped confidentiality is needed.
+ *
+ * Purity: implementations perform key derivation + symmetric crypto only;
+ * they MUST NOT perform I/O or network access. Secret keys are copied at the
+ * boundary and never aliased.
  */
 export interface Nip44Crypto {
   encrypt(plaintext: string, peerPubkey: string): Promise<string> | string;
@@ -19,7 +28,7 @@ function normalizeSeckey(seckey: string | Uint8Array): Uint8Array {
   // Copy at the boundary so caller-held buffers never alias our secret.
   const bytes = typeof seckey === 'string' ? hexToBytes(seckey) : new Uint8Array(seckey);
   if (bytes.length !== 32) {
-    throw new Error('seckey must be 32 bytes');
+    throw new CourtArgumentError('CRYPTO_ARGUMENT', 'seckey must be 32 bytes');
   }
   return bytes;
 }

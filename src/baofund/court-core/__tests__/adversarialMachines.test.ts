@@ -51,78 +51,20 @@ const PROPOSAL = '33'.repeat(32);
 const SALT = 'aa'.repeat(32);
 const DEADLINE = 500;
 
-const hexId = (prefix: string): string => prefix.padEnd(64, '0');
-
-/** Dispatch a sequence, returning the final state (first throw propagates). */
-function run<S, E>(
-  state: S,
-  // client adaptation: events stay untyped here — this is the adversarial
-  // harness, where deliberately malformed/hostile events are the input under
-  // test and the machines' runtime guards (not tsc) are the assertion. The
-  // client tsconfig typechecks __tests__ (upstream excludes them), and inline
-  // event literals widen `type` to `string`, which no longer assigns to the
-  // closed machine event unions now that unknown types fail closed.
-  events: readonly unknown[],
-  reduce: (state: S, event: E) => S,
-): S {
-  let current = state;
-  for (const event of events) current = reduce(current, event as E);
-  return current;
-}
+// Shared helpers (see docs/TESTING_GUIDE.md): ids, asserts, machine factories
+// and steppers - the local copies this file used to hand-roll live there now.
+import { padHexId as hexId } from './helpers/ids';
+import { drive as run, voteMachine as makeVoteMachine, voteCommitEvent, voteRevealEvent, voteClosedReveals, confirmationMachine as makeConfirmationMachine, confirmHashFor as confirmHash, confirmationAt } from './helpers/machines';
+import { expectTypedOrOk, assertDeeplyFrozen } from './helpers/asserts';
 
 /** Expect a typed transition error (or no throw); never an untyped crash. */
-function expectTypedOrOk(fn: () => unknown, ErrorCtor: new (m: string) => Error): void {
-  try {
-    fn();
-  } catch (err) {
-    expect(err).toBeInstanceOf(ErrorCtor);
-  }
-}
 
-// ---------------------------------------------------------------------------
-// Vote machine helpers
-// ---------------------------------------------------------------------------
+const voteMachine = (allowedOutcomes: string[] = ['YES', 'NO'], roster: number[] = [1, 2, 3]) =>
+  makeVoteMachine({ allowedOutcomes, participantIndices: roster });
 
-function voteMachine(allowedOutcomes: string[] = ['YES', 'NO'], roster: number[] = [1, 2, 3]) {
-  return createCourtVoteMachine({
-    sessionHash: SESSION,
-    participantIndices: roster,
-    allowedOutcomes,
-    commitDeadline: 100,
-    revealDeadline: 200,
-  });
-}
+const voteCommit = (idx: number, outcome: string, salt = SALT) => voteCommitEvent(idx, outcome, { salt });
 
-const voteCommit = (idx: number, outcome: string, salt = SALT) => ({
-  type: 'accept_commit' as const,
-  idx,
-  commitHash: hashCourtVoteCommit({ sessionHash: SESSION, outcome, salt }),
-  eventId: hexId(`c${idx}0`),
-  now: 10 + idx,
-});
-
-const voteReveal = (idx: number, outcome: string, salt = SALT) => ({
-  type: 'accept_reveal' as const,
-  idx,
-  outcome,
-  salt,
-  eventId: hexId(`a${idx}0`),
-  now: 150 + idx,
-});
-
-function voteClosedReveals(outcomes: string[]): CourtVoteMachineState {
-  let state = voteMachine(['YES', 'NO', ...outcomes.filter((o) => o !== 'YES' && o !== 'NO')]);
-  outcomes.forEach((outcome, offset) => {
-    state = reduceCourtVoteMachine(state, voteCommit(offset + 1, outcome));
-  });
-  state = reduceCourtVoteMachine(state, { type: 'close_commits', now: 100 });
-  state = reduceCourtVoteMachine(state, { type: 'open_reveals', now: 101 });
-  outcomes.forEach((outcome, offset) => {
-    state = reduceCourtVoteMachine(state, voteReveal(offset + 1, outcome));
-  });
-  state = reduceCourtVoteMachine(state, { type: 'close_reveals', now: 200 });
-  return state;
-}
+const voteReveal = (idx: number, outcome: string, salt = SALT) => voteRevealEvent(idx, outcome, { salt });
 
 // ---------------------------------------------------------------------------
 // Signing machine helpers
@@ -199,58 +141,12 @@ function dkgAt(phase: CourtDkgMachineState['phase']): CourtDkgMachineState {
 }
 
 // ---------------------------------------------------------------------------
-// Confirmation machine helpers
+// Confirmation machine helpers - factories/steppers imported from helpers/machines
+// (makeConfirmationMachine aliased below keeps the local positional signature).
 // ---------------------------------------------------------------------------
 
-function confirmationMachine(allowedOutcomes: string[] = ['YES', 'NO']) {
-  return createCourtConfirmationMachine({
-    sessionHash: SESSION,
-    proposalHash: PROPOSAL,
-    proposedOutcome: 'YES',
-    allowedOutcomes,
-    participantIndices: [1, 2, 3],
-    confirmQuorum: 1,
-    confirmDeadline: 100,
-    challengeDeadline: 200,
-  });
-}
-
-const confirmHash = (idx: number) =>
-  hashCourtConfirmation({ sessionHash: SESSION, proposalHash: PROPOSAL, idx });
-
-function confirmationAt(phase: CourtConfirmationMachineState['phase']): CourtConfirmationMachineState {
-  let state = confirmationMachine();
-  if (phase === 'confirm_open') return state;
-  state = reduceCourtConfirmationMachine(state, {
-    type: 'accept_confirmation', idx: 1, confirmHash: confirmHash(1), eventId: hexId('f10'), now: 10,
-  });
-  if (phase === 'confirm_closed') {
-    return reduceCourtConfirmationMachine(state, { type: 'close_confirmations', now: 100 });
-  }
-  state = reduceCourtConfirmationMachine(state, { type: 'close_confirmations', now: 100 });
-  state = reduceCourtConfirmationMachine(state, { type: 'open_challenge_window', now: 101 });
-  if (phase === 'challenge_window') return state;
-  state = reduceCourtConfirmationMachine(state, {
-    type: 'accept_challenge', idx: 2, bondTxid: '55'.repeat(32), bondProofHash: '66'.repeat(32), eventId: hexId('f20'), now: 150,
-  });
-  state = reduceCourtConfirmationMachine(state, { type: 'close_challenge_window', now: 200 });
-  if (phase === 'ladder_pending') return state;
-  state = reduceCourtConfirmationMachine(state, { type: 'open_ladder_round', round: 1, voteDeadline: 400, now: 201 });
-  if (phase === 'ladder_vote_open') return state;
-  state = reduceCourtConfirmationMachine(state, {
-    type: 'accept_mass_vote', idx: 1, outcome: 'NO', eventId: hexId('f30'), now: 250,
-  });
-  state = reduceCourtConfirmationMachine(state, { type: 'close_ladder_round', now: 400 });
-  if (phase === 'ladder_vote_closed') return state;
-  state = reduceCourtConfirmationMachine(state, { type: 'resolve_round', now: 401 });
-  if (phase === 'round_resolved') return state;
-  // Round 1 of a maxLadderRounds=2 case parks in round_resolved; reaching
-  // fee_settlement requires the host's explicit concede (or escalate to
-  // round 2 and resolve it).
-  state = reduceCourtConfirmationMachine(state, { type: 'concede', now: 401 });
-  if (phase === 'fee_settlement') return state;
-  return reduceCourtConfirmationMachine(state, { type: 'finalize', now: 402 }); // final
-}
+const confirmationMachine = (allowedOutcomes: string[] = ['YES', 'NO']) =>
+  makeConfirmationMachine({ allowedOutcomes });
 
 // ===========================================================================
 // 1. Malformed event fields
@@ -437,11 +333,7 @@ describe('adversarial: ledger MAX boundaries (confirmation machine)', () => {
 // ===========================================================================
 
 describe('adversarial: state-object tampering (vote machine)', () => {
-  function assertDeeplyFrozen(value: unknown, path: string): void {
-    if (value === null || typeof value !== 'object') return;
-    expect(Object.isFrozen(value), `${path} must be frozen`).toBe(true);
-    for (const [key, child] of Object.entries(value)) assertDeeplyFrozen(child, `${path}.${key}`);
-  }
+  // assertDeeplyFrozen imported from helpers/asserts.
 
   it('deep-freezes every returned state (configuration, ledgers, verdict, failure)', () => {
     let state = voteMachine();
@@ -825,7 +717,9 @@ describe('adversarial: state-object tampering (signing machine)', () => {
   it('non-object events and unknown event types fail closed', () => {
     const state = signingFinalized();
     expect(() => reduceCourtSigningMachine(state, null as never)).toThrow(CourtSigningTransitionError);
-    expect(() => reduceCourtSigningMachine(state, { type: 'strike' } as never)).toThrow(/unknown signing event type/);
+    // A valid clock first (the F-12 monotonic-ledger guard runs at reducer
+    // entry, exactly as on the vote machine), then the unknown-type branch.
+    expect(() => reduceCourtSigningMachine(state, { type: 'strike', now: 10_000 } as never)).toThrow(/unknown signing event type/);
   });
 
   it('accepts exactly-threshold partials and rejects threshold-1', () => {
@@ -898,7 +792,9 @@ describe('adversarial: state-object tampering (DKG machine)', () => {
 
   it('non-object events and unknown event types fail closed', () => {
     expect(() => reduceCourtDkgMachine(dkgMachine(), null as never)).toThrow(CourtDkgTransitionError);
-    expect(() => reduceCourtDkgMachine(dkgMachine(), { type: 'strike' } as never)).toThrow(/unknown DKG event type/);
+    // A valid clock first (the F-12 monotonic-ledger guard runs at reducer
+    // entry, exactly as on the vote machine), then the unknown-type branch.
+    expect(() => reduceCourtDkgMachine(dkgMachine(), { type: 'strike', now: 10 } as never)).toThrow(/unknown DKG event type/);
   });
 
   it('non-iterable roster fails closed at creation', () => {
