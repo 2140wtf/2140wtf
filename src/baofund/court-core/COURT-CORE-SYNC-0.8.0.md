@@ -893,3 +893,40 @@ the vendored engine + `helpers/ids.ts` (already vendored, unmodified upstream).
 - `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
 - `npx tsc --noEmit --incremental false` -> exit 0
 - `npx vite build` -> exit 0
+
+# court-core vendor sync - bao-court v0.13.2 (8bac1bc)
+
+Synced the bd5e788 -> v0.13.2 delta from `baocommunity/bao-court` tag
+**v0.13.2** (`8bac1bc` = release commit, one commit before `origin/main`
+`1b33b2f`) and pinned the npm dep `@bao/court`
+`#bd5e788670d95f9c7e23dab58e62313a3e7b6ad9` -> `#v0.13.2` (lockfile re-resolved
+via `npm install --package-lock-only @bao/court@github:baocommunity/bao-court#v0.13.2`;
+resolves to the exact release commit `8bac1bc298c88e5b7ed1eb8e63d77f4361d7f18f`,
+version `0.13.2`).
+
+## What changed
+
+**No engine change.** `git diff --stat bd5e788..v0.13.2` is docs/manifest only
+(`CHANGELOG.md`, `README.md`, `docs/CROSS_CHECK.md`,
+`docs/FROST_COURT_ORACLE_PAPER.md`, `package.json` version) - the v0.13.2
+machine behaviour (review-rounds 4-6 fixes, sign-based ladder bound, strict
+round-bond default) was already vendored in the previous bd5e788 sync. The
+post-tag commit `1b33b2f` (#111) adds `docs/REVIEWS_INDEX.md` plus cross
+references, also docs-only. **`src/baofund/court-core/` is byte-unchanged by
+this sync**, and no client adaptation had to be re-applied.
+
+**Review round 7 is not vendored: it is in flight upstream.** The reviews index
+records it as "in flight at the time of this index" and `docs/REVIEW_ROUND_7.md`
+does not exist at `origin/main`; it arrives with its own upstream PR.
+
+**Changed files in this sync (2):** `package.json` (dep pin) and
+`package-lock.json` (resolved sha + version). Docs deltas stay unvendored, as
+always (engine + tests + fixtures only).
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 40 files / 1,066 tests passed
+  (unchanged from the bd5e788 sync - docs-only delta)
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
