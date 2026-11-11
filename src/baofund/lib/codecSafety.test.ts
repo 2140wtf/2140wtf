@@ -180,6 +180,15 @@ describe('byte codecs - repo source scan', () => {
     'src/lib/sp/indexer.ts',
     'src/lib/sp/storage.ts',
     'src/worker/lnaddrWorker.ts',
+    // 2140 vendored court engine (`src/baofund/court-core`, a byte-exact
+    // mirror of baocommunity/bao-court). Like the host modules above, the
+    // engine is self-contained and owns its strict hex codecs by design:
+    // `hexToBytes` there rejects short/long/non-hex input for the tapscript
+    // builders, which is not an app-level shadow helper. Local edits are not
+    // allowed in this tree (it is overwritten on every vendor sync), so the
+    // rule is exempt here rather than "fixed" in the mirror.
+    'src/baofund/court-core/liquidEscrow.ts',
+    'src/baofund/court-core/taprootSpend.ts',
   ];
 
   it('no private hex/bytes codec helpers in repo source', () => {

@@ -500,3 +500,126 @@ The client is unaffected, verified rather than assumed:
   `waitFor` under host load; re-run green, and that file passes 62/62 alone)
 - `npx tsc --noEmit` -> exit 0
 - `npx vite build` -> exit 0
+
+---
+
+# court-core vendor sync - bao-court v0.12.0 (0364180)
+
+Synced the v0.11.0 -> v0.12.0 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.12.0** (0364180, "docs(changelog): remove
+duplicated v0.12.0 section"; the release itself is 4d26c1c) and bumped the npm
+dep `@bao/court` `#v0.11.0` -> `#v0.12.0` (`npm install
+@bao/court@github:baocommunity/bao-court#v0.12.0`; the lockfile resolves to the
+exact tag commit 0364180cc9d221cfb44cb14977d45de1c980547b). The upstream delta
+spans bao-court PRs #89-#94: the round-2 audit (#90), the escalation-authority
+witness machine change (#92), the derived economic cap + deterministic budget +
+provenance reconciliation (#93) and the changelog dedup (#94).
+
+## What changed
+
+**Machine change (the one code change in this delta): the escalation move is
+now witness-bound in the MACHINE, not the host API.**
+
+- `confirmationMachineTypes.ts` - the `escalate` event gains `authority`
+  (`'challenger' | 'host'`), `challengerIdx`, `challengerPubkey`,
+  `requestHash`, `bondProofHash` and `roundIndex`; new
+  `CourtEscalationAuthority` / `CourtEscalationRecord` types; the state gains
+  the frozen `hostEscalation` policy flag (default false, fail-closed when
+  absent) and the append-only `escalationLog`.
+- `confirmationMachineHandlers.ts` - `onEscalate` previously IGNORED its event
+  (a host that spoke the reducer directly kept the appeal power). It now
+  validates: phase `round_resolved` + ladder cap; `roundIndex ===
+  ladderRound + 1` (no replay onto a later round); `authority` must be one of
+  the two; a challenger escalation needs a safe-integer roster index for a
+  case participant, 32-byte lowercase hex pubkey/request/bond hashes, and a
+  `bondProofHash` matching a bond the machine ALREADY accepted; a host
+  escalation needs the frozen `hostEscalation` policy and must carry no
+  challenger request. The accepted witness is appended to `escalationLog`.
+- `confirmationMachineCore.ts` - `freezeState` deep-freezes the escalation log.
+- `courtConfirmationMachine.ts` - factory records `hostEscalation` and an
+  empty `escalationLog`; new `challengerEscalationEvent(state, now, witness)`
+  and `hostEscalationEvent(state, now)` builders (they construct, the reducer
+  verifies); `reduceCourtConfirmationMachine` normalises a pre-0.12 snapshot
+  whose `escalationLog` is ABSENT to `[]` (a non-array value is still refused
+  by `assertStateArrays`).
+- `index.ts` - re-exports the two builders and the two escalation types.
+
+**Vendored tests:**
+- NEW `__tests__/escalationWitness.test.ts` (304 lines, 12 tests: unwitnessed
+  escalate is a typed error, only `ladderRound + 1` opens, outsider challenger
+  refused, malformed hashes refused, foreign bond refused, host authority
+  refused by default / legal under the frozen policy, append-only log,
+  pre-0.12 snapshot normalisation, `ladder_pending` reachable ONLY through a
+  witnessed escalation).
+- NEW `__tests__/helpers/budget.ts` (deterministic simulation budget helper,
+  `SIM_BUDGET_MS`, default 30 s, replacing the 5 s wall-clock gate).
+- Updated: `courtConfirmationMachine.test.ts`, `multiRoundLadder.test.ts`,
+  `propertiesConfirmation.test.ts`, `adversarialMachines.test.ts`,
+  `adversarialNostr.test.ts`, `mutationClosures.test.ts`,
+  `scale/confirmationCorpus.ts`, `helpers/asserts.ts`, `helpers/machines.ts`,
+  `modelChecking.test.ts`, `modelCheckingCore.ts` (probes the four illegal
+  escalations at every reachable state),
+  `__fixtures__/model-check-summary.json`.
+
+**Not vendored (unchanged policy):** upstream `docs/` (`REVIEW_ROUND_2.md`,
+`RELEASE_VERIFICATION_v0.11.0.md`, `FORMAL_INVARIANTS.md` INV-ESC-1..7,
+paper), `scripts/` (`cross-check.mjs`, `mutation/pass2-postclosure.json`),
+`bench/`, `proofs/`. `__tests__/simulateCourt.test.ts` stays unvendored (it has
+never been part of the client subset).
+
+## Hook/client check (the client is unaffected, verified not assumed)
+
+- **No client code constructs a confirmation machine or plays `escalate`.**
+  `grep` for `createCourtConfirmationMachine` /
+  `reduceCourtConfirmationMachine` / `CourtConfirmationMachineEvent` /
+  `escalationLog` / `ladder_pending` / `round_resolved` outside
+  `src/baofund/court-core` returns nothing (the only "escalation" hits are the
+  unrelated DM cool-down in `src/baofund/dm/`).
+- The court hooks read EVENTS, not machine state: `useBaoCourtSelection` reads
+  the kind-38030 selection event, `useBondEscrow` builds stake commitments,
+  `useDemoCourtRoom`/`baoCourtSimulator` read votes/attestations. Confirmation
+  status is derived from observed relay events (kind 39007/39018), so the new
+  `escalationLog`/`hostEscalation` state fields have no reader to break.
+- Event-shape risk is confined to the vendored engine's own tests, which are
+  updated with the machine (the old bare `{type:'escalate', now}` literal is now
+  a typed rejection by design - that is the fix, and `__tests__/helpers/
+  machines.ts` gained the witnessed-move helpers upstream).
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization, per file, matching each file's established
+   convention** (the tree is not uniform, so the transform was inferred per
+   file by reproducing the v0.11.0 bytes exactly before writing v0.12.0):
+   em/en/figure/non-breaking dashes -> `-` and U+2500 runs -> `-` of the same
+   width for `confirmationMachineCore.ts`, `confirmationMachineHandlers.ts`,
+   `confirmationMachineTypes.ts`, `index.ts`, `escalationWitness.test.ts`,
+   `helpers/budget.ts`, `helpers/asserts.ts`, `helpers/machines.ts`,
+   `courtConfirmationMachine.test.ts`, `multiRoundLadder.test.ts`,
+   `propertiesConfirmation.test.ts`, `adversarialMachines.test.ts`,
+   `adversarialNostr.test.ts`, `mutationClosures.test.ts`,
+   `scale/confirmationCorpus.ts`, `modelChecking.test.ts`;
+   `courtConfirmationMachine.ts` keeps the single box glyphs that draw the
+   phase diagram (`├─`, `─┐`) and flattens only the multi-character rules;
+   `__tests__/modelCheckingCore.ts`, `__tests__/differentialParity.test.ts`
+   and `__fixtures__/model-check-summary.json` stay raw upstream copies as
+   before (they were never normalized - re-normalizing them would be a
+   456-character diff of strings the model-check fixture asserts).
+2. **`helpers/machines.ts` `drive()` cast re-applied** (`readonly unknown[]` +
+   `event as E`): the client tsconfig typechecks `__tests__`, where inline
+   event literals widen `type` to `string`.
+3. **`adversarialNostr.test.ts` `Uint8Array.from(randomBytes(32))` re-applied**
+   for the jsdom realm `instanceof` check in `@noble/curves`' `abytes()`.
+4. No new adaptations were required: `helpers/keys.ts`, `helpers/fixtures.ts`
+   and `differentialParity.test.ts` are not in this delta, and the new
+   `escalationWitness.test.ts` / `helpers/budget.ts` use seeded or hex material
+   (`randomBytes` only through the existing `helpers/keys.ts` wrapper), so the
+   jsdom shims are already in place.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 28 files / 886 tests passed
+  (was 27 / 874; +1 file `escalationWitness.test.ts`, +12 tests)
+- `npx vitest run src/hooks src/components/bao-court` -> 42 files / 274 passed
+- `npx tsc --noEmit` -> exit 0
+- `npx vite build` -> exit 0 (built in 7.98s; pre-existing chunk-size and
+  cashuWallet dynamic-import warnings only)
