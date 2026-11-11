@@ -1043,3 +1043,117 @@ import only vendored engine modules + `helpers/ids.ts`.
 - `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
 - `npx tsc --noEmit --incremental false` -> exit 0
 - `npx vite build` -> exit 0
+
+---
+
+# court-core vendor sync - bao-court v0.14.1 (bc28ff3)
+
+Synced the v0.14.0 -> v0.14.1 delta from `baocommunity/bao-court` tag
+**v0.14.1** (`bc28ff3` = release commit, bao-court #116) and pinned the npm dep
+`@bao/court` `#v0.14.0` -> `#v0.14.1` (lockfile re-resolved via
+`npm install --package-lock-only @bao/court@github:baocommunity/bao-court#v0.14.1`;
+resolves to the exact release commit
+`bc28ff3404ce2546fe9cb2f6de25419b2dbd9a9d`, version `0.14.1`).
+
+Delta = bao-court PR **#115** (review round 8 - the escalation transport attacks)
+plus the release bump #116.
+
+## What changed
+
+**Updated engine files (3):**
+- `courtEscalationRequest.ts` (+321/-33) - **review round 8, four defects in the
+  codec, two of them exploitable.**
+  - **r8-2 (exploitable): the wire->reducer mapping bound nothing.**
+    `escalationRequestToMachineEvent` filled `challengerIdx` from the bond owner
+    and then forwarded the wire's `challengerPubkey`, implying a pairing it
+    cannot see (the machine state carries indices, not pubkeys). Measured on
+    v0.14.0: a bonded challenger minted an escalation whose append-only
+    `escalationLog` named **another juror's** pubkey (attribution forgery, the
+    r29-2 harm at mint time); a request signed to escalate past round 1 was
+    accepted at round 3 (`roundIndex` comes from the case, the wire `round` was
+    inert, so it was replayable on every rung of a legacy case); and a request
+    for one case reduced on another (`caseId` was hashed but never compared).
+    The mapper now REQUIRES the host's `CourtEscalationBinding` - the case id it
+    ROUTED on and the pubkey NIP-98 PROVED - and refuses a disagreement with
+    either, or a `round` that is not the round being resolved; an ambiguous bond
+    ledger (one hash, two owners) is refused rather than resolved by
+    `Array.find`. **Source-compatible** (the 4th parameter is optional in the
+    type) but behaviour-breaking by design: a 3-argument call now throws instead
+    of minting an unbound escalation.
+  - **r8-1 (exploitable): `caseId` was encoded lossily.** The preimage is
+    `TextEncoder`-encoded and an unpaired UTF-16 surrogate becomes U+FFFD, so
+    `"...:1\uD800"` and `"...:1\uFFFD"` - two different ids, two different
+    wires - produced the SAME request hash (the r7 H-6 collision one field
+    over, on the value hosts dedupe and audit by). `caseId` is now canonical
+    UTF-8, NUL-free and bounded at `MAX_ESCALATION_CASE_ID_BYTES` (256), which
+    makes the encoding injective (2,000-id sweep pinned).
+  - **r8-3/r8-4/r8-5:** `concession` was a truthiness test (`"true"`, `1`, `{}`,
+    `null` all parsed to `false`, dropping a signed flag the hash committed to)
+    - a non-boolean is now a typed refusal at `parse` and at `build`; `parse`
+    resolved DUPLICATE JSON keys silently (`JSON.parse` keeps the last, so one
+    digest covered many byte strings and an auditor read a witness the machine
+    never saw) - the raw text is now scanned at depth 1 (after decoding, so
+    `"c\u0061seId"` counts) and a repeated field is a typed refusal, with the
+    host contract "hand `parse` the body text, not a parsed object"; and `build`
+    read every field TWICE (a getter/`Proxy` could fail the check on one value
+    and populate another, or escape as a raw `TypeError`) - fields are now
+    snapshotted exactly once.
+- `confirmationMachineHandlers.ts` (+14) - **r8-6: `resolve_round` appended onto
+  a history that outran nothing.** A restored `ladder_vote_closed` snapshot with
+  `ladderRound = 4` and ONE record appended round 4, producing `[1,4]` - a
+  history no later barrier accepts, so the case could never finalize again (the
+  r40-2 brick, value-locked). `onResolveRound` now requires
+  `outcomeHistory.length === ladder.round - 1`, which the live path always
+  satisfies; a legal two-round ladder still resolves `[1,2]` (pinned).
+- `index.ts` (+2) - re-exports `MAX_ESCALATION_CASE_ID_BYTES` and the
+  `CourtEscalationBinding` type. **No new subpath** in this delta.
+
+**Tests vendored:** `__tests__/reviewRound8.test.ts` (NEW, 694 lines / 34 cases
+- 13 red on v0.14.0: the two exploitable closures, the four PARTIAL closures,
+  the four finality paths re-attacked from the outside, the registered
+  consistent-forgery boundary and the over-strictness controls) and
+  `__tests__/escalationRequestWire.test.ts` (+13 lines - the new host binding is
+  threaded through the six mapping calls). Both import only vendored engine
+  modules + `helpers/ids.ts`.
+
+**Deliberately not vendored (unchanged convention):** the `docs/` delta
+(`REVIEW_ROUND_8.md` NEW, `PER_ROUND_BOND.md`, `REVIEWS_INDEX.md`) and
+`CHANGELOG.md` - engine + tests + fixtures only, as always.
+
+**Consumer impact here: none yet.** Nothing in the client constructs an
+escalation request or a confirmation machine (hooks derive status from relay
+events, the escalation UI emits decisions), so the binding is a follow-up, not a
+break. Both machine changes are *stricter*: no wire field was added, so existing
+cases/snapshots restore unchanged, and a host restoring a tampered snapshot gets
+a typed refusal where it used to brick.
+
+## Client-local adaptations preserved / applied this sync
+
+1. **ASCII dash normalization** re-applied to the three engine files and the two
+   tests (em dash U+2014, en dash U+2013, U+2011, box-drawing U+2500 -> `-`).
+   Verified by reproduction: normalizing the `081fb8c` copies reproduces this
+   tree byte-for-byte, so the diff is exactly the upstream delta (14/321/2
+   lines on the engine files).
+2. **The doc pin stays `it.skip`ped, not weakened** -
+   `escalationRequestWire` "PER_ROUND_BOND.md says the transport ships BEFORE
+   the policy is enforced" reads an upstream document this tree does not vendor.
+   The ordering it pins is stated in the vendored `courtEscalationRequest.ts`
+   header, which IS asserted by the wire suite above. Marked with an
+   `ADAPTED (2140wtf)` comment at the call site.
+3. **No new jsdom shim needed:** `reviewRound8.test.ts` performs no file reads
+   (its only `docs/` reference is a comment naming `REVIEW_ROUND_8.md`), so the
+   `dirname`+`join` shim recorded for `reviewRound7` is untouched.
+4. Upstream's `docs/REVIEW_ROUND_8.md` records review round 8; it is not
+   vendored here (docs convention), so the round's findings are summarised in
+   this section instead.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 43 files, 1,129 passed / 2 skipped
+  (was 42 / 1,095 / 2; +1 file, +34 passing = the 34 round-8 cases)
+- `npx vitest run src/baofund/court-core/__tests__/{reviewRound8,escalationRequestWire}.test.ts`
+  -> 2 files / 45 passed / 1 skipped (the vendored doc pin)
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+- `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
