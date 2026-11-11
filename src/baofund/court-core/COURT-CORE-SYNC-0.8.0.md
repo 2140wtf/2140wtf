@@ -930,3 +930,116 @@ always (engine + tests + fixtures only).
 - `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
 - `npx tsc --noEmit --incremental false` -> exit 0
 - `npx vite build` -> exit 0
+
+# court-core vendor sync - bao-court v0.14.0 (081fb8c)
+
+Synced the v0.13.2 -> v0.14.0 delta from `baocommunity/bao-court` tag
+**v0.14.0** (`081fb8c` = release commit, bao-court #114) and pinned the npm dep
+`@bao/court` `#v0.13.2` -> `#v0.14.0` (lockfile re-resolved via
+`npm install --package-lock-only @bao/court@github:baocommunity/bao-court#v0.14.0`;
+resolves to the exact release commit
+`081fb8cc688343fcc47bfaca797365617dbd8de1`, version `0.14.0`).
+
+Delta = bao-court PRs **#112** (review round 7 - the r41-1 finality forgery) and
+**#113** (the escalation request wire, H-6) plus the release bump.
+
+## What changed
+
+**Updated engine files (3) + 1 new module:**
+- `confirmationMachineHandlers.ts` - **`finalize` minted a verdict from a vote
+  ledger it never re-derived (r41-1, exploitable; fixed).** For a CHALLENGED
+  case the verdict's evidence is the LAST round's vote ledger (`ladder.votes` ->
+  `supportingEventIds` -> the hash preimage). `resolve_round` re-derives it, but
+  a restore skips transitions and `finalize` validated the confirmation ledger,
+  the outcome history and the escalation log - not the votes. A snapshot parked
+  at `fee_settlement` (reachable through `concede`, an entry round 6 had recorded
+  as a non-reader of the challenge pool) could carry duplicate ballots,
+  off-roster voters or an outcome outside the frozen ballot, and `finalize`
+  returned `final` with that outcome and a canonical `verdictHash` - the market
+  pays the side both panels voted against. `finalize` now runs
+  `assertValidMassVoteLedger` (challenged cases only) and re-derives the verdict
+  from the append-only `outcomeHistory` record via the new `deriveFinalVerdict`,
+  requiring the vote ledger to agree on round, majority and the exact winning
+  event-id set; the supporting set comes from the HISTORY, not the
+  attacker-shaped vote list. **`verdict.upheld`** was copied from the snapshot
+  and is not in the hash preimage (a restore could flip the meaning of a verdict
+  whose hash still verified) - it is derived now
+  (`record.outcome === proposedOutcome`) and a disagreeing pending verdict is
+  refused with a typed `CourtConfirmationTransitionError`. **Consumer impact
+  here: none for legal states** - a 40-flow walk (both policies x both
+  authorities x depths 1-5 x never-challenged) finalizes identically and mints
+  identical hashes, and this client constructs no confirmation machine (hooks
+  derive status from relay events).
+- `courtEscalationRequest.ts` (NEW, 317 lines) - **the challenger's escalation
+  request as a versioned wire codec carrying the per-round bond witness (H-6).**
+  The machine has accepted `roundBondProofHash` since R31 and strict is the
+  default for new cases since v0.13.2, but the artefact a client could submit had
+  no field for it: the host body is `additionalProperties: false` and the
+  request-hash preimage omitted the witness, so a strict case's escalation was
+  refused no matter what a client sent (transport could not precede
+  enforcement), and two different round bonds hashed to one request hash.
+  Surface: `buildCourtEscalationRequest` (validate + normalise),
+  `serializeCourtEscalationRequest` / `parseCourtEscalationRequest` (canonical
+  JSON, strict about unknown fields - a silently dropped field is the defect),
+  `courtEscalationRequestPreimage` / `hashCourtEscalationRequest` (**domain
+  v2**, witness in the preimage, `'-'` sentinel when absent) and
+  `escalationRequestToMachineEvent` (the reducer's `escalate` event: the wire
+  supplies the challenger's claims, the CASE supplies `challengerIdx`,
+  `roundIndex` and `now`). **Additive: nothing in the client imports it** - the
+  escalation UI still emits decisions, so adopting the v2 wire is a follow-up.
+- `index.ts` - re-exports the new module (`COURT_ESCALATION_REQUEST_DOMAIN`,
+  `COURT_ESCALATION_REQUEST_VERSION`, `MAX_ESCALATION_REQUEST_ROUND`, the
+  builders/codec/hash/to-event helpers and the `CourtEscalationRequest` type).
+- `ladderEconomics.ts` - JSDoc only: `deriveMaxLadderRounds`'s monotonicity
+  sentence ran backwards (measured grid 0.30...0.95 -> caps 0...5, so a LESS
+  accurate jury gets the SHALLOWER ladder); corrected and pinned (r41-T1-doc).
+
+**Tests vendored:** `__tests__/reviewRound7.test.ts` (NEW, 19 cases: the four
+r41-1 closures - all red on the previous head - the non-reader probes, the
+over-strictness walk, the sign-rule edge probes and two doc pins) and
+`__tests__/escalationRequestWire.test.ts` (NEW, 12 cases: round-trip, the strict
+wire-refusal matrix, the strict path ACCEPTING a transported round bond, the
+hash binding the witness, a pinned known-answer digest and the doc pin). Both
+import only vendored engine modules + `helpers/ids.ts`.
+
+**Deliberately not vendored (unchanged convention):** the `docs/` delta
+(`REVIEW_ROUND_7.md` NEW, `PER_ROUND_BOND.md`, `FORMAL_INVARIANTS.md`) and
+`CHANGELOG.md` - engine + tests + fixtures only, as always.
+
+## Client-local adaptations preserved / applied this sync
+
+1. **ASCII dash normalization** re-applied to the three engine files and the two
+   new tests: em dash (U+2014), en dash (U+2013), U+2011 and box-drawing U+2500
+   -> `-`. The three engine files are byte-equal to normalized upstream v0.14.0
+   (verified: normalizing the 1b33b2f copies reproduces this tree byte-for-byte,
+   so the diff is exactly the upstream delta - 132/13/7 lines).
+2. **jsdom file-read shim in `__tests__/reviewRound7.test.ts`.** jsdom does not
+   resolve a relative href against a `file:` base, so `readFileSync(new URL(rel,
+   import.meta.url))` throws `The URL must be of scheme file` (upstream runs the
+   node environment). The one live `readFileSync(new URL(...))` (r41-T1-doc,
+   which reads the vendored `ladderEconomics.ts`) now uses the documented
+   `dirname(fileURLToPath(import.meta.url))` + `join` pattern, same shim as
+   `helpers/fixtures.ts`. Same class as the previously recorded shims.
+3. **Two doc pins are `it.skip`ped, not weakened:** each
+   reads upstream documents this tree does not vendor
+   (`docs/PER_ROUND_BOND.md`, `docs/FORMAL_INVARIANTS.md`) -
+   `escalationRequestWire` "PER_ROUND_BOND.md says the transport ships BEFORE
+   the policy is enforced" and `reviewRound7` "(r41-T4) the upgrade checklist
+   and the entry-matrix correction are IN the docs". Both are marked with an
+   `ADAPTED (2140wtf)` comment at the call site. The ordering they pin is stated
+   in the vendored `courtEscalationRequest.ts` header and the r41-1 behaviour is
+   pinned by the four closures, so no executable claim is lost.
+4. Upstream's `docs/REVIEW_ROUND_7.md` records review round 7; it is not
+   vendored here (docs convention), so the round's findings are summarised in
+   this section instead.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 42 files, 1,095 passed / 2 skipped
+  (was 40 / 1,066; +2 files, +29 passing, +2 documented skips = 31 new cases)
+- `npx vitest run src/baofund/court-core/__tests__/{reviewRound7,escalationRequestWire}.test.ts`
+  -> 2 files / 29 passed / 2 skipped
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+- `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
