@@ -194,6 +194,21 @@ export function onAcceptChallenge(
       `participant ${event.idx} published a conflicting challenge`,
     );
   }
+  // A bond witness buys exactly ONE challenger's standing (R38, r38-1). The
+  // ledger deduped by `idx` only, so a juror that posted nothing could name a
+  // bonded juror's `bondProofHash` as its own, mint an "accepted" challenge
+  // with a bond it never paid, and then escalate: the `(idx, bondProofHash)`
+  // binding r29-1 added is satisfied once the borrowed record exists. The
+  // machine holds this ledger, so uniqueness is a STATE property here, not a
+  // host attestation - and the r33-1 rule ("no accepted challenge bond may be
+  // relabelled as a per-round bond") assumes the hash has one owner.
+  const bondOwner = state.challenges.find((c) => c.bondProofHash === event.bondProofHash);
+  if (bondOwner) {
+    throw new CourtConfirmationTransitionError(
+      `challenge bond proof hash is already bound to participant ${bondOwner.idx}'s accepted `
+      + 'challenge: one bond witness buys one challenger\'s standing',
+    );
+  }
   return freezeState({
     ...state,
     challenges: [
@@ -240,6 +255,18 @@ export function onOpenLadderRound(
       `cannot open a ladder round during ${state.phase}`,
     );
   }
+  // Rung-spend barrier (round-40 finding r40-2). `open_ladder_round` is where a
+  // pending escalation actually costs a panel seat, and it used to be the ONE
+  // rung-opening transition with no barrier: a restored `ladder_pending`
+  // snapshot whose escalation record had been DELETED still opened the round, so
+  // the bond that record paid with was un-consumed (spendable again) and the
+  // case could only brick later, at `resolve_round`, after the panel had been
+  // summoned. Both halves are re-derived here - the log (completeness +
+  // consumption, r33-5/r37-1) and the challenge ledger the log's witness test
+  // reads (r38-1) - so the seat is never spent on a state the machine could not
+  // have produced.
+  assertValidEscalationLog(state);
+  assertValidConfirmationLedger(state);
   if (
     !Number.isSafeInteger(event.round)
     || event.round !== state.ladderRound + 1
@@ -519,6 +546,15 @@ export function onEscalate(
   // bricks the case at finalize. `onFinalize` still calls this barrier - the
   // verdict path must not depend on the escalate path having run.
   assertValidEscalationLog(state);
+  // The escalation witness test below reads `state.challenges` (`some(c => c.idx
+  // === idx && c.bondProofHash === hash)`), so the pool it reads must be the
+  // ledger the machine could have produced - otherwise a restored snapshot that
+  // binds ONE bond hash to two participants satisfies the pair test for a juror
+  // that posted nothing (the r38-1 harm, one entry later: the reducer refuses
+  // the duplicate at `accept_challenge`, and this barrier is what refuses it on
+  // a restore). Without it, escalate ACCEPTS the borrowed standing, seats a
+  // round panel and bricks the case at `resolve_round` (round-40 finding r40-1).
+  assertValidConfirmationLedger(state);
   const expectedRound = state.ladderRound + 1;
   const authority = event.authority;
   if (authority !== 'challenger' && authority !== 'host') {
