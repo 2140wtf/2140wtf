@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+import { finalizeEvent } from "nostr-tools";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -20,6 +21,7 @@ import {
 import { hashCourtVerdict } from "@/baofund/court-core/courtVoteMachine";
 import { schnorr } from "@noble/curves/secp256k1.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 // ---------------------------------------------------------------------------
 // In-memory relay mock (no network) - follows useJurorSession.test.ts
@@ -69,12 +71,75 @@ function makeEvent(kind: number, tags: string[][], extra: Partial<NostrEvent> = 
 }
 
 function proposalEvent(overrides: Record<string, string> = {}): NostrEvent {
-  return makeEvent(COURT_OUTCOME_PROPOSAL_KIND, [
+  // Security round 35: finality arms are proposal ASSERTIONS, so a proposal
+  // only advances a case to `final` when its publisher is the pinned court
+  // authority (the group key here). Fixtures therefore carry the cohort
+  // pubkey; the unattributed case has its own tests.
+  return makeEvent(
+    COURT_OUTCOME_PROPOSAL_KIND,
+    [
+      ["dispute", CASE_ID],
+      ["session", SESSION],
+      ["outcome", "yes"],
+      ...SUPPORTING.map((id) => ["supporting", id] as string[]),
+      ...Object.entries(overrides).map(([k, v]) => [k, v] as string[]),
+    ],
+    { pubkey: COHORT },
+  );
+}
+
+/**
+ * A NIP-01 signed court event, as a real relay delivers it (the hook verifies
+ * signatures at ingest, so hook-level fixtures cannot use placeholder sigs).
+ */
+function signedEvent(
+  kind: number,
+  tags: string[][],
+  opts: { createdAt?: number; content?: string; key?: Uint8Array } = {},
+): NostrEvent {
+  nowSec += 1;
+  return finalizeEvent(
+    {
+      kind,
+      created_at: opts.createdAt ?? nowSec,
+      tags,
+      content: opts.content ?? "",
+    },
+    opts.key ?? PRIVATE_KEY,
+  ) as unknown as NostrEvent;
+}
+
+/**
+ * A distinct juror signing key per index. Confirmations are deduped by PUBKEY,
+ * so a shared key would collapse four confirmations into one - the fixture has
+ * to produce genuinely different signers to exercise the threshold.
+ */
+function jurorKey(index: number): Uint8Array {
+  return sha256(new TextEncoder().encode(`r35-juror-${index}`));
+}
+
+/** Signed kind-39015 confirmation by juror #index. */
+function signedConfirmation(index: number, createdAt?: number): NostrEvent {
+  return signedEvent(COURT_JUROR_CONFIRMATION_KIND, [["dispute", CASE_ID]], {
+    createdAt: createdAt ?? nowSec + 1,
+    key: jurorKey(index),
+  });
+}
+
+/** Signed kind-38026 proposal carrying the batch proof for `batch`. */
+function signedProposalWithBatchProof(batch: NostrEvent): NostrEvent {
+  const leaf = buildBatchMerkleTree([
+    hashCourtVerdict({ sessionHash: SESSION, outcome: "yes", supportingEventIds: SUPPORTING }),
+  ]).leaves[0]!;
+  return signedEvent(COURT_OUTCOME_PROPOSAL_KIND, [
     ["dispute", CASE_ID],
     ["session", SESSION],
     ["outcome", "yes"],
     ...SUPPORTING.map((id) => ["supporting", id] as string[]),
-    ...Object.entries(overrides).map(([k, v]) => [k, v] as string[]),
+    ["batch", batch.id],
+    ["proof-index", "0"],
+    ["proof-path", ""],
+    ["proof-leaf", leaf],
   ]);
 }
 
@@ -253,10 +318,13 @@ describe("verifyBatchesForCase", () => {
   it("verifies a genuine proof and rejects a tampered one", () => {
     const batch = signedBatchEventForCase();
     const good = proposalWithBatchProof(batch);
-    expect(verifyBatchesForCase(CASE_ID, [good, batch])).toEqual({
+    expect(verifyBatchesForCase(CASE_ID, [good, batch])).toMatchObject({
       verified: true,
+      attributed: true,
       batchEventId: batch.id,
       reason: null,
+      epoch: 1,
+      count: 1,
     });
 
     const tampered = makeEvent(COURT_OUTCOME_PROPOSAL_KIND, [
@@ -278,15 +346,15 @@ describe("verifyBatchesForCase", () => {
 describe("useCourtConfirmations (hook, mocked relay)", () => {
   it("ingests backfill, dedupes live events by id, and derives statuses", async () => {
     const batch = signedBatchEventForCase();
-    const proposal = proposalWithBatchProof(batch);
+    const proposal = signedProposalWithBatchProof(batch);
     const confirmations = [
-      confirmationEvent("a".repeat(64)),
-      confirmationEvent("b".repeat(64)),
-      confirmationEvent("e".repeat(64)),
+      signedConfirmation(0, nowSec + 2),
+      signedConfirmation(1, nowSec + 3),
+      signedConfirmation(2, nowSec + 4),
     ];
     backfillEvents = [proposal, batch, ...confirmations];
     // Live stream re-delivers one already-seen event plus a duplicate-free one.
-    liveEvents = [confirmations[0]!, confirmationEvent("f".repeat(64))];
+    liveEvents = [confirmations[0]!, signedConfirmation(3, nowSec + 5)];
 
     const { result } = renderHook(() => useCourtConfirmations());
 
@@ -308,8 +376,8 @@ describe("useCourtConfirmations (hook, mocked relay)", () => {
   });
 
   it("does not double-count a live-redelivered event (dedupe by event id)", async () => {
-    backfillEvents = [proposalEvent()];
-    const live = confirmationEvent("a".repeat(64));
+    backfillEvents = [signedEvent(COURT_OUTCOME_PROPOSAL_KIND, [["dispute", CASE_ID]])];
+    const live = signedConfirmation(9, nowSec + 1);
     liveEvents = [live, live]; // same event id twice in one flush window
     const { result } = renderHook(() => useCourtConfirmations());
 

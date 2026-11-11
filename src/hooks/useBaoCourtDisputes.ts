@@ -4,6 +4,7 @@ import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import { isNostrId } from "@/lib/nostrId";
 import { isVerifiedEvent } from "@/lib/nostrEvents";
+import { sanitizeDisplayText } from "@/lib/displayText";
 import {
   BAO_COURT_DISPUTE_KIND,
   type DisputeCase,
@@ -14,12 +15,11 @@ const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
 
-function sanitizeSingleLine(text: string, maxLength = 200): string {
-  return text
-    .replace(/[\r\n\t]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
+export function sanitizeSingleLine(text: string, maxLength = 200): string {
+  // Round 35: delegate to the shared display guard so bidi overrides and
+  // zero-width characters are stripped too — a hostile dispute event must not
+  // be able to reorder or disguise the outcome string in a status row.
+  return sanitizeDisplayText(text, { maxChars: maxLength });
 }
 
 export interface BaoCourtDispute extends DisputeCase {
@@ -29,7 +29,7 @@ export interface BaoCourtDispute extends DisputeCase {
   readonly status: 'open' | 'closed';
 }
 
-function parseBaoCourtDispute(event: NostrEvent): BaoCourtDispute | null {
+export function parseBaoCourtDispute(event: NostrEvent): BaoCourtDispute | null {
   if (event.kind !== BAO_COURT_DISPUTE_KIND) return null;
 
   try {

@@ -58,10 +58,28 @@ export function ConfirmationStatusRow({
       {status.verified && (
         <span
           className="flex items-center gap-1 text-green-700 dark:text-green-400"
-          title="Included in a verified epoch batch attestation"
+          title={
+            status.batchEpoch != null
+              ? `Included in a verified epoch ${status.batchEpoch} batch attestation of ${status.batchCount ?? "?"} verdicts, published by the pinned court authority`
+              : "Included in a verified epoch batch attestation, published by the pinned court authority"
+          }
         >
           <ShieldCheck className="size-3.5" aria-hidden />
           batch verified
+        </span>
+      )}
+      {/*
+        Round 35: a batch can be cryptographically valid while the event that
+        asserts THIS case's attribution came from an unpinned publisher. That
+        must never be presented as finality - but hiding it silently would be
+        dishonest, so it gets its own amber, explicitly non-final chip.
+      */}
+      {!status.verified && status.batchAttestationValid && (
+        <span
+          className="text-amber-600 dark:text-amber-400"
+          title="A batch attestation verified cryptographically, but the proposal that attributes it to this case was not published by the pinned court authority — not counted as final"
+        >
+          batch valid · attribution unverified
         </span>
       )}
     </div>

@@ -15,6 +15,8 @@ function notice(overrides: Partial<CourtSummonsNotice> = {}): CourtSummonsNotice
     marketId: "market-1",
     proposedOutcome: "YES",
     createdAt: Math.floor(Date.now() / 1000) - 60,
+    publisher: "c".repeat(64),
+    attributed: true,
     ...overrides,
   };
 }
@@ -83,5 +85,40 @@ describe("SummonsNoticeCard", () => {
   it("surfaces an ack failure message", () => {
     renderCard({ ackError: "ack HTTP 503" });
     expect(screen.getByText("Ack failed: ack HTTP 503")).toBeInTheDocument();
+  });
+
+  it("R35: labels an unpinned publisher instead of impersonating a court summons", () => {
+    renderCard({ notices: [notice({ attributed: false })] });
+    expect(screen.getByTestId("summons-unverified-publisher")).toBeInTheDocument();
+  });
+
+  it("R35: shows nothing extra for an attributed (court-published) notice", () => {
+    renderCard();
+    expect(screen.queryByTestId("summons-unverified-publisher")).toBeNull();
+  });
+
+  it("R35: sanitises bidi/oversized hostile strings and never builds a link", () => {
+    const { container } = renderCard({
+      notices: [
+        notice({
+          caseId: "javascript:alert(1)\u202E" + "x".repeat(5_000),
+          proposedOutcome: "<img src=x onerror=alert(1)>",
+        }),
+      ],
+      ackError: "\u202Esome\u0007failure",
+    });
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    // The hostile payload survives only as ESCAPED TEXT: no attribute anywhere
+    // in the subtree carries it (React escapes, this pins that we never pass
+    // event data through dangerouslySetInnerHTML or an href/src builder).
+    for (const element of container.querySelectorAll("*")) {
+      for (const attribute of element.attributes) {
+        expect(attribute.value).not.toMatch(/onerror|javascript:/i);
+      }
+    }
+    expect(container.textContent).not.toMatch(/[\u202A-\u202E]/);
+    // The case id is shortened, not rendered at hostile length.
+    expect(container.textContent).not.toContain("x".repeat(100));
   });
 });
