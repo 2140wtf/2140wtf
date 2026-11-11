@@ -38,6 +38,51 @@
  * (`fundCourtGroupPubkey()`); a batch attestation signed by any other key
  * (or a batch tag without a proof, or a failing proof) is reported via
  * `verifyReason` and never counts as finality.
+ *
+ * ## Attribution pin (security round 35)
+ *
+ * Both finality arms are **assertions made by a proposal event**, and before
+ * round 35 the hook trusted whoever published that proposal:
+ *
+ * - the batch arm's leaf binds `(sessionHash, outcome, supportingEventIds)`
+ *   but NOT the case id, so replaying a genuinely court-signed batch + proof
+ *   under a `dispute` tag naming any other case displayed that case `final`;
+ * - the window arm trusted a `challenge-deadline` from the same hostile
+ *   event, so a single proposal (`dispute: X`, `challenge-deadline: 0`) read
+ *   `final` with zero evidence.
+ *
+ * A case therefore reads `final` ONLY when the winning proposal is published
+ * by the pinned court authority ({@link courtProposalPin}) - the empaneled
+ * FROST group key by default, overridable with
+ * `VITE_FUND_COURT_PROPOSAL_PUBKEY` for a coordinator-published flow. Any
+ * other publisher may still *propose* (confirmations are counted, the reason
+ * is shown), but never finality: `verified` stays false and `verifyReason`
+ * names the reason. `attributed` reports the publisher decision separately
+ * from `batchAttestationValid` (the pure crypto result), so the UI can say
+ * "cryptographically valid, publisher not pinned" instead of guessing.
+ *
+ * ## Epoch / replay pins
+ *
+ * The signed manifest already binds `epoch`, `cohort`, `batchIndex`, `count`,
+ * `root` and `finalizedAt`, and `verifyCaseInBatch` re-derives the root from
+ * the proof and recomputes the event id - a batch built for another case's
+ * verdict cannot contain this case's leaf (the proof is rejected), and a
+ * batch from another cohort fails the group-key pin. Because only the pinned
+ * authority may assert the case attribution, an `expectedEpoch` pin is not
+ * required: the epoch is whatever the pinned authority signed, and it is
+ * *surfaced* (`batchEpoch`, `batchCount`) for audit rather than silently
+ * assumed. Accepted behaviour: a re-batching of the same verdict in a later
+ * epoch is legitimate and reads `final` again.
+ *
+ * ## Ingest trust
+ *
+ * Kinds 38026 / 39015 / 39016 are NIP-01 signed events and are verified
+ * (`verifyEvent`) at ingest - a hostile relay must not be able to forge a
+ * confirmation attributed to a real juror, a challenge, or a proposal
+ * claiming the court group's pubkey. Kind 39018 is deliberately NOT
+ * NIP-01-verified: a batch attestation carries the cohort's FROST signature
+ * over the manifest in its `sig` TAG, so `verifyCaseInBatch` is its
+ * authenticity check (see the note above the ingest filter).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
@@ -47,7 +92,11 @@ import {
   verifyCaseInBatch,
   type BatchMerkleProof,
 } from "@/baofund/court-core/batchAttestation";
-import { fundCourtGroupPubkey } from "@/baofund/lib/court/courtGroupPubkey";
+import { isVerifiedEvent } from "@/lib/nostrEvents";
+import { courtGroupPin, courtProposalPin } from "@/lib/courtPins";
+
+// Re-exported for callers that reason about the trust anchor directly.
+export { courtProposalPin };
 
 /** Universal-confirmation outcome proposal (planned kind). */
 export const COURT_OUTCOME_PROPOSAL_KIND = 38026;
@@ -73,6 +122,14 @@ const MAX_EVENTS = 2_000;
 const MAX_EVENT_CONTENT_CHARS = 65_536;
 const MAX_EVENT_TAGS = 256;
 const MAX_EVENT_TAG_VALUE_CHARS = 8_192;
+/**
+ * Cap on eagerly derived cases per render. `statuses` re-derives every known
+ * case on each event batch (each derivation scans all retained events), so a
+ * relay that parks 2 000 proposal events for 2 000 distinct case ids would
+ * otherwise make every flush O(cases x events). Consumers that need a specific
+ * case use `statusForCase(id)` (uncapped); the map is a convenience index.
+ */
+const MAX_DERIVED_CASES = 300;
 
 export type CourtConfirmationStage = "pending" | "confirmed" | "final";
 
@@ -87,15 +144,34 @@ export interface CourtConfirmationStatus {
   readonly challengeCount: number;
   /** Event id of the observed kind-38026 proposal, when present. */
   readonly proposalEventId: string | null;
+  /** Pubkey that published the winning proposal, when present. */
+  readonly proposalPublisher: string | null;
+  /**
+   * True when the winning proposal is published by the pinned court
+   * authority ({@link courtProposalPin}). Only an attributed proposal may
+   * assert finality.
+   */
+  readonly attributed: boolean;
   /** Event id of the kind-39018 batch the proposal claims inclusion in. */
   readonly batchEventId: string | null;
-  /** True ONLY when verifyCaseInBatch succeeded for this case. */
+  /** Pure crypto result: the batch + proof verified against the group pin. */
+  readonly batchAttestationValid: boolean;
+  /**
+   * True ONLY when the batch path succeeded fail-closed against the PINNED
+   * court group pubkey AND the winning proposal is attributed. This - not
+   * `batchAttestationValid` - is what the UI shows as verified finality.
+   */
   readonly verified: boolean;
   /** Fail-closed explanation when a batch was referenced but not verified. */
   readonly verifyReason: string | null;
+  /** Epoch of the verifying batch (surfaced for audit; not pinned). */
+  readonly batchEpoch: number | null;
+  /** Declared verdict count of the verifying batch. */
+  readonly batchCount: number | null;
   /** Which observed-evidence rule produced `final`, when it did. */
   readonly finalReason: "batch-attestation" | "challenge-window" | null;
 }
+
 
 function getTag(event: NostrEvent, name: string): string | undefined {
   return event.tags?.find((t) => t[0] === name)?.[1];
@@ -202,11 +278,27 @@ function caseInputFromProposal(proposal: NostrEvent): {
  * (`fundCourtGroupPubkey()`, overridable via VITE_FUND_COURT_GROUP_PUBKEY);
  * without the pin ANY keypair holder could self-sign a batch attestation
  * and the client would display "final / batch verified" for a case the
- * court never finalized.
+ * court never finalized. See `@/lib/courtPins`.
  */
 function courtBatchPin(): string | null {
-  const pin = fundCourtGroupPubkey();
-  return typeof pin === "string" && isHex64(pin) ? pin.toLowerCase() : null;
+  return courtGroupPin();
+}
+
+/**
+ * The pubkey allowed to assert a case's attribution (the `dispute` tag on a
+ * kind-38026 proposal that carries a batch proof or a challenge deadline).
+ * See `@/lib/courtPins#courtProposalPin` - it defaults to the group key.
+ */
+
+export interface BatchVerification {
+  /** Crypto result: proof + manifest signature + group pin all passed. */
+  readonly verified: boolean;
+  /** True when the batch was published by the pinned group key (attribution). */
+  readonly attributed: boolean;
+  readonly batchEventId: string | null;
+  readonly reason: string | null;
+  readonly epoch: number | null;
+  readonly count: number | null;
 }
 
 /**
@@ -215,24 +307,53 @@ function courtBatchPin(): string | null {
  * court's group pubkey. Returns the first PASSING verification, else the
  * LAST failure reason (fail-closed: nothing observed means
  * { verified: false }). Never throws on hostile protocol data.
+ *
+ * `attributed` is set when the winning proposal's publisher IS the pinned
+ * court authority. `verified` is the pure crypto check; callers decide
+ * whether unattributed (but cryptographically valid) inclusion may advance a
+ * case's stage - {@link deriveConfirmationStatus} does not let it.
  */
 export function verifyBatchesForCase(
   caseId: string,
   events: readonly NostrEvent[],
-): { verified: boolean; batchEventId: string | null; reason: string | null } {
+): BatchVerification {
   const proposal = latestProposal(caseId, events);
-  if (!proposal) return { verified: false, batchEventId: null, reason: "no proposal observed" };
+  if (!proposal) {
+    return {
+      verified: false,
+      attributed: false,
+      batchEventId: null,
+      reason: "no proposal observed",
+      epoch: null,
+      count: null,
+    };
+  }
+  const attributed = isAttributedProposal(proposal);
   const caseInput = caseInputFromProposal(proposal);
   const observed = proposalBatchProof(proposal);
   if (!caseInput || !observed) {
-    return { verified: false, batchEventId: null, reason: "proposal carries no verifiable batch proof" };
+    return {
+      verified: false,
+      attributed,
+      batchEventId: null,
+      reason: "proposal carries no verifiable batch proof",
+      epoch: null,
+      count: null,
+    };
   }
 
   const batches = events.filter(
     (e) => e.kind === BAO_COURT_BATCH_ATTESTATION_KIND && e.id === observed.batchEventId,
   );
   if (batches.length === 0) {
-    return { verified: false, batchEventId: observed.batchEventId, reason: "batch attestation not observed" };
+    return {
+      verified: false,
+      attributed,
+      batchEventId: observed.batchEventId,
+      reason: "batch attestation not observed",
+      epoch: null,
+      count: null,
+    };
   }
 
   const pin = courtBatchPin();
@@ -245,14 +366,47 @@ export function verifyBatchesForCase(
         pin ? { expectedGroupPubkey: pin } : undefined,
       );
       if (result.valid) {
-        return { verified: true, batchEventId: batch.id, reason: null };
+        return {
+          verified: true,
+          attributed,
+          batchEventId: batch.id,
+          reason: null,
+          epoch: tagNumber(batch, "epoch"),
+          count: tagNumber(batch, "count"),
+        };
       }
       lastReason = result.reason ?? null;
     } catch (err) {
       lastReason = err instanceof Error ? err.message : String(err);
     }
   }
-  return { verified: false, batchEventId: observed.batchEventId, reason: lastReason };
+  return {
+    verified: false,
+    attributed,
+    batchEventId: observed.batchEventId,
+    reason: lastReason,
+    epoch: null,
+    count: null,
+  };
+}
+
+/** A decimal tag value as a safe non-negative integer, or null. */
+function tagNumber(event: NostrEvent, name: string): number | null {
+  const raw = getTag(event, name);
+  if (raw == null || !/^[0-9]+$/.test(raw)) return null;
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
+ * True when the event's publisher is the pinned court authority. Used for
+ * BOTH proposal attribution and the batch publisher check: an unattributed
+ * proposal cannot assert a case's finality however well-formed its tags are.
+ */
+function isAttributedProposal(proposal: NostrEvent): boolean {
+  const pin = courtProposalPin();
+  if (!pin) return false;
+  return typeof proposal.pubkey === "string" && proposal.pubkey.toLowerCase() === pin;
 }
 
 /**
@@ -260,22 +414,35 @@ export function verifyBatchesForCase(
  * created_at ties break deterministically by the lexicographically smaller
  * event id, so two clients observing the same hostile event set agree on
  * the SAME proposal regardless of relay delivery order.
+ *
+ * Attributed proposals (published by the pinned court authority) always beat
+ * unattributed ones, regardless of created_at. Without that rule a hostile
+ * publisher could suppress an already-final case - or pre-empt a court
+ * re-proposal - by posting a newer proposal with no evidence, making the row
+ * flicker away from `final` on every hostile event.
  */
 function latestProposal(caseId: string, events: readonly NostrEvent[]): NostrEvent | null {
   let latest: NostrEvent | null = null;
+  let latestAttributed: NostrEvent | null = null;
   for (const event of events) {
     if (event.kind !== COURT_OUTCOME_PROPOSAL_KIND) continue;
     if (eventCaseId(event) !== caseId) continue;
-    if (
-      !latest ||
-      event.created_at > latest.created_at ||
-      (event.created_at === latest.created_at && event.id < latest.id)
-    ) {
-      latest = event;
+    if (isNewerProposal(event, latest)) latest = event;
+    if (isAttributedProposal(event) && isNewerProposal(event, latestAttributed)) {
+      latestAttributed = event;
     }
   }
-  return latest;
+  return latestAttributed ?? latest;
 }
+
+function isNewerProposal(event: NostrEvent, latest: NostrEvent | null): boolean {
+  if (!latest) return true;
+  return (
+    event.created_at > latest.created_at ||
+    (event.created_at === latest.created_at && event.id < latest.id)
+  );
+}
+
 
 /**
  * Pure derivation - exported for tests. `now` is unix seconds; it is used
@@ -290,6 +457,7 @@ export function deriveConfirmationStatus(
 ): CourtConfirmationStatus {
   const relevant = events.filter((e) => eventCaseId(e) === caseId);
   const proposal = latestProposal(caseId, relevant);
+  const attributed = proposal ? isAttributedProposal(proposal) : false;
 
   const confirmationPubkeys = new Set<string>();
   const challengeIds = new Set<string>();
@@ -319,11 +487,18 @@ export function deriveConfirmationStatus(
             typeof e.created_at === "number" &&
             e.created_at <= deadline,
         ).length;
-  const windowPassed = deadline != null && now > deadline && inWindowChallengeCount === 0;
+  // The deadline itself is a proposal assertion, so an UNATTRIBUTED proposal
+  // can never close a window - otherwise one hostile event (`dispute: X`,
+  // `challenge-deadline: 0`, no evidence) reads `final`.
+  const windowPassed =
+    attributed && deadline != null && now > deadline && inWindowChallengeCount === 0;
+  // Same rule for the batch arm: cryptographically valid inclusion is not
+  // finality unless the pinned court authority asserts the case attribution.
+  const verified = batchCheck.verified && attributed;
 
   let stage: CourtConfirmationStage = "pending";
   let finalReason: CourtConfirmationStatus["finalReason"] = null;
-  if (batchCheck.verified) {
+  if (verified) {
     stage = "final";
     finalReason = "batch-attestation";
   } else if (windowPassed) {
@@ -331,6 +506,15 @@ export function deriveConfirmationStatus(
     finalReason = "challenge-window";
   } else if (confirmationPubkeys.size >= threshold) {
     stage = "confirmed";
+  }
+
+  let verifyReason: string | null = null;
+  if (!verified) {
+    if (batchCheck.verified && !attributed) {
+      verifyReason = "batch is valid but the proposal publisher is not the pinned court authority";
+    } else {
+      verifyReason = batchCheck.reason;
+    }
   }
 
   return {
@@ -341,22 +525,30 @@ export function deriveConfirmationStatus(
     challenged: challengeIds.size > 0,
     challengeCount: challengeIds.size,
     proposalEventId: proposal?.id ?? null,
+    proposalPublisher: proposal?.pubkey ?? null,
+    attributed,
     batchEventId: isHex64(batchRef) ? batchRef : batchCheck.batchEventId,
-    verified: batchCheck.verified,
-    verifyReason: batchCheck.verified ? null : batchCheck.reason,
+    batchAttestationValid: batchCheck.verified,
+    verified,
+    verifyReason,
+    batchEpoch: batchCheck.epoch,
+    batchCount: batchCheck.count,
     finalReason,
   };
 }
 
 export interface UseCourtConfirmationsResult {
-  /** Observed status per dispute id, keyed by case id. */
+  /**
+   * Observed status per dispute id, keyed by case id. Bounded index: only
+   * cases with an observed kind-38026 proposal appear (a case enters the
+   * ladder via its proposal), at most `MAX_DERIVED_CASES` of them, sorted by
+   * id. Use `statusForCase` for any specific id (uncapped).
+   */
   statuses: ReadonlyMap<string, CourtConfirmationStatus>;
   /** Observed status for one case (derived on demand). */
   statusForCase: (caseId: string) => CourtConfirmationStatus;
   /** Batch-verify one case against its observed kind-39018 attestations. */
-  verifyBatchForCase: (
-    caseId: string,
-  ) => { verified: boolean; batchEventId: string | null; reason: string | null };
+  verifyBatchForCase: (caseId: string) => BatchVerification;
   /** True while the initial backfill query is in flight. */
   isLoading: boolean;
 }
@@ -383,6 +575,14 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
         seenIds.current.add(event.id);
         // Drop oversized hostile events before they can enter state.
         if (!sizeCapped(event)) continue;
+        // NIP-01 authenticity for the event kinds that are genuinely signed.
+        // Kind 39018 is excluded on purpose: its authenticity is the cohort's
+        // FROST signature over the manifest in the `sig` TAG (the NIP-01
+        // `sig` is empty by construction), and `verifyCaseInBatch` recomputes
+        // the id + signature. Verifying it here would drop every real batch.
+        if (event.kind !== BAO_COURT_BATCH_ATTESTATION_KIND && !isVerifiedEvent(event)) {
+          continue;
+        }
         fresh.push(event);
       }
       if (fresh.length === 0) return;
@@ -466,14 +666,19 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
   );
 
   const statuses = useMemo(() => {
-    const ids = new Set<string>();
+    // Only cases that actually have a PROPOSAL can leave `pending`, so those
+    // are the only ids worth deriving eagerly - a relay cannot inflate the
+    // index with bare confirmations/challenges for invented case ids.
+    const ids: string[] = [];
     for (const event of events) {
+      if (event.kind !== COURT_OUTCOME_PROPOSAL_KIND) continue;
       const id = eventCaseId(event);
-      if (id) ids.add(id);
+      if (id) ids.push(id);
     }
+    const unique = [...new Set(ids)].sort().slice(0, MAX_DERIVED_CASES);
     const now = Math.floor(Date.now() / 1000);
     const map = new Map<string, CourtConfirmationStatus>();
-    for (const id of ids) map.set(id, deriveConfirmationStatus(id, events, now));
+    for (const id of unique) map.set(id, deriveConfirmationStatus(id, events, now));
     return map;
   }, [events]);
 

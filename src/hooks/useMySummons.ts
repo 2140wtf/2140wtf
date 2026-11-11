@@ -4,6 +4,7 @@ import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useToast } from "@/hooks/useToast";
 import { isVerifiedEvent } from "@/lib/nostrEvents";
+import { courtProposalPin } from "@/lib/courtPins";
 import { BAO_COURT_RELAY } from "@/lib/baoCourtRelays";
 import { baoNip98Header } from "@/lib/baoApiAuth";
 import { baoApiBase } from "@/lib/baoFundraising";
@@ -25,6 +26,19 @@ const QUERY_TIMEOUT_MS = 15_000;
 const MAX_STORED_IDS = 500;
 const SEEN_STORAGE_KEY = "bao-court-summons-seen";
 const ACKED_STORAGE_KEY = "bao-court-summons-acked";
+/**
+ * Round 35 caps. ANYONE can publish a kind-39002/38026 `#p`-tagged to this
+ * npub, so the notice list, the per-session dedupe set and the toast queue are
+ * all attacker-fillable. None of these caps is a trust decision - they only
+ * bound memory, DOM and notification spam.
+ */
+const MAX_SUMMONS = 200;
+const MAX_INGESTED_IDS = 2_000;
+const MAX_ANNOUNCEMENTS = 5;
+/** Longest accepted case/market/outcome tag value (display + URL bound). */
+const MAX_FIELD_CHARS = 512;
+/** Longest failure reason surfaced from the API/exception path. */
+const MAX_REASON_CHARS = 200;
 
 export interface CourtSummonsNotice {
   /** Relay event id of the summons (dedupe + ack binding target). */
@@ -35,6 +49,16 @@ export interface CourtSummonsNotice {
   readonly marketId: string;
   readonly proposedOutcome: string | null;
   readonly createdAt: number;
+  /** Pubkey that published the summons event (always NIP-01 verified). */
+  readonly publisher: string;
+  /**
+   * True when the publisher is the pinned court authority
+   * (`courtProposalPin()`). ANY key can publish a `#p`-tagged summons, and the
+   * event carries no selection proof the client can re-run, so an
+   * unattributed notice is displayed as *unverified* rather than as a real
+   * summons. The server-side summons board remains the authority for the ack.
+   */
+  readonly attributed: boolean;
 }
 
 export interface SummonsAckResult {
@@ -58,6 +82,12 @@ function getTag(tags: readonly (readonly string[])[], name: string): string | un
 /**
  * Parse + verify a #p-tagged summons event. Returns null for anything
  * malformed — never a partially trusted notice.
+ *
+ * Round 35: the event must be NIP-01 signed (a hostile relay must not be able
+ * to forge a summons attributed to the court), tag values are length-capped
+ * (a hostile event cannot park a megabyte in the notice list), and the
+ * publisher is reported separately from `attributed` so the UI can label an
+ * unpinned publisher instead of implying court provenance.
  */
 export function parseSummonsEvent(event: NostrEvent): CourtSummonsNotice | null {
   if (event.kind !== SUMMONS_SELECTION_KIND && event.kind !== SUMMONS_PROPOSAL_KIND) return null;
@@ -78,9 +108,14 @@ export function parseSummonsEvent(event: NostrEvent): CourtSummonsNotice | null 
     : getTag(tags, "d") ?? String(content.caseId ?? "");
   const marketId = getTag(tags, "market") ?? getTag(tags, "m") ?? String(content.marketId ?? "");
   if (!caseId || !marketId) return null;
+  // Reject (never truncate) absurd values: a 512-char case id is not an
+  // identifier any real court event carries, and truncating would let two
+  // hostile events collide on the same displayed id.
+  if (caseId.length > MAX_FIELD_CHARS || marketId.length > MAX_FIELD_CHARS) return null;
 
   const rawOutcome = getTag(tags, "proposed") ?? getTag(tags, "outcome") ?? getTag(tags, "o")
     ?? (typeof content.outcome === "string" ? content.outcome : undefined);
+  if (rawOutcome != null && rawOutcome.length > MAX_FIELD_CHARS) return null;
 
   return {
     eventId: event.id,
@@ -89,6 +124,8 @@ export function parseSummonsEvent(event: NostrEvent): CourtSummonsNotice | null 
     marketId,
     proposedOutcome: rawOutcome ?? null,
     createdAt: event.created_at,
+    publisher: event.pubkey,
+    attributed: event.pubkey.toLowerCase() === courtProposalPin(),
   };
 }
 
@@ -139,6 +176,10 @@ export function useMySummons() {
   const cursorRef = useRef<number>(0);
 
   const ingest = useCallback((events: readonly NostrEvent[], myPubkey: string) => {
+    // Bound the per-session dedupe set: clearing it only costs a re-parse
+    // (the notice map below dedupes by event id), whereas an unbounded set is
+    // a memory sink a hostile relay controls.
+    if (ingestedIdsRef.current.size > MAX_INGESTED_IDS) ingestedIdsRef.current.clear();
     const fresh: CourtSummonsNotice[] = [];
     for (const event of events) {
       if (ingestedIdsRef.current.has(event.id)) continue;
@@ -156,7 +197,10 @@ export function useMySummons() {
     setSummons((old) => {
       const byId = new Map(old.map((s) => [s.eventId, s]));
       for (const s of fresh) byId.set(s.eventId, s);
-      return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+      // Newest first, capped: the list is attacker-fillable.
+      return [...byId.values()]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, MAX_SUMMONS);
     });
   }, []);
 
@@ -213,16 +257,32 @@ export function useMySummons() {
   );
 
   // Toast per newly-arrived unseen summons (bounded: only events not in the
-  // persisted seen set and not already announced this session).
+  // persisted seen set and not already announced this session, and at most
+  // MAX_ANNOUNCEMENTS toasts per mount - a hostile publisher can otherwise
+  // queue hundreds of notifications at this npub).
   const announcedRef = useRef<Set<string>>(new Set());
+  const announceCountRef = useRef(0);
   useEffect(() => {
+    let suppressed = 0;
     for (const notice of unseen) {
       if (announcedRef.current.has(notice.eventId)) continue;
       announcedRef.current.add(notice.eventId);
+      if (announceCountRef.current >= MAX_ANNOUNCEMENTS) {
+        suppressed += 1;
+        continue;
+      }
+      announceCountRef.current += 1;
       const label = notice.kind === SUMMONS_SELECTION_KIND ? "Jury selection" : "Court summons";
+      const unverified = notice.attributed ? "" : " (unverified publisher)";
       toast({
-        title: `${label} received`,
+        title: `${label} received${unverified}`,
         description: `Case ${notice.caseId.slice(0, 16)} — acknowledge from your Jury Duty panel.`,
+      });
+    }
+    if (suppressed > 0) {
+      toast({
+        title: `${suppressed} more court notices`,
+        description: "Open your Jury Duty panel to review them.",
       });
     }
   }, [unseen, toast]);
@@ -275,7 +335,13 @@ export function useMySummons() {
       });
       if (!ackRes.ok) {
         const detail = (await ackRes.json().catch(() => ({}))) as { error?: { message?: string } };
-        return { ok: false, reason: detail?.error?.message ?? `ack HTTP ${ackRes.status}` };
+        const message = detail?.error?.message;
+        return {
+          ok: false,
+          reason: typeof message === "string" && message
+            ? message.slice(0, MAX_REASON_CHARS)
+            : `ack HTTP ${ackRes.status}`,
+        };
       }
       const ackJson = (await ackRes.json().catch(() => ({}))) as { data?: { acked?: boolean } };
 
@@ -287,7 +353,7 @@ export function useMySummons() {
       markSeen([notice.eventId]);
       return { ok: true, acked: ackJson?.data?.acked ?? true };
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = (err instanceof Error ? err.message : String(err)).slice(0, MAX_REASON_CHARS);
       setAckError(reason);
       return { ok: false, reason };
     } finally {

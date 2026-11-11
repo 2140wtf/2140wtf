@@ -19,6 +19,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
+import { finalizeEvent } from "nostr-tools";
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -94,14 +95,37 @@ function makeEvent(
   };
 }
 
+/**
+ * A NIP-01 signed event for HOOK-level tests: ingest verifies signatures, so
+ * an unsigned fixture would be dropped before the size caps were exercised.
+ */
+function signedEvent(
+  kind: number,
+  tags: string[][],
+  opts: { content?: string; key?: Uint8Array } = {},
+): NostrEvent {
+  nowSec += 1;
+  return finalizeEvent(
+    { kind, created_at: nowSec, tags, content: opts.content ?? "" },
+    opts.key ?? COURT_PRIVATE_KEY,
+  ) as unknown as NostrEvent;
+}
+
 function proposalEvent(overrides: Record<string, string> = {}): NostrEvent {
-  return makeEvent(COURT_OUTCOME_PROPOSAL_KIND, [
-    ["dispute", CASE_ID],
-    ["session", SESSION],
-    ["outcome", "yes"],
-    ...SUPPORTING.map((id) => ["supporting", id] as string[]),
-    ...Object.entries(overrides).map(([k, v]) => [k, v] as string[]),
-  ]);
+  // Round 35: finality requires the proposal publisher to be the pinned court
+  // authority (the group key in these tests); the unattributed case has its
+  // own repro tests in useCourtConfirmations.r35.security.test.ts.
+  return makeEvent(
+    COURT_OUTCOME_PROPOSAL_KIND,
+    [
+      ["dispute", CASE_ID],
+      ["session", SESSION],
+      ["outcome", "yes"],
+      ...SUPPORTING.map((id) => ["supporting", id] as string[]),
+      ...Object.entries(overrides).map(([k, v]) => [k, v] as string[]),
+    ],
+    { pubkey: COURT_COHORT },
+  );
 }
 
 function confirmationEvent(pubkey: string): NostrEvent {
@@ -242,7 +266,7 @@ describe("S2 — hostile proof paths fail closed without throwing", () => {
 describe("S3 — oversized hostile events are dropped at ingest", () => {
   it("drops an event with a multi-megabyte content field", async () => {
     const hugeCaseId = "e".repeat(64);
-    const huge = makeEvent(COURT_OUTCOME_PROPOSAL_KIND, [], {
+    const huge = signedEvent(COURT_OUTCOME_PROPOSAL_KIND, [], {
       // ~10MB of VALID JSON content carrying the case id — the only place it
       // appears (no dispute tag), so ingestion is observable via statuses.
       content: JSON.stringify({
@@ -259,7 +283,7 @@ describe("S3 — oversized hostile events are dropped at ingest", () => {
 
   it("drops an event with an absurd tag value", async () => {
     const hugeTagCaseId = "f".repeat(64);
-    const hugeTag = makeEvent(COURT_OUTCOME_PROPOSAL_KIND, [
+    const hugeTag = signedEvent(COURT_OUTCOME_PROPOSAL_KIND, [
       ["dispute", hugeTagCaseId],
       ["outcome", "y".repeat(10 * 1024 * 1024)],
     ]);
@@ -268,6 +292,16 @@ describe("S3 — oversized hostile events are dropped at ingest", () => {
     const { result } = renderHook(() => useCourtConfirmations());
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.statuses.has(hugeTagCaseId)).toBe(false);
+  });
+
+  it("keeps a small, validly signed event (the size caps are not a deny-all)", async () => {
+    const smallCaseId = "d".repeat(64);
+    backfillEvents = [
+      signedEvent(COURT_OUTCOME_PROPOSAL_KIND, [["dispute", smallCaseId], ["outcome", "yes"]]),
+    ];
+    const { result } = renderHook(() => useCourtConfirmations());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.statuses.has(smallCaseId)).toBe(true);
   });
 });
 

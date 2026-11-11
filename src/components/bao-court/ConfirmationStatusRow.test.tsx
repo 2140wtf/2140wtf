@@ -13,9 +13,14 @@ function status(overrides: Partial<CourtConfirmationStatus> = {}): CourtConfirma
     challenged: false,
     challengeCount: 0,
     proposalEventId: "p".repeat(64),
+    proposalPublisher: "e".repeat(64),
+    attributed: true,
     batchEventId: null,
+    batchAttestationValid: false,
     verified: false,
     verifyReason: null,
+    batchEpoch: null,
+    batchCount: null,
     finalReason: null,
     ...overrides,
   };
@@ -75,6 +80,64 @@ describe("ConfirmationStatusRow", () => {
     );
     const count = screen.getByLabelText("10000 of 3 juror confirmations");
     expect(count.getAttribute("title")).toMatch(/not verified to be empaneled jurors/);
+  });
+
+  it("R35: shows a cryptographically valid batch without calling it final when attribution is unverified", () => {
+    render(
+      <ConfirmationStatusRow
+        status={status({
+          stage: "confirmed",
+          confirmations: 3,
+          batchAttestationValid: true,
+          verified: false,
+          attributed: false,
+          verifyReason: "batch is valid but the proposal publisher is not the pinned court authority",
+        })}
+      />,
+    );
+    const row = screen.getByTestId("court-confirmation-status");
+    expect(row.getAttribute("data-stage")).toBe("confirmed");
+    expect(screen.getByText(/attribution unverified/)).toBeTruthy();
+    expect(screen.queryByText(/batch verified/)).toBeNull();
+  });
+
+  it("R35: surfaces the verified batch epoch in the checkmark tooltip", () => {
+    render(
+      <ConfirmationStatusRow
+        status={status({
+          stage: "final",
+          confirmations: 3,
+          attributed: true,
+          batchAttestationValid: true,
+          verified: true,
+          batchEpoch: 42,
+          batchCount: 7,
+          finalReason: "batch-attestation",
+        })}
+      />,
+    );
+    const chip = screen.getByText(/batch verified/).closest("span")!;
+    expect(chip.getAttribute("title")).toMatch(/epoch 42/);
+    expect(chip.getAttribute("title")).toMatch(/pinned court authority/);
+  });
+
+  it("R35: never builds a link or raw HTML from hostile status fields", () => {
+    const { container } = render(
+      <ConfirmationStatusRow
+        status={status({
+          caseId: "javascript:alert(1)",
+          proposalEventId: "<img src=x onerror=alert(1)>",
+          proposalPublisher: "\u202Eevil",
+          verifyReason: "<script>alert(1)</script>",
+          batchEventId: "\" onmouseover=\"alert(1)",
+        })}
+      />,
+    );
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.innerHTML).not.toContain("onerror");
+    expect(container.innerHTML).not.toContain("onmouseover");
   });
 
   it("renders nothing without a status", () => {
