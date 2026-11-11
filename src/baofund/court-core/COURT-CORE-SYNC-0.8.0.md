@@ -623,3 +623,80 @@ never been part of the client subset).
 - `npx tsc --noEmit` -> exit 0
 - `npx vite build` -> exit 0 (built in 7.98s; pre-existing chunk-size and
   cashuWallet dynamic-import warnings only)
+
+---
+
+# court-core vendor sync - bao-court v0.13.0 (c456fb4)
+
+Synced the v0.12.0 -> v0.13.0 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.13.0** (c456fb4) and bumped the npm dep
+`@bao/court` `#v0.12.0` -> `#v0.13.0`.
+
+## What changed
+
+**Updated engine files (6):**
+- `confirmationMachineTypes.ts`, `confirmationMachineHandlers.ts`,
+  `confirmationMachineCore.ts`, `courtConfirmationMachine.ts` - **per-round
+  escalation bond (R31, r30-1).** The bond was a membership test: one accepted
+  challenge bond authorised every ladder round, so escalation was a free option
+  worth `sum 3^r b0` at the protocol cap. New wire:
+  `CourtEscalationRecord.roundBondProofHash`, `escalate.roundBondProofHash`, and
+  the frozen policy `CourtConfirmationMachineState.requireRoundBond` (**default
+  `false`**). `onEscalate` refuses an absent per-round witness when required,
+  the relabelled membership bond, and a hash an earlier round consumed;
+  `assertValidEscalationLog` re-derives all three rules at `finalize`.
+  **Additive for this client**: no escalate path is constructed in app code, and
+  the default keeps v0.12 semantics for existing cases/snapshots.
+- `courtInbox.ts` - durable-inbox durability fix (T-1): provenance is capped at
+  the first 64 distinct sources, so a wrap delivered by 65+ relays can no longer
+  produce a snapshot `fromSnapshot` refuses (which lost the whole inbox on the
+  next restart).
+- `index.ts` - root re-exports for the three new economics modules.
+
+**New modules (copied in clean):**
+- `ladderEconomics.ts` - `deriveMaxLadderRounds`, `deriveLadderFlipRound`,
+  `escalationOptionEv`, `ladderCapWithinBound`, `ladderSignBoundary`,
+  `escalationBondMultiple`, `cumulativeLadderBondMultiple`.
+- `penaltyAging.ts` - `agePenalties` / `pairedJurorWeight` (decay pairing at the
+  commitment's `lambda = ln2/3`, anchored at the weight floor).
+- `quorumEconomics.ts` - `captureProbability`, `quorumCapCorrection`.
+
+**Tests vendored (8 new files, +106 tests):** `ladderEconomics`,
+`penaltyAging`, `perRoundBond`, `quorumEconomics`, `reviewRound3`,
+`r30SealGames`, `r30MarmotTransport`, `r30InboxOutboxLoad`; plus updated
+`escalationWitness`, `modelChecking`(+`Core`), `helpers/fixtures`,
+`helpers/machines`, the `scale/` corpora + `witnessCorpus` /
+`epochRotationCorpus` / `finalityCorpus`, and `__fixtures__/model-check-summary.json`.
+
+**Deliberately not vendored:**
+- `__tests__/r30MultiProcessCeremony.test.ts` - it drives
+  `scripts/court/multi-process-ceremony.mjs` through `tsx`; this client vendors
+  neither the engine's `scripts/` tree nor `tsx`, so the gate cannot run here.
+  Upstream bao-court CI keeps it.
+- `docs/` and `scripts/` deltas (`PER_ROUND_BOND.md`, `REVIEW_ROUND_3.md`,
+  `MULTI_PROCESS_CEREMONY.md`, proofs, campaign harnesses) - unchanged
+  convention: this client vendors the engine + tests + fixtures only.
+
+## Client-local adaptations preserved
+
+1. **ASCII dash normalization** re-applied to the engine sources and the
+   vendored tests (em/en dashes and box-drawing rules -> `-`; single `─`
+   adjacent to a diagram tee/corner is kept).
+2. **`__tests__/modelCheckingCore.ts` and `__fixtures__/model-check-summary.json`
+   stay RAW upstream copies**, per the v0.12.0 note - they are asserted
+   against each other, so normalizing one (or both) is a string diff for no
+   behaviour change.
+3. **`helpers/machines.ts` `drive()` cast**, **`helpers/keys.ts`
+   `Uint8Array.from(randomBytes(...))`** and **`helpers/fixtures.ts`
+   dirname+join path resolution** re-applied (three-way merge, clean) - the
+   jsdom realm shims.
+4. No new adaptations were required: `adversarialNostr.test.ts` and
+   `differentialParity.test.ts` are not in this delta.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 36 files / 992 tests passed
+  (was 28 / 886; +8 files / +106 tests)
+- `npx vitest run src/hooks src/components/bao-court` -> 42 files / 274 passed
+- `npx tsc --noEmit` -> exit 0
+- `npx vite build` -> exit 0 (pre-existing chunk-size / dynamic-import warnings only)
