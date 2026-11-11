@@ -471,6 +471,8 @@ export {
 export {
   buildMultisigScript,
   buildTaprootLeaves,
+  buildCourtJudgeLeaf,
+  isCourtJudgeLeaf,
   p2wshProgram,
   p2wshAddress,
   taprootProgram,
@@ -485,6 +487,9 @@ export {
   pushHex,
   type MultiSigParams,
   type TaprootEscrowParams,
+  type CourtJudgeLeafParams,
+  type CourtJudgeLeaf,
+  type JudgeLeafSecondSignature,
   type LiquidNetworkParams,
   type LiquidUtxo,
   type LiquidRecipient,
@@ -566,6 +571,7 @@ export {
 export {
   COURT_CONFIRMATION_DOMAIN,
   CourtConfirmationTransitionError,
+  confirmSupermajority,
   createCourtConfirmationMachine,
   hashCourtConfirmation,
   reduceCourtConfirmationMachine,
@@ -592,6 +598,21 @@ export {
   verifyCaseInBatch,
   type BatchMerkleProof,
 } from './batchAttestation';
+
+export {
+  SIGNING_JOURNAL_DOMAIN,
+  AttributionError,
+  buildSigningJournal,
+  hashSigningJournal,
+  verifyAggregateAttribution,
+  type AggregateSignature,
+  type AttributionFailure,
+  type AttributionResult,
+  type JournalCommitment,
+  type JournalPartial,
+  type SigningJournal,
+  type SigningJournalInput,
+} from './attribution';
 
 export {
   COURT_EPOCH_COHORT_DOMAIN,

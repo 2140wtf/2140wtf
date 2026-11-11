@@ -394,3 +394,109 @@ regressions (all re-based onto the helpers kit where upstream did).
 - `npx vitest run src/hooks src/components/bao-court` → 43 files / 277 passed
 - `npx tsc --noEmit` → exit 0
 - `npx vite build` → exit 0
+
+---
+
+# court-core vendor sync - bao-court v0.11.0 (eb91297)
+
+Synced the a66baa4 -> v0.11.0 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.11.0** (eb91297, "release: v0.11.0 -
+review-response round + verification campaign") and bumped the npm dep
+`@bao/court` `#v0.10.2` -> `#v0.11.0` (lockfile re-resolved via explicit
+`npm install @bao/court@github:baocommunity/bao-court#v0.11.0`; resolves to the
+exact tag commit eb912977c06a1ab2614bf0d021620926be8c10d9). The upstream delta
+spans bao-court PRs #77-#88: the settlement-binding judge leaf (#78),
+attribution (#84), the R25 quorum default (#85), the scale campaign (#86), the
+mutation campaign (#87) and the docs/proofs rounds (#79-#83, #88).
+
+## What changed
+
+**New modules (copied in clean):**
+- `attribution.ts` - attributable FROST signing sessions (Theorem 6,
+  `docs/proofs/attribution.tex.md`). A bare FROST aggregate is an ordinary
+  BIP-340 signature and attributes nothing; this module publishes the session
+  as the evidence: `buildSigningJournal` (round-1 nonce commitments, round-2
+  partials, signer set, threshold, aggregate), `hashSigningJournal`, and
+  `verifyAggregateAttribution`, which re-verifies every partial against its
+  signer's certified verification share, re-runs `s = sum s_i`, and checks the
+  aggregate against the pinned group key - so a failing partial is attributed
+  to its index and a non-reconstructing journal is itself evidence. Pure
+  computation, no I/O; journalling is the host's job. Exports
+  `SIGNING_JOURNAL_DOMAIN`, `AttributionError` and the journal types.
+  **Consumer impact: additive** - nothing in the client imports it.
+
+**Updated files:**
+- `liquidEscrow.ts` - upstream #78 (settlement binding): new
+  `buildCourtJudgeLeaf({winnerXOnly, groupXOnly})` and
+  `isCourtJudgeLeaf(scriptHex, keys)`. The judge slot holds the standing
+  cohort key and that key signs the SPEND's tapscript sighash in a second
+  session; the builder refuses role collapse (winner == group) and non-x-only
+  inputs, and produces bytes identical to `buildTaprootLeaves`'s judge leaf.
+  The legacy single-oracle builder is byte-compatible and untouched. Doc
+  comment now separates the two builders explicitly.
+- `courtConfirmationMachine.ts` + `confirmationMachineCore.ts` +
+  `confirmationMachineTypes.ts` - upstream #85 (**R25**): the factory DEFAULT
+  `confirmQuorum` is now the roster supermajority `confirmSupermajority(N)` =
+  ceil(2N/3) instead of 1 (one compromised juror could previously confirm every
+  case). An explicit smaller quorum stays ALLOWED and every existing snapshot
+  still restores; the factory RECORDS `quorumBelowSupermajority: boolean` in
+  the state so policies and auditors can gate on it.
+- `index.ts` - re-exports `confirmSupermajority`, the attribution surface and
+  the two judge-leaf builders + their types.
+
+**New tests vendored:** `__tests__/attribution.test.ts` (7 tests: forged
+partial attribution, missing partial, non-reconstructing aggregate, wrong
+signer set, verification-share pin, wrong group key, malformed-record
+fail-closed), `__tests__/mutationClosures.test.ts` (the 8 spec holes the
+upstream 53-mutant campaign found, closed with pins) and `__tests__/scale/`
+(`corpus.ts`, `index.ts`, six seeded corpora + `scaleCampaign.test.ts` - the
+CI-bounded FAST profile of every campaign: 250 confirmation sequences, 15,000
+tallies, 40 Merkle batches, 250 real signed v2 attestations, 200 selection
+draws, 100,000 canonical encodings).
+
+**Updated tests synced:** `courtConfirmationMachine.test.ts` (+84 lines: the
+R25 default/flag suite), `errorTaxonomy.test.ts` (+3: `AttributionError`) and
+`invariantAssertions.test.ts` (+2: `SIGNING_JOURNAL_DOMAIN`).
+
+**Not vendored (unchanged policy):** upstream `docs/`, `scripts/`, `bench/`,
+`proofs/` and the release/paper files. The committed model-check fixture
+(`__fixtures__/model-check-summary.json`), `__tests__/modelCheckingCore.ts` and
+`__tests__/differentialParity.test.ts` were already at v0.11.0 bytes - no
+change.
+
+## Quorum check (the one machine-parameter change this round)
+
+The client is unaffected, verified rather than assumed:
+- No client code constructs a confirmation machine. The court hooks use only
+  `batchAttestation` (`verifyCaseInBatch`) and `courtVoteMachine`
+  (`hashCourtVerdict`); confirmation status is DERIVED from observed relay
+  events (kind 39007/39018), so there is no quorum assumption to re-derive.
+  `grep` for `confirmQuorum` / `createCourtConfirmationMachine` outside
+  `src/baofund/court-core` returns nothing but the fund attestation panel's
+  unrelated sat-weighted `quorumPct` helper.
+- The vendored engine tests pin the old behaviour explicitly
+  (`__tests__/helpers/machines.ts` `CONFIRM_DEFAULTS.confirmQuorum: 1`, which is
+  upstream's own helper), so R25 changed no existing test's expectation.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** as documented above, applied to every copied
+   file (em/en/word-joiner dashes -> `-`; U+2500 section-rule runs ->
+   `-` of the same width; tree glyphs, `©`, `→`, `≤`, `≥`, `…`, `§` kept).
+2. **No new adaptations were needed:** upstream did not change
+   `__tests__/helpers/{keys,machines,fixtures}.ts`,
+   `__tests__/adversarialNostr.test.ts`, `__tests__/modelCheckingCore.ts` or
+   `__tests__/differentialParity.test.ts` in this delta (diffs against v0.11.0
+   are the client adaptations only, so they were left byte-unchanged). The new
+   scale corpora use seeded generators and hex secrets - no `randomBytes`, so
+   the jsdom `Uint8Array.from(...)` shim is not required.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 27 files / 874 tests passed
+  (was 24 / 838)
+- `npx vitest run src/hooks src/components/bao-court` -> 42 files / 274 passed
+  (a first run flaked on the unrelated `useCashuWallet.test.tsx`
+  `waitFor` under host load; re-run green, and that file passes 62/62 alone)
+- `npx tsc --noEmit` -> exit 0
+- `npx vite build` -> exit 0
