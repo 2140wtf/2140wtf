@@ -1273,3 +1273,92 @@ constants (`BAO_COURT_DISPUTE_KIND`, court kinds) only.
 - `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
 - `npx tsc --noEmit --incremental false` -> exit 0
 - `npx vite build` -> exit 0 (49.5 s, chunk-size advisory only)
+
+---
+
+# court-core vendor sync - bao-court v0.15.1 (e489fe5)
+
+Small round: the v0.15.0 sync landed earlier the same day (#217), so this
+carries ONLY the `v0.15.0 -> v0.15.1` delta (bao-court #128 review round 11 +
+#129 release) into `src/baofund/court-core/` and moves the dep `@bao/court`
+`#v0.15.0` -> `#v0.15.1`. `v0.15.1` is an ANNOTATED tag; it resolves to commit
+`e489fe594b59d41615f1700a01a99006d4740e73` (package version `0.15.1`), which is
+what the lockfile records.
+
+## What changed (4 engine files + 1 new test; no export, no wire field, no signature)
+
+- `courtEscalationRequest.ts` - **r11-1 + r11-2.** The refusal echo is now
+  TOTAL: `quoteWireValue` escaped `Cc/Cf/Zl/Zp/Cs` but only four of the ten
+  echo sites used it, so `event.kind` from the wire and `state.ladderRound` /
+  `state.phase` from a restored snapshot were interpolated raw (`"3\nESCALATION
+  ACCEPTED"` forged a log line inside the barrier's own refusal message); the
+  64-character budget is now spent on the ESCAPED output (a legal 60-char
+  zero-width id echoed 387 characters, now 59 plus `...`); the walk is by code
+  point, so the clip cannot split a surrogate pair or half an escape; and new
+  `quoteWireUnknown` never calls `toString` (`String(Object.create(null))` used
+  to throw a raw `TypeError` OUT of a refusal). The signed-event binder
+  validates the event SHAPE (kind/id/pubkey/sig/created_at/content/tags) before
+  `verifyEvent`, so `tags: null` is a typed refusal instead of
+  `Cannot read properties of null (reading 'map')`.
+- `confirmationMachineCore.ts` - r11-1 on the counters barrier: its refusal
+  echoes both counters through a total `quoteCounter` (a restored
+  `ladderRound: "3\nESCALATION ACCEPTED"` is described, never stringified), and
+  the doc comment no longer claims the reverted pre-dispatch placement.
+- `confirmationMachineHandlers.ts` - **r11-3.** `flag_clawback` was the one
+  ladder reader the round-10 sweep missed: it stamped the clawback record with
+  `state.ladderRound` without `assertRoundCountersAgree`, so a restored
+  `fee_settlement` snapshot (`ladderRound 3` / `ladder.round 2`) wrote a round-3
+  clawback on a round-2 case. It is now behind the same barrier as `finalize`,
+  `escalate`, `open_ladder_round` and `resolve_round`.
+- `ladderEconomics.ts` - **DOCSTRING ONLY, no behaviour change.** It now states
+  the edge round 11 measured: parameters are rationalised from `String(number)`,
+  so `beta: 3 * 0.1` is a DIFFERENT rational from `0.3` and admits one round
+  more at the exact boundary. The numeric export, `deriveMaxLadderRounds`, is
+  byte-identical to v0.15.0.
+- `__tests__/reviewRound11.test.ts` (new, 828 lines) - the attack suite for the
+  three fixes plus the exact-bound pin.
+
+**Not vendored (unchanged policy):** `CHANGELOG.md`, `docs/REVIEW_ROUND_11.md`
+and the release `package.json`. No `__fixtures__` or `__tests__/reference`
+change in this delta; the committed model-check fixture is untouched.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** on all 5 copied files (em/en/non-breaking dash
+   -> `-`), the standing rule. Proven, not asserted: normalizing the v0.15.0
+   copies of the 4 modified files reproduces this tree's previous bytes exactly,
+   so the delta is the only change in them.
+2. **No new adaptations were needed.** `reviewRound11.test.ts` imports only
+   `vitest`, `nostr-tools/pure` and relative `../` engine paths - no `fs`, no
+   `dirname`+`join` jsdom shim, no `scripts/` harness case (so no
+   `HAS_HARNESS` guard), no doc pin. It runs in process, whole.
+
+## Client call sites (verified by grep, not assumed)
+
+- `quoteWireValue` / `quoteWireUnknown` / `quoteCounter` are module-private; the
+  client cannot import them and never did.
+- The client does not construct escalation requests or `flag_clawback` events at
+  all (`grep` for `courtEscalationRequest`, `escalationRequestToMachineEvent`,
+  `flag_clawback` outside `src/baofund/court-core` is empty), so the tightened
+  barriers change no client path. The engine is carried for parity and for its
+  suite.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> **50 files, 1,252 passed / 7
+  skipped (1,259)** (was 49 / 1,231 / 6: exactly +1 file and +21 tests, all from
+  `reviewRound11.test.ts`). One extra `skipIf` case parks in this worktree's
+  install - `scripts/differential` is not vendored and `tsx` is not installed
+  here, so `differentialWire.test.ts`'s harness case skips; no test was
+  weakened and no engine assertion changed.
+- `npx vitest run src/baofund/court-core/__tests__/reviewRound11.test.ts`
+  (verbose) -> 21/21 passed, no skips.
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+  (unchanged from #217, as expected: no client call site).
+- `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0 (1m 27s)
+- `npm ci` re-resolved `@bao/court` to **0.15.1** from
+  `github:baocommunity/bao-court#v0.15.1` (lock: commit
+  `e489fe594b59d41615f1700a01a99006d4740e73`), so the pin is real rather than
+  a hand-edited lockfile entry.
