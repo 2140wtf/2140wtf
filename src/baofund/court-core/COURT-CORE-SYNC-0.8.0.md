@@ -1157,3 +1157,119 @@ a typed refusal where it used to brick.
 - `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
 - `npx tsc --noEmit --incremental false` -> exit 0
 - `npx vite build` -> exit 0
+
+---
+
+# court-core vendor sync - bao-court v0.15.0 (fe47ba4)
+
+Synced the v0.14.1 -> v0.15.0 delta from `baocommunity/bao-court` tag
+**v0.15.0** (`fe47ba454deb28832fe35ca373746adb740eead3` = release commit,
+bao-court #126) and pinned the npm dep `@bao/court` `#v0.14.1` -> `#v0.15.0`
+(lockfile re-resolved to the exact release commit; installed version `0.15.0`).
+
+Delta = bao-court PR **#120** (independent Python wire + 100k differential),
+**#121** (10x corpus), **#122** (review round 10), **#123/#124** (Lean 4 ladder
++ escalation ledger, Apalache), the **R52 exact ladder bound** and the release
+bump #126.
+
+## What changed
+
+**Updated engine files (6):**
+
+- `ladderEconomics.ts` (+233) - **SEMANTICS, not docs.** `deriveMaxLadderRounds`
+  is now the safe predicate itself: `max{d : R*D^d < A^d*(R+B)}`, evaluated in
+  `BigInt` on the exact rational each parameter's decimal text names (`0.03`
+  -> `3/100`, not the nearest double). No logarithm and no floating-point
+  comparison remain on the decision path; `0` still means "no safe depth".
+  **Seven exact-boundary rows changed** (`a_f = 1/2` with `beta = 3rho/7rho/
+  15rho/31rho` -> caps 1/2/3/4, were 2/3/4/5; `beta = 7rho/9` -> 1, was 2) and
+  `derivedCap = flipRound - 1` is now an **equality**; every `rho = beta`
+  configuration (flip 7/5/4/3/2, cap 5/4/3/2/1) is unchanged. `rho + beta`
+  overflow no longer reads as a perfect jury. **Client impact: none** - nothing
+  in this tree reads the ladder bound (it is the HOST's creation-time gate;
+  the client only renders court status).
+- `courtEscalationRequest.ts` (+397) - r9-1 case ids validated EXACTLY (the
+  `trim()` fold gave one digest to `"court:X "`, `"court:X\t"` and
+  `"court:X\u3000"`; the host binding no longer folds symmetrically), r9-2
+  `bondTxid` COMPARED with the accepted challenge record, r9-3 a signed
+  CONCESSION can no longer be minted as an ESCALATION, r9-4 the mapper refuses
+  a snapshot whose `ladderRound` and `ladder.round` disagree, r10-1 refusal
+  echoes escape `Cc/Cf/Zl/Zp/Cs` and are bounded (`quoteWireValue`), r10-3 the
+  binding lives inside the SIGNED bytes
+  (`courtEscalationRequestSignedContent` + `escalationRequestBindingFromSignedEvent`),
+  and the four raw `TypeError` escapes the independent wire found are typed.
+- `confirmationMachineCore.ts` (+44), `confirmationMachineHandlers.ts` (+35) -
+  r10-4 `assertRoundCountersAgree` in `finalize`/`escalate`/`open_ladder_round`
+  (a fee-settlement snapshot with `ladderRound 3` / `ladder.round 2` FINALISED
+  round 2's YES over round 3's NO), plus the r9-3/r9-4 barriers.
+- `courtConfirmationMachine.ts` (+23) - the machine factory surface for the
+  above; no wire field was added, so existing cases/snapshots restore unchanged.
+- `index.ts` (+3) - re-exports `courtEscalationRequestSignedContent`,
+  `escalationRequestBindingFromSignedEvent` and the `CourtEscalationRequestEvent`
+  type. No new subpath.
+
+**Tests vendored:** 5 modified (`reviewRound6`, `reviewRound7`, `scale/corpus`,
+`scale/index`, `scale/scaleCampaign` - the r40-4/R52 boundary expectations move
+to cap 1 / flip 2 and the campaign gains the three new corpora) and 7 new
+(`reviewRound9` 734 lines, `reviewRound10` 940, `ladderBoundExact` 438, 
+`findingR46` 179, `mechanisedArtifacts` 578, `differentialWire` 352,
+`scale/{escalationTransportCorpus,ledgerBarrierCorpus,bondAlgebraCorpus}`).
+All import only vendored engine modules, `helpers/` and `@noble/*` - no new
+dependency.
+
+**Deliberately not vendored (unchanged convention):** the `docs/` delta
+(`DIFFERENTIAL_WIRE.md`, `REVIEW_ROUND_9.md`, `REVIEW_ROUND_10.md`,
+`SCALE_CAMPAIGN_V2.md`, `docs/proofs/07-mechanised-escalation.tex.md`,
+refreshed paper/README/CROSS_CHECK/EVALUATION/REVIEWS_INDEX/PER_ROUND_BOND),
+`proofs/` (Lean 4 + Quint), `scripts/` (the differential harness, campaign,
+mutation) and `CHANGELOG.md` - engine + tests + fixtures only, as always.
+
+## Client-local adaptations preserved / applied this sync
+
+1. **ASCII dash normalization** re-applied to all 20 copied files (em dash
+   U+2014, en dash U+2013, U+2011, box-drawing U+2500 -> `-`). Verified by
+   reproduction: normalizing the `bc28ff3` copies reproduced the previous tree
+   byte-for-byte, so the diff is exactly the upstream delta.
+2. **`differentialWire.test.ts` - the harness-backed cases are SKIPPED, not
+   weakened.** The suite drives `scripts/differential/{wire_ref.py,run.mjs}` and
+   reads the committed `results/*.json`, none of which is vendored here, and one
+   pin reads `docs/DIFFERENTIAL_WIRE.md`. A `HAS_HARNESS` guard (path existence +
+   `python3`) skips those 5 cases and the doc pin; the four DECIDED corners
+   (D1 whitespace set, D2 typed refusal, D3 double semantics, D4 canonicality)
+   run in process and stay asserted.
+3. **`reviewRound7.test.ts`** - the `dirname`+`join` jsdom shim (relative URL
+   against a `file:` base throws `ERR_INVALID_URL_SCHEME` here) and the
+   `it.skip` on the doc pin were re-applied to the REWRITTEN upstream text (the
+   r41-T1 case now pins cap 1 / flip 2 / `E[pi](2) = 0`), so the skip stays a
+   skip on the new assertion, not a stale duplicate.
+4. **`escalationRequestWire.test.ts`** is unchanged upstream in this delta, so
+   its existing `it.skip` doc pin stands untouched.
+5. No new dependency, no new jsdom shim (the new in-process suites read nothing).
+6. **`scale/escalationTransportCorpus.ts` - `prependMember` uses index-based
+   insertion instead of `text.replace('{', ...)`.** CodeQL flags the
+   string-pattern form on code changed by this PR (`js/incomplete-sanitization`:
+   the replacement re-supplies the searched character). Behaviour is identical
+   for a JSON object text - the fixture crafts malformed wire text at a known
+   position - and the intent is now explicit (`startsWith` guard + `slice`).
+   Upstream keeps the `replace` form; this is the only divergence in the
+   vendored TESTS that is neither a dash nor a skip.
+
+## Consumer impact here: none
+
+Nothing in the client constructs an escalation request or a confirmation
+machine (hooks derive status from relay events; the escalation UI emits
+decisions), so r9-3/r9-4/r10-3 are stricter-and-unused here, and the ladder
+bound has no client call site. `@bao/court` is imported for TYPES and a few
+constants (`BAO_COURT_DISPUTE_KIND`, court kinds) only.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 49 files, **1,231 passed / 6 skipped**
+  (was 43 / 1,129 / 2; +6 files, +102 passing, +4 documented skips)
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+  (one full-suite run showed 4 load flakes - `useCashuWallet` x3 and the 2,000-
+  event r36 retention case at 82 s; all 82 cases of those two files pass in
+  isolation 35 s, so they are load-sensitive, not regressions)
+- `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0 (49.5 s, chunk-size advisory only)

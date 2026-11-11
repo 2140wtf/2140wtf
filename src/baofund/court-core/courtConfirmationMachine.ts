@@ -48,14 +48,14 @@ import {
  * Every market outcome - disputed or not - is confirmed by a juror panel:
  *
  *   confirm_open -> confirm_closed -> challenge_window
- *     ├─ (no challenge) -> fee_settlement -> final
- *     └─ (challenge)    -> ladder_pending -> ladder_vote_open ->
- *                          ladder_vote_closed -> resolve_round ─┐
+ *     ├- (no challenge) -> fee_settlement -> final
+ *     └- (challenge)    -> ladder_pending -> ladder_vote_open ->
+ *                          ladder_vote_closed -> resolve_round -┐
  *           ┌---------------------------------------------------┤
- *           ├─ (round === maxLadderRounds) -> fee_settlement -> final
- *           └─ (rounds remain)            -> round_resolved
- *                                             ├─ concede  -> fee_settlement -> final
- *                                             └─ escalate -> ladder_pending (next round)
+ *           ├- (round === maxLadderRounds) -> fee_settlement -> final
+ *           └- (rounds remain)            -> round_resolved
+ *                                             ├- concede  -> fee_settlement -> final
+ *                                             └- escalate -> ladder_pending (next round)
  *
  * Confirmations are public endorsements (no commit/reveal - the confirmation
  * is itself the juror's signed statement). A challenge must carry a verified
@@ -436,6 +436,15 @@ export function reduceCourtConfirmationMachine(
   ) {
     throw new CourtConfirmationTransitionError('ladder state is missing or malformed');
   }
+  // One round number per case (r10-4): the state carries `ladderRound` (every
+  // escalation rule) and `ladder.round` (the vote ledger the verdict is derived
+  // from), and the machine writes both in the same transition. Round 9 checked
+  // this in `resolve_round` and in the transport mapper; round 10 measured the
+  // gap that left - a `fee_settlement` snapshot with `ladderRound = 3` and
+  // `ladder.round = 2` passed every barrier `finalize` runs and minted round 2's
+  // verdict over the last paid round's decision (`docs/REVIEW_ROUND_10.md` §4).
+  // The three value- and seat-locking entries that consume the escalation log
+  // check it themselves, so no entry inherits the gap.
   // Monotonic non-decreasing clock for every time-bearing event; `abort`
   // carries no clock (mirrors the vote machine).
   if (event.type !== 'abort') {
