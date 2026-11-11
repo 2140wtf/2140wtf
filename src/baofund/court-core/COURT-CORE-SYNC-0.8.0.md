@@ -700,3 +700,95 @@ Synced the v0.12.0 -> v0.13.0 delta into `src/baofund/court-core/` from
 - `npx vitest run src/hooks src/components/bao-court` -> 42 files / 274 passed
 - `npx tsc --noEmit` -> exit 0
 - `npx vite build` -> exit 0 (pre-existing chunk-size / dynamic-import warnings only)
+
+# court-core vendor sync - bao-court v0.13.1 (bedb476)
+
+Synced the v0.13.0 -> v0.13.1 delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` tag **v0.13.1** (bedb476, verified: the tag points at
+origin/main on the day of the sync) and bumped the npm dep
+`@bao/court` `#v0.13.0` -> `#v0.13.1` (lockfile resolved sha
+`bedb476ec1ce3589a6e28d49f40661ac8e794ed1`).
+
+Delta = bao-court PRs #102-#106: the Byzantine-relay ceremony campaign (R33),
+the review-round-4 attack on the v0.13 surface, the registered-findings sweep
+(R34), the round-35 readiness review and the release bump.
+
+## What changed
+
+**Updated engine files (4):**
+- `confirmationMachineCore.ts`, `confirmationMachineHandlers.ts` - two
+  review-round-4 machine fixes, both *stricter*, neither adds a wire field:
+  - **two-challenger bond billing (r33-1, exploitable, fixed).** The reducer
+    compared a round bond only with the *escalator's own* membership bond, so
+    juror B could bill its rung to juror A's accepted challenge bond: A's
+    witness burned, B free, the wrong payer in the ledger. `onEscalate` and
+    `assertValidEscalationLog` now refuse ANY already-accepted challenge bond.
+  - **complete escalation ledger + barrier before every rung (r33-5,
+    exploitable, fixed).** The barrier's "short log" exemption (kept for
+    pre-0.12 snapshots) was a free option once log records consume bond hashes:
+    deleting a record un-consumed its bond. The barrier now demands one record
+    per opened round whenever the log is non-empty or `requireRoundBond` is
+    true, and `onEscalate` re-runs it before opening a rung (previously only
+    `onFinalize` did), so a restored snapshot cannot seat a panel on a spent
+    bond and then brick at finalize. The legacy deletion residual
+    (`requireRoundBond` false, no records) is documented and pinned.
+  **Additive for this client**: no escalate path is constructed in app code,
+  no snapshot shape changes, and every existing case restores unchanged.
+- `ladderEconomics.ts` - **sign-based bound (r33-6, exploitable, fixed).**
+  `deriveMaxLadderRounds` clamped to `[1, MAX_LADDER_ROUNDS]`, so at
+  `a_f <= rho/(rho+beta)` it returned `1` and `ladderCapWithinBound` blessed a
+  *profitable* first rung, contradicting its own `E[pi] < 0 for every R <=
+  derived` contract. `0` now means "no safe depth" (upward-only clamp) and
+  `ok` is decided by the sign (`maxLadderRounds < deriveLadderFlipRound`), not
+  by comparing with `derivedCap`. **Consumer impact: none in-tree** - nothing
+  in the client reads `derivedCap`; any future host must treat `0` as "refuse
+  every ladder".
+- `penaltyAging.ts` - **`Infinity` from finite overflow (r33-9, fixed).**
+  `pairedJurorWeight` rejects a non-finite `earned` weight (finite `w0` and a
+  finite `bonusMultiplier` can still overflow `Number.MAX_VALUE`), because the
+  weight is a lottery/selection input and `Infinity` silently dominates every
+  downstream comparison.
+
+**Tests vendored:**
+- `__tests__/reviewRound4.test.ts` (NEW, 487 lines) - every case is either a
+  CLOSURE (red before the fix) or a named `(registered ...)` pin, so a future
+  fix turns the pin red on purpose. Imports only the engine root + helpers.
+
+**Deliberately not vendored (unchanged convention):**
+- `__tests__/r33ByzantineRelay.test.ts` (NEW upstream) and the updated
+  `__tests__/r30MultiProcessCeremony.test.ts` - both drive
+  `scripts/court/multi-process-ceremony.mjs` through a child process; this
+  client vendors neither the engine's `scripts/` tree nor `tsx`.
+  `__tests__/simulateCourt.test.ts` (updated upstream) imports
+  `../scripts/simulateCourt`, which is not vendored either.
+- `docs/` and `scripts/` deltas (`REVIEW_ROUND_4.md`, `READINESS_REVIEW.md`,
+  `MULTI_PROCESS_CEREMONY.md`, `PER_ROUND_BOND.md`, the refreshed paper,
+  proofs, campaign harnesses) - engine + tests + fixtures only, as always.
+
+## Client-local adaptations preserved
+
+1. **ASCII dash normalization** re-applied to the four engine files and the new
+   test: em dash (U+2014), en dash (U+2013) and box-drawing U+2500 runs -> `-`, with a
+   single `─` kept only when adjacent to another box-drawing glue character
+   (the state-diagram tees/corners in `courtConfirmationMachine.ts`). The
+   normalizer reproduces all 107 previously-synced files byte-for-byte, so the
+   transform is unchanged.
+2. **`__tests__/modelCheckingCore.ts` and `__fixtures__/model-check-summary.json`
+   stay RAW upstream copies** (`differentialParity.test.ts` likewise), per the
+   v0.12.0 note - they are asserted against each other.
+3. The three jsdom realm shims (`helpers/machines.ts` `drive()` cast,
+   `helpers/keys.ts` `Uint8Array.from(randomBytes(...))`, `helpers/fixtures.ts`
+   dirname+join) and the `adversarialNostr.test.ts` `Uint8Array.from` shim were
+   not in this delta - untouched.
+4. No new adaptations required. `helpers/ids.ts` used by the new test is
+   already vendored and unmodified upstream.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 37 files / 1,013 tests passed
+  (was 36 / 992; +1 file / +21 tests from `reviewRound4`)
+- `npx vitest run src/hooks src/components/bao-court` -> 46 files / 319 passed
+- `npx tsc --noEmit` -> exit 0
+- `npx vite build` -> exit 0 (pre-existing chunk-size / dynamic-import warnings only)
+- The R35 client security fixes (#210) are untouched by this sync: the delta is
+  engine-only plus the dep bump, and the client suite above covers them.
