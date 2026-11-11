@@ -53,6 +53,18 @@ const MAX_BADGE_NAME_CHARS = 64;
 export const MAX_BADGES = 32;
 /** Relay query limit (a hint, not a guarantee — hence MAX_BADGES too). */
 const QUERY_LIMIT = 100;
+/**
+ * Most relay events inspected per query (round 36). `limit` is a hint: a
+ * hostile relay can answer with 100k kind-8 events, and each one used to be
+ * parsed (`a`-tag split, name sanitise) before the MAX_BADGES slice ran.
+ */
+const MAX_SCANNED_EVENTS = 2_000;
+/**
+ * Longest `a` / `name` tag value inspected. A real NIP-58 `a` value is
+ * `30009:<pubkey>:<identifier>` (< 200 chars); a multi-megabyte one is bait for
+ * the split/sanitise path.
+ */
+const MAX_TAG_VALUE_CHARS = 512;
 
 export interface JurorBadge {
   /** Badge id from the `a` tag (`30009:<identifier>`), or the `name` tag. */
@@ -71,7 +83,7 @@ export interface JurorBadge {
  */
 export function badgeNameFromEvent(event: NostrEvent): string | null {
   const aTag = event.tags?.find((t) => t[0] === "a")?.[1];
-  if (typeof aTag === "string" && aTag.startsWith("30009:")) {
+  if (typeof aTag === "string" && aTag.startsWith("30009:") && aTag.length <= MAX_TAG_VALUE_CHARS) {
     const parts = aTag.slice("30009:".length).split(":");
     // Standard form: the last segment is the identifier; the middle one is the
     // badge AUTHOR's pubkey and must never be shown as the badge name.
@@ -80,7 +92,10 @@ export function badgeNameFromEvent(event: NostrEvent): string | null {
     if (name) return name;
   }
   const nameTag = event.tags?.find((t) => t[0] === "name")?.[1];
-  const fallback = sanitizeDisplayText(nameTag ?? "", { maxChars: MAX_BADGE_NAME_CHARS });
+  const fallback = sanitizeDisplayText(
+    typeof nameTag === "string" && nameTag.length <= MAX_TAG_VALUE_CHARS ? nameTag : "",
+    { maxChars: MAX_BADGE_NAME_CHARS },
+  );
   return fallback || null;
 }
 
@@ -103,8 +118,11 @@ export function useJurorBadges(jurorPubkey: string | null | undefined): JurorBad
         if (controller.signal.aborted) return;
         const seen = new Set<string>();
         const byName = new Map<string, JurorBadge>();
+        let scanned = 0;
         for (const event of events) {
+          if (scanned >= MAX_SCANNED_EVENTS) break;
           if (!event || typeof event.id !== "string" || seen.has(event.id)) continue;
+          scanned += 1;
           seen.add(event.id);
           // NIP-58 acceptance is self-published: only count events the
           // juror signed themselves (anti-spoofing; see header trust note).

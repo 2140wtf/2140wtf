@@ -79,16 +79,48 @@
  * Kinds 38026 / 39015 / 39016 are NIP-01 signed events and are verified
  * (`verifyEvent`) at ingest - a hostile relay must not be able to forge a
  * confirmation attributed to a real juror, a challenge, or a proposal
- * claiming the court group's pubkey. Kind 39018 is deliberately NOT
- * NIP-01-verified: a batch attestation carries the cohort's FROST signature
- * over the manifest in its `sig` TAG, so `verifyCaseInBatch` is its
- * authenticity check (see the note above the ingest filter).
+ * claiming the court group's pubkey. Kind 39018 is not NIP-01-verified (a
+ * batch attestation carries the cohort's FROST signature over the manifest in
+ * its `sig` TAG, and the NIP-01 `sig` is empty by construction) - but since
+ * round 36 it must pass that FROST verification, pinned to the court group
+ * key, BEFORE it enters state. The exemption is therefore bounded on both
+ * sides: authenticity is the cohort signature, and a batch that fails it never
+ * costs retention.
+ *
+ * ## Retention (security round 36)
+ *
+ * Retention used to be one newest-wins array (`MAX_EVENTS`) for all four kinds,
+ * which made eviction the cheapest attack on this hook: an unsigned kind-39018
+ * flood, or 2 000 valid confirmations from sybil keys, pushed a genuinely
+ * final case out of state and it read `pending` again. Retention is now split
+ * by class - batch attestations (`MAX_BATCH_EVENTS`) and attributed court
+ * proposals (`MAX_COURT_PROPOSALS`), which the relay cannot manufacture - so a
+ * flood can only evict the flood's own class. The `statuses` index applies the
+ * same rule: attributed case ids are ranked before attacker-chosen ones.
+ *
+ * ## Accepted behaviour
+ *
+ * - **No case -> session cross-check is possible client-side.** A batch leaf
+ *   binds (sessionHash, outcome, supportingEventIds), and a kind-39000 dispute
+ *   carries a market id, not a session hash, so the client has no independent
+ *   record to compare the proposal's `session` tag against. The binding that
+ *   matters is therefore the ATTRIBUTION PIN: only the court authority can
+ *   publish a proposal, and only a proposal can assert which session/outcome a
+ *   case has. A third party cannot relabel a genuine batch onto another case
+ *   (round 36 re-tested this with identical leaf inputs, where the crypto
+ *   really does pass: `attributed` is still false and the case never reads
+ *   final).
+ * - **A hostile relay can still withhold data.** It can serve no proposals, no
+ *   batches, or spend the per-ingest verification budget on batches that claim
+ *   the (public) cohort pin. That delays or hides a verdict; it cannot forge
+ *   one, and withholding alone achieves the same suppression.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NRelay1, type NostrEvent, type NostrFilter } from "@nostrify/nostrify";
 
 import {
   BAO_COURT_BATCH_ATTESTATION_KIND,
+  validateBatchAttestationEvent,
   verifyCaseInBatch,
   type BatchMerkleProof,
 } from "@/baofund/court-core/batchAttestation";
@@ -115,6 +147,21 @@ const LIVE_BATCH_MS = 1_000;
 /** Hard cap on retained events so a runaway relay cannot grow state forever. */
 const MAX_EVENTS = 2_000;
 /**
+ * Separate retention budget for kind-39018 batch attestations (security round
+ * 36). Batches used to share {@link MAX_EVENTS} with the NIP-01-verified
+ * kinds, so a flood of batches evicted the proposals/confirmations that carry
+ * the real signal - and a batch needs no valid NIP-01 signature to be accepted
+ * (see the ingest note), i.e. the eviction flood was free. Splitting the
+ * budgets means a batch flood can only evict batches.
+ */
+const MAX_BATCH_EVENTS = 512;
+/**
+ * Separate retention budget for attributed (court-published) proposals. They
+ * are the only events that can assert finality, and they are the only class the
+ * relay cannot manufacture, so they must not be evictable by a signed flood.
+ */
+const MAX_COURT_PROPOSALS = 256;
+/**
  * Ingest size caps. A hostile relay can otherwise park 10MB tag values or
  * multi-megabyte content in every retained event (2000 events x 10MB = 20GB
  * of React-reachable memory). Legitimate court events are far smaller.
@@ -122,6 +169,20 @@ const MAX_EVENTS = 2_000;
 const MAX_EVENT_CONTENT_CHARS = 65_536;
 const MAX_EVENT_TAGS = 256;
 const MAX_EVENT_TAG_VALUE_CHARS = 8_192;
+/**
+ * A batch attestation's content is a 4-field JSON summary (root/count/epoch/
+ * batch), ~120 bytes. Anything larger is not a court batch.
+ */
+const MAX_BATCH_CONTENT_CHARS = 4_096;
+/**
+ * Schnorr verifications performed per ingest call (round 36). Batches skip the
+ * NIP-01 check, so a hostile relay can offer them for free; without a budget
+ * every offered batch would cost a signature verification on the render
+ * thread. Over-budget events are dropped - dropping can only *remove*
+ * confidence (the ladder falls back to `confirmed`/`pending`), never create it.
+ * Real court traffic is one batch per epoch cohort, far below this.
+ */
+const MAX_BATCH_VERIFICATIONS_PER_INGEST = 128;
 /**
  * Cap on eagerly derived cases per render. `statuses` re-derives every known
  * case on each event batch (each derivation scans all retained events), so a
@@ -570,17 +631,66 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
 
     const ingest = (incoming: readonly NostrEvent[]) => {
       const fresh: NostrEvent[] = [];
+      // Fail-closed pin for the ingest-time FROST check: when the group pin is
+      // unresolvable, pass an EMPTY pin so `validateBatchAttestationEvent`
+      // rejects everything (its F-2 rule) instead of silently skipping the
+      // group check.
+      const batchPin = courtGroupPin() ?? "";
+      let batchVerifications = 0;
       for (const event of incoming) {
         if (!event?.id || seenIds.current.has(event.id)) continue;
-        seenIds.current.add(event.id);
         // Drop oversized hostile events before they can enter state.
-        if (!sizeCapped(event)) continue;
-        // NIP-01 authenticity for the event kinds that are genuinely signed.
-        // Kind 39018 is excluded on purpose: its authenticity is the cohort's
-        // FROST signature over the manifest in the `sig` TAG (the NIP-01
-        // `sig` is empty by construction), and `verifyCaseInBatch` recomputes
-        // the id + signature. Verifying it here would drop every real batch.
-        if (event.kind !== BAO_COURT_BATCH_ATTESTATION_KIND && !isVerifiedEvent(event)) {
+        if (!sizeCapped(event)) {
+          seenIds.current.add(event.id);
+          continue;
+        }
+        if (event.kind === BAO_COURT_BATCH_ATTESTATION_KIND) {
+          // Kind 39018 cannot be NIP-01-verified (its `sig` tag holds the
+          // cohort's FROST signature over the manifest and the NIP-01 `sig` is
+          // empty by construction), so round 35 exempted it from the ingest
+          // check and deferred authenticity to `verifyCaseInBatch`. Round 36
+          // closes the gap that exemption left open: a batch now enters state
+          // ONLY when that same FROST verification passes at ingest, pinned to
+          // the court group key. A hostile relay can no longer park hundreds of
+          // garbage batches in retention (they were free - no signature
+          // required) to evict the proposals/confirmations carrying the real
+          // signal.
+          //
+          // Cheap pre-filter first: a real batch names the cohort in the `p`
+          // and `cohort` tags, so anything else is dropped before any hashing.
+          if (
+            !batchPin
+            || getTag(event, "p") !== batchPin
+            || getTag(event, "cohort") !== batchPin
+            || (typeof event.content === "string" && event.content.length > MAX_BATCH_CONTENT_CHARS)
+          ) {
+            seenIds.current.add(event.id);
+            continue;
+          }
+          // Verification budget: over-budget batches are NOT marked seen, so a
+          // later flush can still verify them (a hostile relay can equally
+          // withhold a batch outright, so a delayed cohort is not a new
+          // capability - only an unverified one would be, and that is refused).
+          if (batchVerifications >= MAX_BATCH_VERIFICATIONS_PER_INGEST) continue;
+          batchVerifications += 1;
+          let valid = false;
+          try {
+            valid = validateBatchAttestationEvent(event, {
+              expectedGroupPubkey: batchPin,
+            }).valid;
+          } catch {
+            valid = false;
+          }
+          seenIds.current.add(event.id);
+          if (!valid) continue;
+          fresh.push(event);
+          continue;
+        }
+        // NIP-01 authenticity for the event kinds that are genuinely signed:
+        // a hostile relay must not be able to forge a confirmation attributed
+        // to a real juror, a challenge, or a proposal claiming the group key.
+        seenIds.current.add(event.id);
+        if (!isVerifiedEvent(event)) {
           continue;
         }
         fresh.push(event);
@@ -588,8 +698,28 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
       if (fresh.length === 0) return;
       setEvents((old) => {
         const merged = [...old, ...fresh];
-        // Bounded retention: newest events win.
-        return merged.length > MAX_EVENTS ? merged.slice(merged.length - MAX_EVENTS) : merged;
+        // Bounded retention, by class (round 36):
+        //  - batch attestations get their own budget so they can never evict
+        //    the evidence (they are not NIP-01-signed, so they used to be the
+        //    cheapest way to evict it);
+        //  - an ATTRIBUTED (court-published) proposal is never evicted by a
+        //    signed flood either: 2000 kind-39015 events from sybil keys were
+        //    enough to push it out of retention and take a final case back to
+        //    `pending`. The court cannot be made to publish 256 proposals, so
+        //    that class is bounded by the court, not by the relay.
+        const batches = merged.filter((e) => e.kind === BAO_COURT_BATCH_ATTESTATION_KIND);
+        const rest = merged.filter((e) => e.kind !== BAO_COURT_BATCH_ATTESTATION_KIND);
+        const courtProposals = rest.filter(
+          (e) => e.kind === COURT_OUTCOME_PROPOSAL_KIND && isAttributedProposal(e),
+        );
+        const others = rest.filter(
+          (e) => !(e.kind === COURT_OUTCOME_PROPOSAL_KIND && isAttributedProposal(e)),
+        );
+        return [
+          ...others.slice(Math.max(0, others.length - MAX_EVENTS)),
+          ...courtProposals.slice(Math.max(0, courtProposals.length - MAX_COURT_PROPOSALS)),
+          ...batches.slice(Math.max(0, batches.length - MAX_BATCH_EVENTS)),
+        ];
       });
     };
 
@@ -669,13 +799,26 @@ export function useCourtConfirmations(): UseCourtConfirmationsResult {
     // Only cases that actually have a PROPOSAL can leave `pending`, so those
     // are the only ids worth deriving eagerly - a relay cannot inflate the
     // index with bare confirmations/challenges for invented case ids.
-    const ids: string[] = [];
+    //
+    // Round 36: the cap used to sort purely by case id, so a hostile relay
+    // could publish MAX_DERIVED_CASES proposals whose ids sort first ("0..."
+    // ids) and push a genuinely court-attributed case out of the index - the
+    // juror then saw NO status row for it at all (the card renders
+    // `statuses.get(id)`). Attributed (court-published) case ids are now ranked
+    // first, so only the court's own proposals can contest that budget.
+    const attributedIds: string[] = [];
+    const otherIds: string[] = [];
     for (const event of events) {
       if (event.kind !== COURT_OUTCOME_PROPOSAL_KIND) continue;
       const id = eventCaseId(event);
-      if (id) ids.push(id);
+      if (!id) continue;
+      (isAttributedProposal(event) ? attributedIds : otherIds).push(id);
     }
-    const unique = [...new Set(ids)].sort().slice(0, MAX_DERIVED_CASES);
+    const ordered = [
+      ...[...new Set(attributedIds)].sort(),
+      ...[...new Set(otherIds)].sort(),
+    ];
+    const unique = ordered.slice(0, MAX_DERIVED_CASES);
     const now = Math.floor(Date.now() / 1000);
     const map = new Map<string, CourtConfirmationStatus>();
     for (const id of unique) map.set(id, deriveConfirmationStatus(id, events, now));

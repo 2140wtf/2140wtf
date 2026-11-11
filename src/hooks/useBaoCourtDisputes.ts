@@ -14,6 +14,26 @@ const RELAY = "wss://relay.bao.markets";
 const QUERY_LIMIT = 500;
 const QUERY_TIMEOUT_MS = 15_000;
 const LIVE_BATCH_MS = 1_000;
+/**
+ * Ingest bounds (security round 36). `limit` is a relay HINT, not a
+ * guarantee: a hostile relay can answer a 500-event query with 100k events,
+ * each carrying a multi-megabyte content/tag. Parsing runs `sanitizeDisplayText`
+ * over the outcome fields and keeps one object per dispute id, so without
+ * these caps the dashboard could be made to allocate/scan gigabytes on mount.
+ * Real dispute events are tiny.
+ */
+const MAX_EVENT_CONTENT_CHARS = 65_536;
+const MAX_EVENT_TAGS = 256;
+const MAX_EVENT_TAG_VALUE_CHARS = 8_192;
+/** Most disputes retained in the list (newest win). */
+export const MAX_DISPUTES = 500;
+/**
+ * Most relay events parsed per query response. Anything beyond this is not
+ * parsed at all (a hostile relay cannot make the client scan unbounded input);
+ * the trade-off is bounded suppression the relay could cause anyway by simply
+ * returning nothing.
+ */
+const MAX_SCANNED_EVENTS = 2_000;
 
 export function sanitizeSingleLine(text: string, maxLength = 200): string {
   // Round 35: delegate to the shared display guard so bidi overrides and
@@ -31,6 +51,19 @@ export interface BaoCourtDispute extends DisputeCase {
 
 export function parseBaoCourtDispute(event: NostrEvent): BaoCourtDispute | null {
   if (event.kind !== BAO_COURT_DISPUTE_KIND) return null;
+  // Ingest size caps (round 36): reject, never truncate, so a hostile relay
+  // cannot park megabytes in the list or make two events collide on a
+  // truncated value. Checked BEFORE signature verification / JSON parsing.
+  if (typeof event.content === "string" && event.content.length > MAX_EVENT_CONTENT_CHARS) {
+    return null;
+  }
+  if (!Array.isArray(event.tags) || event.tags.length > MAX_EVENT_TAGS) return null;
+  for (const tag of event.tags) {
+    if (!Array.isArray(tag)) return null;
+    for (const value of tag) {
+      if (typeof value === "string" && value.length > MAX_EVENT_TAG_VALUE_CHARS) return null;
+    }
+  }
 
   try {
     if (!isVerifiedEvent(event)) return null;
@@ -128,6 +161,7 @@ export function useBaoCourtDisputes() {
         const deduped: NostrEvent[] = [];
         const seenIds = new Set<string>();
         for (const event of events) {
+          if (deduped.length >= MAX_SCANNED_EVENTS) break;
           if (seenIds.has(event.id)) continue;
           seenIds.add(event.id);
           deduped.push(event);
@@ -143,7 +177,9 @@ export function useBaoCourtDisputes() {
           }
         }
 
-        return Array.from(seen.values()).sort((a, b) => b.createdAt - a.createdAt);
+        return Array.from(seen.values())
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, MAX_DISPUTES);
       } finally {
         clearTimeout(timeoutId);
         relay.close().catch(() => {});
@@ -198,7 +234,9 @@ export function useBaoCourtDisputes() {
         }
 
         if (!changed) return old;
-        return Array.from(byDispute.values()).sort((a, b) => b.createdAt - a.createdAt);
+        return Array.from(byDispute.values())
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .slice(0, MAX_DISPUTES);
       });
     }
 

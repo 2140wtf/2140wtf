@@ -5,6 +5,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useToast } from "@/hooks/useToast";
 import { isVerifiedEvent } from "@/lib/nostrEvents";
 import { courtProposalPin } from "@/lib/courtPins";
+import { shortIdentifier } from "@/lib/displayText";
 import { BAO_COURT_RELAY } from "@/lib/baoCourtRelays";
 import { baoNip98Header } from "@/lib/baoApiAuth";
 import { baoApiBase } from "@/lib/baoFundraising";
@@ -35,6 +36,13 @@ const ACKED_STORAGE_KEY = "bao-court-summons-acked";
 const MAX_SUMMONS = 200;
 const MAX_INGESTED_IDS = 2_000;
 const MAX_ANNOUNCEMENTS = 5;
+/**
+ * Round 36: individual toasts an UNATTRIBUTED publisher may consume. The
+ * remaining {@link MAX_ANNOUNCEMENTS} - this budget is reserved for the pinned
+ * court authority, so a flood of stranger notices cannot fill the toast queue
+ * and silence a real summons that arrives a moment later.
+ */
+const MAX_UNATTRIBUTED_ANNOUNCEMENTS = 2;
 /** Longest accepted case/market/outcome tag value (display + URL bound). */
 const MAX_FIELD_CHARS = 512;
 /** Longest failure reason surfaced from the API/exception path. */
@@ -197,10 +205,17 @@ export function useMySummons() {
     setSummons((old) => {
       const byId = new Map(old.map((s) => [s.eventId, s]));
       for (const s of fresh) byId.set(s.eventId, s);
-      // Newest first, capped: the list is attacker-fillable.
-      return [...byId.values()]
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, MAX_SUMMONS);
+      const all = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt);
+      // Newest first, capped - the list is attacker-fillable. Round 36: the cap
+      // is applied with provenance priority, because ANY key can publish a
+      // `#p`-tagged notice: a flood of newer unattributed events used to push a
+      // genuine court summons off the list entirely (it then vanished from
+      // `unseen`, the badge and the toast queue - the true signal was silenced
+      // by publishing 200 newer fakes). Attributed notices always keep their
+      // slot; unattributed ones fill what is left, newest first.
+      const attributed = all.filter((s) => s.attributed);
+      const rest = all.filter((s) => !s.attributed);
+      return [...attributed, ...rest].slice(0, MAX_SUMMONS);
     });
   }, []);
 
@@ -260,23 +275,38 @@ export function useMySummons() {
   // persisted seen set and not already announced this session, and at most
   // MAX_ANNOUNCEMENTS toasts per mount - a hostile publisher can otherwise
   // queue hundreds of notifications at this npub).
+  //
+  // Round 36: unattributed publishers get only
+  // MAX_UNATTRIBUTED_ANNOUNCEMENTS slots, so a stranger flood cannot spend the
+  // whole queue before a genuine court summons arrives (it used to: five
+  // attacker toasts, then the real one only appeared in the aggregate
+  // "N more court notices" line - or not at all once it fell off the list cap).
   const announcedRef = useRef<Set<string>>(new Set());
   const announceCountRef = useRef(0);
+  const unattributedAnnouncedRef = useRef(0);
   useEffect(() => {
     let suppressed = 0;
     for (const notice of unseen) {
       if (announcedRef.current.has(notice.eventId)) continue;
       announcedRef.current.add(notice.eventId);
-      if (announceCountRef.current >= MAX_ANNOUNCEMENTS) {
+      const allowed = notice.attributed
+        ? announceCountRef.current < MAX_ANNOUNCEMENTS
+        : announceCountRef.current < MAX_ANNOUNCEMENTS
+          && unattributedAnnouncedRef.current < MAX_UNATTRIBUTED_ANNOUNCEMENTS;
+      if (!allowed) {
         suppressed += 1;
         continue;
       }
       announceCountRef.current += 1;
+      if (!notice.attributed) unattributedAnnouncedRef.current += 1;
       const label = notice.kind === SUMMONS_SELECTION_KIND ? "Jury selection" : "Court summons";
       const unverified = notice.attributed ? "" : " (unverified publisher)";
       toast({
         title: `${label} received${unverified}`,
-        description: `Case ${notice.caseId.slice(0, 16)} — acknowledge from your Jury Duty panel.`,
+        // Attacker-controlled id: sanitize + cap before it reaches a toast
+        // (a raw slice could split a surrogate pair and smuggle bidi controls
+        // into the notification).
+        description: `Case ${shortIdentifier(notice.caseId, 16)} — acknowledge from your Jury Duty panel.`,
       });
     }
     if (suppressed > 0) {
