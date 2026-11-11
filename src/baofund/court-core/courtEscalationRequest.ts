@@ -67,11 +67,36 @@
  *    the host's binding - the case id it routed on and the pubkey NIP-98
  *    authenticated - and refuses a request that disagrees with either.
  *
+ * REVIEW ROUND 9 - what round 8's fixes did NOT do. Each is pinned in
+ * `__tests__/reviewRound9.test.ts` and recorded in `docs/REVIEW_ROUND_9.md`:
+ *
+ *  - **`caseId` was still FOLDED (r9-1).** r8-1 validated `value.trim()` and
+ *    returned it, so `"court:X "`, `"court:X\t"` and `"court:X\u{3000}"` were
+ *    one id with ONE digest - the same defect, and `build` returning an id the
+ *    caller never supplied (the r8-5 shape). The host binding compared
+ *    `expectedCaseId.trim()`, so the fold was symmetric and a request could
+ *    cross the whitespace class. Ids are now validated EXACTLY (refused if they
+ *    carry surrounding whitespace), and the preimage no longer trims.
+ *  - **`bondTxid` was unbound (r9-2).** The bond filter matches `bondProofHash`,
+ *    and `bondTxid` went into the preimage uncompared with the challenge
+ *    record, so the logged `requestHash` could commit to a bond the case never
+ *    bound. It must now equal `CourtChallengeRecord.bondTxid`.
+ *  - **A CONCESSION was minted as an ESCALATION (r9-3).** `concession: true`
+ *    commits `'1'` to the hash and was then ignored, so an escalate event could
+ *    be minted from a request whose signer dropped the appeal - the log records
+ *    an authorisation he refused. Now a typed refusal; route it to `concede`.
+ *  - **The r8-2 binding is a TRUST ANCHOR, not a proof (r9-6).** A host that
+ *    fills `authenticatedPubkey` from the wire's `challengerPubkey` reproduces
+ *    the pre-r8-2 harm exactly, and no pure function can tell "verified" from
+ *    "copied". Registered boundary, pinned as a test, obligation stated on
+ *    {@link CourtEscalationBinding}: the value must come from the auth layer.
+ *
  * Purity: pure functions; no I/O, no clock, no randomness.
  */
 
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { verifyEvent } from 'nostr-tools/pure';
 
 import { HEX_32, isRecord } from './courtEventParseCore';
 import { isCanonicalUtf8Text } from './courtCeremonyCore';
@@ -140,6 +165,47 @@ const WIRE_FIELDS = [
 
 const textEncoder = new TextEncoder();
 
+/**
+ * Characters that may not travel into an error message verbatim (r10-1).
+ *
+ * `Cc` = C0/C1 controls (newline, tab, NEL U+0085, …), `Cf` = format characters
+ * (zero-width space/joiners, bidi marks and overrides U+200B-U+200F,
+ * U+202A-U+202E, U+2066-U+2069, soft hyphen, U+180E, BOM), `Zl`/`Zp` = the line
+ * and paragraph separators, `Cs` = lone surrogates.
+ */
+const UNSAFE_ECHO = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu;
+
+/** Longest value echoed into a refusal (chars), so one refusal cannot flood a log. */
+const MAX_ECHO_CHARS = 64;
+
+/**
+ * Quote an attacker-supplied wire value for an ERROR MESSAGE (r10-1).
+ *
+ * Every refusal in this module is meant to be logged - the append-only
+ * escalation log, an operator's stderr, a bug ticket - so a refusal that
+ * interpolates the offending value VERBATIM is a log-injection channel. A case
+ * id may carry any character that survives the id rules: only the ENDS are
+ * whitespace-checked, so `"court:A\nESCALATION ACCEPTED for …"` is a legal id,
+ * and a host that logs the refusal prints a forged, well-formed line after the
+ * newline. U+202E (RIGHT-TO-LEFT OVERRIDE) does the same to a rendered line
+ * without any newline at all, and a 256-byte id doubled into a two-id message
+ * makes every refusal a 512-byte log entry.
+ *
+ * Escaping the value (never re-interpreting it) is the fix that keeps the
+ * diagnostic: the reason and the bytes are both still on the line, they just
+ * cannot BE a line.
+ */
+function quoteWireValue(value: string): string {
+  const chars = [...value];
+  const clipped = chars.length <= MAX_ECHO_CHARS
+    ? value
+    : `${chars.slice(0, MAX_ECHO_CHARS).join('')}…`;
+  return clipped.replace(
+    UNSAFE_ECHO,
+    (ch) => `\\u{${(ch.codePointAt(0) ?? 0).toString(16)}}`,
+  );
+}
+
 function assertHex32(value: unknown, field: string): string {
   if (typeof value !== 'string' || !HEX_32.test(value)) {
     throw new CourtConfirmationTransitionError(
@@ -150,7 +216,7 @@ function assertHex32(value: unknown, field: string): string {
 }
 
 /**
- * Validate and normalise the case id (r8-1).
+ * Validate a case id (r8-1, r9-1).
  *
  * The id is a FIELD OF THE HASH PREIMAGE, so it must encode injectively: an
  * unpaired surrogate would be replaced by U+FFFD on the way into `TextEncoder`,
@@ -158,26 +224,53 @@ function assertHex32(value: unknown, field: string): string {
  * fields with U+0000, so a NUL inside the id would blur a field boundary (a
  * fixed field count keeps that from colliding today, but the codec must not
  * depend on counting to stay sound). Canonical UTF-8, no NUL, bounded bytes.
+ *
+ * VALIDATE, DO NOT NORMALISE (r9-1). The r8-1 version returned `value.trim()`,
+ * which is a lossy map: `"court:X "`, `"court:X\t"` and `"court:X\u{3000}"` all
+ * became `"court:X"` and therefore all shared ONE digest - the same
+ * two-ids-one-digest defect r8-1 was written to close, plus the r8-5 shape
+ * (`build` returning an id the caller never supplied). It also made the host's
+ * binding fold, so a request for case `"court:X"` routed against a case stored
+ * as `"court:X "` was accepted: the "a request must not cross cases" claim was
+ * true only up to the whitespace class. Ids a host GENERATES never carry
+ * surrounding whitespace, so the fail-closed direction is free: refuse, and the
+ * accepted domain is exactly the set of strings that encode injectively.
+ *
+ * NO UNICODE NORMALISATION, deliberately (r9-1). `"café"` (NFC) and
+ * `"cafe\u0301"` (NFD) are two distinct ids with two distinct digests even
+ * though they RENDER identically. Normalising would create the collision
+ * (`NFC(a) === NFC(b)` for different `a`, `b`); the residual is an audit/display
+ * confusable, which the host resolves by rendering ids escaped or by generating
+ * ASCII ids. Pinned in `__tests__/reviewRound9.test.ts`.
  */
-function normalizeCaseId(value: unknown): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new CourtConfirmationTransitionError('escalation request caseId must be a non-empty string');
+function normalizeCaseId(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new CourtConfirmationTransitionError(`${label} must be a non-empty string`);
   }
-  const trimmed = value.trim();
-  if (!isCanonicalUtf8Text(trimmed)) {
+  // Checked on the RAW value: a fold must never mask a non-canonical string.
+  if (!isCanonicalUtf8Text(value)) {
     throw new CourtConfirmationTransitionError(
-      'escalation request caseId must be canonical UTF-8 (no unpaired surrogates)',
+      `${label} must be canonical UTF-8 (no unpaired surrogates)`,
     );
   }
-  if (trimmed.includes('\u0000')) {
-    throw new CourtConfirmationTransitionError('escalation request caseId must not contain U+0000');
+  if (value.includes('\u0000')) {
+    throw new CourtConfirmationTransitionError(`${label} must not contain U+0000`);
   }
-  if (textEncoder.encode(trimmed).length > MAX_ESCALATION_CASE_ID_BYTES) {
+  if (value.trim() === '') {
+    throw new CourtConfirmationTransitionError(`${label} must be a non-empty string`);
+  }
+  if (value !== value.trim()) {
     throw new CourtConfirmationTransitionError(
-      `escalation request caseId exceeds ${MAX_ESCALATION_CASE_ID_BYTES} bytes`,
+      `${label} must not have leading or trailing whitespace: folding it would give two different `
+      + 'ids one request hash (r9-1)',
     );
   }
-  return trimmed;
+  if (textEncoder.encode(value).length > MAX_ESCALATION_CASE_ID_BYTES) {
+    throw new CourtConfirmationTransitionError(
+      `${label} exceeds ${MAX_ESCALATION_CASE_ID_BYTES} bytes`,
+    );
+  }
+  return value;
 }
 
 /**
@@ -193,6 +286,13 @@ function normalizeCaseId(value: unknown): string {
  * `TypeError` (`input.caseId.trim is not a function`) instead of this module's
  * typed refusal. Snapshot first, then validate the snapshot.
  *
+ * The same rule covers a non-OBJECT argument (r49-d): `build(null)`,
+ * `hash(null)` and `escalationRequestToMachineEvent(state, null, …)` used to
+ * escape as a raw `TypeError` (`Cannot read properties of null (reading
+ * 'caseId')`) - a foreign error type at the fail-closed boundary. A non-object
+ * descriptor is now a typed refusal, so every entry point of this module
+ * refuses with {@link CourtConfirmationTransitionError} or not at all.
+ *
  * @throws {@link CourtConfirmationTransitionError} on any malformed field.
  */
 export function buildCourtEscalationRequest(input: {
@@ -206,6 +306,12 @@ export function buildCourtEscalationRequest(input: {
   readonly signedAtSec: number;
   readonly concession?: boolean;
 }): CourtEscalationRequest {
+  if (!isRecord(input)) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request must be an object: a null, array or primitive descriptor cannot be read '
+      + 'field by field, and a raw TypeError must not escape the codec (r49-d)',
+    );
+  }
   const caseIdRaw: unknown = input.caseId;
   const roundRaw: unknown = input.round;
   const challengerPubkeyRaw: unknown = input.challengerPubkey;
@@ -216,7 +322,7 @@ export function buildCourtEscalationRequest(input: {
   const signedAtSecRaw: unknown = input.signedAtSec;
   const concessionRaw: unknown = input.concession;
 
-  const caseId = normalizeCaseId(caseIdRaw);
+  const caseId = normalizeCaseId(caseIdRaw, 'escalation request caseId');
   if (
     !Number.isSafeInteger(roundRaw)
     || (roundRaw as number) < 1
@@ -224,7 +330,7 @@ export function buildCourtEscalationRequest(input: {
   ) {
     throw new CourtConfirmationTransitionError(
       `escalation request round must be an integer in 1..${MAX_ESCALATION_REQUEST_ROUND} `
-      + `(got ${String(roundRaw)})`,
+      + `(got ${quoteWireValue(String(roundRaw))})`,
     );
   }
   const roundBondProofHash = roundBondProofHashRaw == null
@@ -261,12 +367,16 @@ export function buildCourtEscalationRequest(input: {
  * bondTxid ‖ bondProofHash ‖ roundBondProofHash ‖ eventId ‖ signedAtSec ‖
  * concession`, fields joined by `\u0000`.
  *
+ * The case id is used EXACTLY as validated (r9-1): a `trim()` here would
+ * re-introduce the fold `buildCourtEscalationRequest` refuses, for any caller
+ * that hand-builds a request object and calls this function directly.
+ *
  * The round-bond slot is `'-'` when the request carries none - a sentinel no
  * hex32 value can equal, so "absent" and "present" can never hash the same.
  */
 export function courtEscalationRequestPreimage(request: CourtEscalationRequest): string {
   return [
-    request.caseId.trim(),
+    request.caseId,
     String(request.round),
     request.challengerPubkey,
     request.bondTxid,
@@ -407,7 +517,7 @@ function assertNoRepeatedWireFields(text: string): void {
     index += 1;
     if (seen.has(key.value)) {
       throw new CourtConfirmationTransitionError(
-        `escalation request repeats the field ${key.value}`,
+        `escalation request repeats the field ${quoteWireValue(key.value)}`,
       );
     }
     seen.add(key.value);
@@ -449,7 +559,9 @@ export function parseCourtEscalationRequest(raw: unknown): CourtEscalationReques
   }
   for (const key of Object.keys(value)) {
     if (!(WIRE_FIELDS as readonly string[]).includes(key)) {
-      throw new CourtConfirmationTransitionError(`escalation request has an unknown field ${key}`);
+      throw new CourtConfirmationTransitionError(
+        `escalation request has an unknown field ${quoteWireValue(key)}`,
+      );
     }
   }
   return buildCourtEscalationRequest({
@@ -473,10 +585,168 @@ export function parseCourtEscalationRequest(raw: unknown): CourtEscalationReques
  * `caseId` is the case id the host resolved the request against (its routing
  * key); `authenticatedPubkey` is the x-only pubkey the request's authentication
  * (NIP-98) actually proved - never a value taken from the body.
+ *
+ * THIS IS A TRUST ANCHOR, NOT A PROOF (r9-6). The mapper can only compare the
+ * binding with the request; it cannot tell a value the host VERIFIED from the
+ * same value COPIED out of the request. A host that passes
+ * `{ caseId: request.caseId, authenticatedPubkey: request.challengerPubkey }`
+ * reproduces the pre-r8-2 harm exactly - a bonded challenger's escalation whose
+ * append-only log names a juror who never escalated, because `challengerIdx`
+ * comes from the bond record and the pubkey from the wire. The protection is
+ * therefore a host obligation with a named owner: `authenticatedPubkey` must be
+ * the value the auth layer derived from the signed request (NIP-98 event pubkey
+ * / bearer-session identity), and `caseId` must be the id of the case the host
+ * looked up - never an echo of the body. Pinned as a visible boundary in
+ * `__tests__/reviewRound9.test.ts` › `T2 (r9-6)`, so the residual is a decision
+ * on the record rather than an assumption.
+ *
+ * What the binding does NOT close: bond OWNERSHIP (r40-3). The state carries no
+ * idx→pubkey registry (r29-5/r38-3), so the mapper cannot tell the juror who
+ * paid a bond from a juror who registered its publicly derivable witness first;
+ * the host's bond verifier must bind the witness to the event author.
  */
 export interface CourtEscalationBinding {
   readonly caseId: string;
   readonly authenticatedPubkey: string;
+}
+
+/**
+ * The published request EVENT, as its signature sees it (r10-3).
+ *
+ * Only the seven fields a Nostr id commits to: `id = sha256(canonical
+ * [0, pubkey, created_at, kind, tags, content])`, and the signature covers
+ * `id`. That is why this - not the request body - is the authority: the body is
+ * a set of fields a caller can retype, while `content` is bytes the signer
+ * signed.
+ */
+export interface CourtEscalationRequestEvent {
+  readonly kind: number;
+  readonly pubkey: string;
+  readonly created_at: number;
+  readonly tags: readonly (readonly string[])[];
+  readonly content: string;
+  readonly id: string;
+  readonly sig: string;
+}
+
+/**
+ * The bytes a request is SIGNED over (r10-3): the canonical wire form WITHOUT
+ * `eventId`.
+ *
+ * The field is the id of the very event that carries these bytes, so it cannot
+ * be inside them - a hash cannot contain its own digest. Publishing
+ * `content: courtEscalationRequestSignedContent(request)` and then setting
+ * `eventId` to the resulting event id is the only non-circular shape, which is
+ * why the builder ships with the verifier: a host that invents its own content
+ * layout is outside the binding below.
+ */
+export function courtEscalationRequestSignedContent(request: CourtEscalationRequest): string {
+  const normalised = buildCourtEscalationRequest(request);
+  const wire = JSON.parse(serializeCourtEscalationRequest(normalised)) as Record<string, unknown>;
+  delete wire.eventId;
+  return JSON.stringify(wire);
+}
+
+/**
+ * Derive the host binding from the SIGNED request event (r10-3), instead of
+ * accepting two strings the host might have copied out of the body (r9-6).
+ *
+ * WHY THIS EXISTS. r9-3 refused a request whose `concession` flag was `true`, so
+ * the mapper could not mint an ESCALATION from the body of a signed CONCESSION.
+ * That guard is a FIELD check, and the flag is a field: the same signed event
+ * re-presented with `concession: false` was accepted (measured - `docs/
+ * REVIEW_ROUND_10.md` §3), minting an escalation whose `requestHash` was the
+ * hash of a request nobody signed (`H(concession=0)` for bytes that said `1`).
+ * The mirror direction is worse and has no guard at all: the package offers no
+ * concession transition, so nothing refused a signed ESCALATION re-labelled
+ * `concession: true` - and it is the flag, not the signature, that a host reads
+ * to decide whether the appeal is dropped.
+ *
+ * WHAT BINDS IT. `content` must equal {@link courtEscalationRequestSignedContent}
+ * of THE request being verified (the canonical wire form minus `eventId`, which
+ * is the event's own id and therefore cannot be inside it), and the id and
+ * signature must cover that content. The flag, the case id, the round, both bond
+ * witnesses and `signedAtSec` are all inside those bytes, so:
+ *
+ *  - a SIGNED concession cannot become an escalation and a SIGNED escalation
+ *    cannot become a concession - flipping the flag changes `content`, so the
+ *    event id no longer names this request (both directions pinned);
+ *  - a request cannot be replayed under another KIND, because `kind` is inside
+ *    the id (`expectedKind` is the host's request kind, checked here);
+ *  - `caseId` needs no host binding at all: it is signed;
+ *  - `authenticatedPubkey` is the event's author, derived from the signature -
+ *    never an echo of the body (this is what r9-6 registered as impossible for a
+ *    pure string comparison).
+ *
+ * A host that publishes requests with `serializeCourtEscalationRequest(request)`
+ * as `content` can therefore close r9-6 and r10-3 in one call: pass the result
+ * to {@link escalationRequestToMachineEvent}. A host that keeps its own event
+ * shape must do the same two comparisons itself.
+ *
+ * @throws {@link CourtConfirmationTransitionError} when the event is not of
+ *         `expectedKind`, does not carry this request's id, fails signature
+ *         verification, was authored by a key other than the claimed
+ *         challenger, was created at another time, or carries content that is
+ *         not this request's canonical serialization.
+ */
+export function escalationRequestBindingFromSignedEvent(
+  request: CourtEscalationRequest,
+  event: CourtEscalationRequestEvent,
+  expectedKind: number,
+): CourtEscalationBinding {
+  const normalised = buildCourtEscalationRequest(request);
+  if (!isRecord(event)) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request event must be an object',
+    );
+  }
+  if (!Number.isSafeInteger(expectedKind) || expectedKind < 0 || event.kind !== expectedKind) {
+    throw new CourtConfirmationTransitionError(
+      `escalation request event has kind ${String(event.kind)} but this route publishes kind `
+      + `${String(expectedKind)}: a request signed for another kind is another claim (r10-3)`,
+    );
+  }
+  if (event.id !== normalised.eventId) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request names an event id that is not the id of the signed event presented with it',
+    );
+  }
+  // Rebuilt as a plain object before verification: nostr-tools memoises the
+  // verdict ON the object it is handed (see `validator.ts`), so a caller's
+  // object that already carries a verdict must not be reused as the input.
+  const plain = {
+    kind: event.kind,
+    pubkey: event.pubkey,
+    created_at: event.created_at,
+    tags: event.tags.map((tag) => [...tag]),
+    content: event.content,
+    id: event.id,
+    sig: event.sig,
+  };
+  if (!verifyEvent(plain as Parameters<typeof verifyEvent>[0])) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request event signature does not verify: the request is not what its author signed',
+    );
+  }
+  if (plain.pubkey !== normalised.challengerPubkey) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request challengerPubkey is not the author of the signed event: the wire claim has '
+      + 'no signature over it',
+    );
+  }
+  if (plain.created_at !== normalised.signedAtSec) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request signedAtSec is not the created_at of the signed event',
+    );
+  }
+  if (plain.content !== courtEscalationRequestSignedContent(normalised)) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request is not the canonical serialization the signed event carries: a field of the '
+      + 'body (the concession flag, the case id, a bond witness, the round) differs from what was '
+      + 'signed, so the digest of this request is a claim nobody authorised (r10-3)',
+    );
+  }
+  return { caseId: normalised.caseId, authenticatedPubkey: plain.pubkey };
 }
 
 /**
@@ -505,8 +775,10 @@ export interface CourtEscalationBinding {
  *
  * @throws {@link CourtConfirmationTransitionError} when the binding is absent or
  *         disagrees with the request, when the request names a round the case is
- *         not resolving, or when the case has no single accepted challenge
- *         carrying the request's membership bond.
+ *         not resolving, when it is a CONCESSION rather than an escalation
+ *         (r9-3), when its `bondTxid` is not the txid of the challenge record its
+ *         witness selects (r9-2), or when the case has no single accepted
+ *         challenge carrying the request's membership bond.
  */
 export function escalationRequestToMachineEvent(
   state: CourtConfirmationMachineState,
@@ -515,6 +787,21 @@ export function escalationRequestToMachineEvent(
   binding?: CourtEscalationBinding,
 ): Extract<CourtConfirmationMachineEvent, { type: 'escalate' }> {
   const normalised = buildCourtEscalationRequest(request);
+  // r9-3: a CONCESSION is not an escalation. The flag is part of the preimage
+  // (`'1'` vs `'0'`, so the digests differ), which means an escalate event
+  // minted from a concession request records an authorisation its signer
+  // explicitly refused: the append-only log would claim "this challenger
+  // escalated" against a request that says "this challenger drops the appeal",
+  // and the case climbs a rung (a fresh round bond, a summoned panel) instead of
+  // finalizing. The challenger's exits are not the host's to convert, so the
+  // conversion is a typed refusal - route a concession to `concede`.
+  if (normalised.concession) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request is a CONCESSION (concession = true): it authorises dropping the appeal, not '
+      + 'opening a rung - route it to the `concede` transition; minting an escalate event from it '
+      + 'records an authorisation the challenger refused (r9-3)',
+    );
+  }
   if (binding === undefined || binding === null || typeof binding !== 'object') {
     throw new CourtConfirmationTransitionError(
       'escalation request binding is required: pass { caseId, authenticatedPubkey } - the transport '
@@ -523,27 +810,38 @@ export function escalationRequestToMachineEvent(
   }
   const expectedCaseId: unknown = binding.caseId;
   const authenticatedPubkey: unknown = binding.authenticatedPubkey;
-  if (typeof expectedCaseId !== 'string' || expectedCaseId.trim() === '') {
-    throw new CourtConfirmationTransitionError(
-      'escalation request binding caseId must be the non-empty case id the host routed on',
-    );
-  }
+  const boundCaseId = normalizeCaseId(expectedCaseId, 'escalation request binding caseId');
   if (typeof authenticatedPubkey !== 'string' || !HEX_32.test(authenticatedPubkey)) {
     throw new CourtConfirmationTransitionError(
       'escalation request binding authenticatedPubkey must be the 32-byte lowercase hex key the '
       + 'request authenticated as',
     );
   }
-  if (normalised.caseId !== expectedCaseId.trim()) {
+  if (normalised.caseId !== boundCaseId) {
     throw new CourtConfirmationTransitionError(
-      `escalation request names case "${normalised.caseId}" but the host bound it to `
-      + `"${expectedCaseId.trim()}" - a request must not cross cases`,
+      `escalation request names case "${quoteWireValue(normalised.caseId)}" but the host bound it to `
+      + `"${quoteWireValue(boundCaseId)}" - a request must not cross cases`,
     );
   }
   if (normalised.challengerPubkey !== authenticatedPubkey) {
     throw new CourtConfirmationTransitionError(
       'escalation request challengerPubkey is not the pubkey the request authenticated as: the wire '
       + 'claim is unverified, so an escalation may not be attributed to it',
+    );
+  }
+  // r49-d: a restored or tampered SNAPSHOT must fail closed with this module's
+  // typed refusal, never with a raw TypeError. `state.ladderRound` is read
+  // below, so `escalationRequestToMachineEvent(null, …)` used to escape as
+  // `Cannot read properties of null (reading 'ladderRound')` - a foreign error
+  // type at the boundary `@bao/court` documents as typed-only (`errors.ts`,
+  // r3-1/r41-1), on the exact shape a host restores from disk. The package
+  // already owns this guard (`assertStateArrays`, `courtCeremonyCore.ts`) and
+  // every other machine guard uses it; this path did not, and neither did the
+  // bond filter (`state.challenges.filter` on a non-array).
+  if (!isRecord(state)) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request landed on a case snapshot that is not an object: an escalation must not be '
+      + 'minted against a snapshot the machine could not have produced (r49-d)',
     );
   }
   if (normalised.round !== state.ladderRound) {
@@ -553,7 +851,34 @@ export function escalationRequestToMachineEvent(
       + 'authorised',
     );
   }
-  const bonds = state.challenges.filter((c) => c.bondProofHash === normalised.bondProofHash);
+  // r9-4, the transport half: `round === ladderRound` is only meaningful if the
+  // case has ONE round number. The machine writes `ladderRound` and
+  // `ladder.round` together, so a snapshot where they disagree is not a state it
+  // could have produced - and the reducer's history rule sizes itself from
+  // `ladder.round` while every escalation rule uses `ladderRound`, so minting an
+  // attribution record for such a state picks a round number by side effect.
+  if (!isRecord(state.ladder)) {
+    throw new CourtConfirmationTransitionError(
+      'escalation request landed on a case with no open ladder round: there is nothing to escalate '
+      + `past (phase ${String(state.phase)})`,
+    );
+  }
+  if (state.ladder.round !== state.ladderRound) {
+    throw new CourtConfirmationTransitionError(
+      `the round counters disagree: ladderRound is ${state.ladderRound} but the open round is `
+      + `${state.ladder.round} - an escalation must not be minted against a snapshot the machine `
+      + 'could not have produced (r9-4)',
+    );
+  }
+  if (!Array.isArray(state.challenges)) {
+    // r49-d: `challenges.filter` on a restored snapshot whose ledger is not an
+    // array was a raw `TypeError` (`state.challenges.filter is not a function`).
+    throw new CourtConfirmationTransitionError(
+      `the case snapshot has no challenge ledger (challenges is ${typeof state.challenges}): an `
+      + 'escalation must not be minted against a snapshot the machine could not have produced (r49-d)',
+    );
+  }
+  const bonds = state.challenges.filter((c) => isRecord(c) && c.bondProofHash === normalised.bondProofHash);
   if (bonds.length === 0) {
     throw new CourtConfirmationTransitionError(
       'no accepted challenge bond to bind an escalation witness to',
@@ -568,6 +893,22 @@ export function escalationRequestToMachineEvent(
     );
   }
   const bond = bonds[0];
+  // r9-2: the bond's IDENTITY is part of the request hash, so it must be bound
+  // to the challenge record the witness selects. The filter above matches on
+  // `bondProofHash` alone, and `bondTxid` was carried into the preimage and
+  // never compared with the case: a bonded challenger could name ANY txid and
+  // the resulting `requestHash` (the append-only log's only record of the
+  // request) committed to a bond the case never bound - the r8-2 "unbound claim"
+  // family one field over, on the value a host reads to decide which bond the
+  // escalation is made under. One challenge record carries both halves
+  // (`CourtChallengeRecord.bondTxid`), so the pairing is checkable here.
+  if (normalised.bondTxid !== bond.bondTxid) {
+    throw new CourtConfirmationTransitionError(
+      `escalation request names bond txid ${normalised.bondTxid} but the accepted challenge carrying `
+      + `its witness is bond ${bond.bondTxid} - the request hash would commit to a bond this case `
+      + 'never bound (r9-2)',
+    );
+  }
   if (!Number.isSafeInteger(now) || now < 0) {
     throw new CourtConfirmationTransitionError('escalation event now must be a non-negative safe integer');
   }
