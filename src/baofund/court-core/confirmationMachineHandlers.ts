@@ -32,6 +32,7 @@ import {
   assertParticipant,
   assertRoundParticipant,
   assertValidConfirmationLedger,
+  assertValidEscalationLog,
   assertValidMassVoteLedger,
   assertValidOutcomeHistory,
   freezeState,
@@ -475,6 +476,10 @@ function applyRoundClawbacks(
  *    x-only pubkey, a 32-byte request hash, and the bond-proof hash of a
  *    challenge the machine has ALREADY accepted (the witness is bound to
  *    state, not merely well-formed);
+ *  - the per-round bond witness (`roundBondProofHash`, R31) must be distinct
+ *    from that membership bond and never reused: when the case sets
+ *    `requireRoundBond` it is mandatory (break-glass host cases aside, where the
+ *    host escalates free anyway), so one bond can no longer fund every round;
  *  - `authority: "host"` requires the frozen `hostEscalation` policy (default
  *    false) and must not carry a challenger request.
  *
@@ -519,6 +524,13 @@ export function onEscalate(
     );
   }
   let record: CourtEscalationRecord;
+  const roundBondProofHash = event.roundBondProofHash ?? null;
+  if (roundBondProofHash !== null) {
+    assertHex32(
+      roundBondProofHash,
+      'escalation round bond proof hash must be 32-byte lowercase hex',
+    );
+  }
   if (authority === 'challenger') {
     const idx = event.challengerIdx;
     if (!Number.isSafeInteger(idx)) {
@@ -539,12 +551,45 @@ export function onEscalate(
       event.bondProofHash as string,
       'escalation bond proof hash must be 32-byte lowercase hex',
     );
-    // Bind the witness to a bond the machine already accepted: a
-    // well-formed hash for a bond this case never saw proves nothing.
-    if (!state.challenges.some((c) => c.bondProofHash === event.bondProofHash)) {
+    // Bind the witness to a bond THIS challenger posted: a well-formed hash for
+    // a bond the case never saw proves nothing, and a bond some OTHER juror
+    // posted proves nothing either. Without the `idx` half (round-3 finding
+    // r29-1) a juror who posted no bond could escalate by quoting a bonded
+    // juror's hash, and the witness log would name the wrong challenger.
+    if (!state.challenges.some(
+      (c) => c.idx === (idx as number) && c.bondProofHash === event.bondProofHash,
+    )) {
       throw new CourtConfirmationTransitionError(
-        'escalation bond proof hash does not match any accepted challenge bond',
+        'escalation bond proof hash does not match an accepted challenge bond of this challenger',
       );
+    }
+    // Per-round bond (R31, r30-1): the challenge bond proves MEMBERSHIP - it is
+    // posted once and funds every round, which made escalation free at the
+    // margin. A round bond proves the challenger PAID for this rung: it must be
+    // a DIFFERENT witness (relabelling the membership bond is not a payment)
+    // and it must never have been consumed by an earlier escalation.
+    if (roundBondProofHash === null) {
+      // Compatibility matrix: a witness without a round bond stays legal on the
+      // default policy (`requireRoundBond` false - every v0.12 case) and for a
+      // break-glass case, where the host may already open rounds on its own
+      // authority, so demanding one from the challenger prices nothing.
+      if (state.requireRoundBond === true && state.hostEscalation !== true) {
+        throw new CourtConfirmationTransitionError(
+          'escalation requires a per-round bond witness: this case sets requireRoundBond',
+        );
+      }
+    } else {
+      if (roundBondProofHash === (event.bondProofHash as string)) {
+        throw new CourtConfirmationTransitionError(
+          'escalation round bond proof hash must be distinct from the membership (challenge) bond',
+        );
+      }
+      const consumed = log.find((r) => r.roundBondProofHash === roundBondProofHash);
+      if (consumed) {
+        throw new CourtConfirmationTransitionError(
+          `escalation round bond proof hash was already consumed by round ${consumed.round}`,
+        );
+      }
     }
     record = {
       round: expectedRound,
@@ -553,6 +598,7 @@ export function onEscalate(
       challengerPubkey: event.challengerPubkey as string,
       requestHash: event.requestHash as string,
       bondProofHash: event.bondProofHash as string,
+      roundBondProofHash,
       at: event.now,
     };
   } else {
@@ -566,6 +612,7 @@ export function onEscalate(
       || event.challengerPubkey != null
       || event.requestHash != null
       || event.bondProofHash != null
+      || roundBondProofHash !== null
     ) {
       throw new CourtConfirmationTransitionError(
         'a host escalation must not carry a challenger request witness',
@@ -578,6 +625,7 @@ export function onEscalate(
       challengerPubkey: null,
       requestHash: null,
       bondProofHash: null,
+      roundBondProofHash: null,
       at: event.now,
     };
   }
@@ -679,6 +727,11 @@ export function onFinalize(
   // re-verify (consecutive rounds, ballot closure, well-formed winners)
   // before the machine reaches `final` on top of it.
   assertValidOutcomeHistory(state);
+  // Witness-log barrier (round-3 finding r29-2, INV-ESC-8): the escalation
+  // log is an audit input hosts use to attribute misconduct and price fees,
+  // so a restored snapshot must not be able to ADD a record naming a juror
+  // who never escalated, a round never opened, or a bond never posted.
+  assertValidEscalationLog(state);
   const pending = state.verdict;
   if (!pending) {
     throw new CourtConfirmationTransitionError('cannot finalize without a resolved round');

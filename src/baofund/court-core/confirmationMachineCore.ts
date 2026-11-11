@@ -21,6 +21,7 @@ import {
   COURT_CONFIRMATION_DOMAIN,
   CourtConfirmationPhase,
   CourtConfirmationMachineState,
+  CourtEscalationRecord,
   CourtRoundOutcomeRecord,
   CourtConfirmationTransitionError,
 } from './confirmationMachineTypes';
@@ -278,6 +279,143 @@ export function assertValidOutcomeHistory(state: CourtConfirmationMachineState):
         throw new CourtConfirmationTransitionError('outcome history winner indices must be unique');
       }
       seenIndices.add(idx);
+    }
+  }
+}
+
+/**
+ * Restore-time barrier for the append-only escalation witness log
+ * (round-3 finding r29-2, INV-ESC-8).
+ *
+ * The log is an audit artifact that hosts read to attribute misconduct (who
+ * escalated, against which request and bond) and to price fees. Until v0.12.1
+ * nothing re-verified it: a hand-restored `fee_settlement` snapshot could
+ * APPEND a fabricated record - naming a juror who never escalated, a round
+ * that was never opened, or a bond that juror never posted - and finalize
+ * minted a canonical verdict on top of it. The verdict hash deliberately does
+ * not cover the log (it must not: the log is not an adjudicating input), so
+ * the barrier is what keeps the audit trail honest.
+ *
+ * Rules, each mirroring something the live path guarantees:
+ *  - rounds are a consecutive `2..k` sequence (one record per escalation, the
+ *    first opens round 2) and never name a round the case did not open;
+ *  - timestamps are finite and non-decreasing (the reducer's clock ledger);
+ *  - a `challenger` record names a roster participant whose OWN accepted
+ *    challenge bond is the recorded hash (r29-1), and carries a per-round bond
+ *    witness that is neither that membership bond nor one an earlier round
+ *    already consumed - mandatory when the case sets `requireRoundBond` (R31);
+ *  - a `host` record requires the frozen `hostEscalation` policy and carries
+ *    no challenger witness.
+ *
+ * A SHORT log is accepted on purpose: a pre-0.12 snapshot legitimately has no
+ * entries, and refusing those would make legacy snapshots un-finalizable
+ * (round-3 target 1.5). Deletions remain a host-attestation obligation
+ * (INV-ESC-6) because they are indistinguishable from a legacy state.
+ */
+export function assertValidEscalationLog(state: CourtConfirmationMachineState): void {
+  const log = state.escalationLog;
+  if (!Array.isArray(log)) {
+    throw new CourtConfirmationTransitionError('escalation log must be an array');
+  }
+  if (log.length > MAX_LADDER_ROUNDS) {
+    throw new CourtConfirmationTransitionError(
+      `escalation log exceeds the ${MAX_LADDER_ROUNDS}-round ladder bound`,
+    );
+  }
+  let previousAt = Number.NEGATIVE_INFINITY;
+  const seenRoundBonds = new Set<string>();
+  for (let offset = 0; offset < log.length; offset += 1) {
+    const record: unknown = log[offset];
+    if (typeof record !== 'object' || record === null) {
+      throw new CourtConfirmationTransitionError('escalation log contains a malformed record');
+    }
+    const { round, authority, challengerIdx, challengerPubkey, requestHash, bondProofHash, at } =
+      record as CourtEscalationRecord;
+    // Legacy records (v0.12) predate the per-round witness; an ABSENT field is
+    // read as `null` (membership semantics), exactly as the reducer does.
+    const roundBondProofHash: string | null =
+      (record as { readonly roundBondProofHash?: string | null }).roundBondProofHash ?? null;
+    if (!Number.isSafeInteger(round) || round !== offset + 2) {
+      throw new CourtConfirmationTransitionError(
+        'escalation log rounds must be a consecutive 2..k sequence',
+      );
+    }
+    if (round > state.ladderRound) {
+      throw new CourtConfirmationTransitionError(
+        'escalation log records a round the case never opened',
+      );
+    }
+    if (typeof at !== 'number' || !Number.isFinite(at) || at < previousAt) {
+      throw new CourtConfirmationTransitionError(
+        'escalation log timestamps must be finite and non-decreasing',
+      );
+    }
+    previousAt = at;
+    if (authority === 'challenger') {
+      if (
+        typeof challengerIdx !== 'number'
+        || !Number.isSafeInteger(challengerIdx)
+        || !state.participantIndices.includes(challengerIdx)
+      ) {
+        throw new CourtConfirmationTransitionError(
+          'escalation log challenger is not a case-roster participant',
+        );
+      }
+      assertHex32(challengerPubkey as string, 'escalation log challenger pubkey must be 32-byte lowercase hex');
+      assertHex32(requestHash as string, 'escalation log request hash must be 32-byte lowercase hex');
+      assertHex32(bondProofHash as string, 'escalation log bond proof hash must be 32-byte lowercase hex');
+      if (!state.challenges.some((c) => c.idx === challengerIdx && c.bondProofHash === bondProofHash)) {
+        throw new CourtConfirmationTransitionError(
+          'escalation log record is not bound to that challenger\'s accepted bond',
+        );
+      }
+      // Per-round bond consumption (R31, r30-1): the whole point of the
+      // witness is that a round costs a FRESH bond. A record that reuses the
+      // membership bond, or a hash an earlier round already consumed, would
+      // restore the free option on a restored snapshot even though the live
+      // reducer refuses it - so the barrier re-derives the same property.
+      if (roundBondProofHash !== null) {
+        assertHex32(
+          roundBondProofHash,
+          'escalation log round bond proof hash must be 32-byte lowercase hex',
+        );
+        if (roundBondProofHash === bondProofHash) {
+          throw new CourtConfirmationTransitionError(
+            'escalation log round bond must be distinct from the membership (challenge) bond',
+          );
+        }
+        if (seenRoundBonds.has(roundBondProofHash)) {
+          throw new CourtConfirmationTransitionError(
+            'escalation log reuses a per-round bond witness across rounds',
+          );
+        }
+        seenRoundBonds.add(roundBondProofHash);
+      } else if (state.requireRoundBond === true && state.hostEscalation !== true) {
+        throw new CourtConfirmationTransitionError(
+          'escalation log records a challenger escalation without the per-round bond this case requires',
+        );
+      }
+    } else if (authority === 'host') {
+      if (state.hostEscalation !== true) {
+        throw new CourtConfirmationTransitionError(
+          'escalation log records a host escalation the frozen policy does not permit',
+        );
+      }
+      if (
+        challengerIdx !== null
+        || challengerPubkey !== null
+        || requestHash !== null
+        || bondProofHash !== null
+        || roundBondProofHash !== null
+      ) {
+        throw new CourtConfirmationTransitionError(
+          'host escalation log record must not carry a challenger witness',
+        );
+      }
+    } else {
+      throw new CourtConfirmationTransitionError(
+        'escalation log authority must be "challenger" or "host"',
+      );
     }
   }
 }
