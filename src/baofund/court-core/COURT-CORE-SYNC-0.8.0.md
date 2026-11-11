@@ -792,3 +792,104 @@ the review-round-4 attack on the v0.13 surface, the registered-findings sweep
 - `npx vite build` -> exit 0 (pre-existing chunk-size / dynamic-import warnings only)
 - The R35 client security fixes (#210) are untouched by this sync: the delta is
   engine-only plus the dep bump, and the client suite above covers them.
+
+# court-core vendor sync - bao-court head bd5e788 (post-v0.13.1, next release v0.13.2)
+
+Synced the v0.13.1 -> head delta into `src/baofund/court-core/` from
+`baocommunity/bao-court` **head `bd5e788`**
+(`bd5e788670d95f9c7e23dab58e62313a3e7b6ad9` = `origin/main`, three commits past
+tag `v0.13.1`/`bedb476`; `git describe` = `v0.13.1-3-gbd5e788`) and pinned the
+npm dep `@bao/court` `#v0.13.1` -> `#bd5e788670d95f9c7e23dab58e62313a3e7b6ad9`
+(lockfile resolved sha updated to the same commit). **No new tag exists
+upstream**, so the package `version` stays `0.13.1`; the next release is
+v0.13.2. The sha was resolved from GitHub directly
+(`git ls-remote https://github.com/baocommunity/bao-court refs/heads/main`).
+
+Delta = bao-court PRs #107 (review round 5), #108 (mutation campaign 2) and
+#109 (review round 6).
+
+## What changed
+
+**Updated engine files (3), all *stricter*, none adds a wire field - every
+existing case/snapshot restores unchanged:**
+- `confirmationMachineHandlers.ts`, `confirmationMachineCore.ts` - **one bond
+  witness, one challenger (r38-1, exploitable, fixed).** The challenge ledger
+  deduped by `idx` only, so a juror that posted nothing could name a bonded
+  juror's `bondProofHash` as its own, mint an "accepted" challenge with a bond
+  it never paid, and then escalate: the `(idx, bondProofHash)` pair test of
+  r29-1 is satisfied once the borrowed record exists, and the r33-1 rule ("no
+  accepted challenge bond may be relabelled as a per-round bond") assumes the
+  hash has exactly one owner. `onAcceptChallenge` now refuses a proof hash
+  already bound to another roster index and `assertValidConfirmationLedger`
+  re-derives the same uniqueness on restore (a STATE property: the machine
+  holds the ledger).
+- `confirmationMachineHandlers.ts` - **borrowed standing at `escalate` (r40-1,
+  exploitable, fixed).** `onEscalate` ran only the *log* barrier while its
+  witness test reads `state.challenges`, so a hand-restored snapshot binding one
+  hash to two indices satisfied `(idx, bondProofHash)` for a juror that posted
+  nothing: a rung opened on a borrowed bond, a round panel was seated, and the
+  case could then only brick at `resolve_round`. `onEscalate` now re-derives the
+  challenge ledger before the witness is used.
+- `confirmationMachineHandlers.ts` - **`open_ladder_round` ran NO barrier
+  (r40-2, exploitable, fixed).** It is the transition that actually spends a
+  panel seat, and it validated the round number, cap, deadline and roster only:
+  a restored `ladder_pending` snapshot with the escalation record DELETED still
+  opened round k+1, un-consuming the bond that record paid with and bricking
+  later at `resolve_round`. It now runs `assertValidEscalationLog` **and**
+  `assertValidConfirmationLedger` first. No consumer impact for legal states (a
+  640-state legal-state hunt across every policy/ladder/authority combination is
+  pinned upstream, 0 refusals).
+- `confirmationMachineCore.ts` - **`ladder_pending` round bound (r37-1, fixed
+  in #108).** The completeness rule knew about the `ladder_pending` half-step,
+  the "round the case never opened" check did not, so the barrier refused the
+  very mid-escalation snapshots a host legitimately restores. The bound now
+  includes the pending rung.
+- `confirmationMachineTypes.ts` - JSDoc only: `bondProofHash` uniqueness is a
+  state invariant, and the registered residual **r40-3** (uniqueness is not
+  ownership - a derivable witness is first-come-first-served, so the host's bond
+  verifier must bind the witness to the event author). Nothing in this client
+  derives a witness.
+
+**Tests vendored:** `__tests__/reviewRound5.test.ts` (NEW, 750 lines),
+`__tests__/reviewRound6.test.ts` (NEW, 936 lines) and
+`__tests__/mutationClosuresV013.test.ts` (NEW, 144 lines). All three import only
+the vendored engine + `helpers/ids.ts` (already vendored, unmodified upstream).
+
+**Deliberately not vendored (unchanged convention):**
+- `docs/` deltas (`REVIEW_ROUND_5.md`, `REVIEW_ROUND_6.md`,
+  `MUTATION_TESTING_V013.md`, refreshed `MUTATION_TESTING.md`,
+  `PER_ROUND_BOND.md`, `FORMAL_INVARIANTS.md`, `CHANGELOG.md`) - engine + tests
+  + fixtures only, as always.
+- `scripts/mutation/` (`check-catalogue.mjs` NEW, `mutants.mjs`,
+  `run-mutants.mjs`, `spot-check.mjs`, the two `pass*-v013*.json` run artefacts) -
+  this client vendors no `scripts/` tree and no `tsx`.
+
+## Client-local adaptations preserved
+
+1. **ASCII dash normalization** re-applied to the three engine files and the
+   three new tests: em dash (U+2014), en dash (U+2013), U+2011 and box-drawing
+   U+2500 -> `-`. None of the six files carries a box-drawing glue character, so
+   the "keep a single `-` adjacent to a tee/corner" exception did not apply and
+   the result is byte-identical to the normalizer's output. The three engine
+   files are byte-equal to normalized upstream head; the rest of the vendored
+   tree was already at v0.13.1 parity.
+2. **The hunk-level apply, not a file overwrite**: the three engine files were
+   patched with only the upstream hunks so pre-existing normalized text is
+   untouched.
+3. **`__tests__/modelCheckingCore.ts`, `__tests__/differentialParity.test.ts`
+   and `__fixtures__/model-check-summary.json` stay RAW upstream copies** (they
+   are asserted against each other) - untouched, not in this delta.
+4. The three jsdom realm shims (`helpers/machines.ts` `drive()` cast,
+   `helpers/keys.ts` `Uint8Array.from(randomBytes(...))`, `helpers/fixtures.ts`
+   dirname+join) and the `adversarialNostr.test.ts` `Uint8Array.from` shim were
+   not in this delta - untouched.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> 40 files / 1,066 tests passed
+  (was 37 / 1,013; +3 files / +53 tests from the three new suites)
+- `npx vitest run src/baofund/court-core/__tests__/{reviewRound5,reviewRound6,mutationClosuresV013}.test.ts`
+  -> 3 files / 53 tests passed
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
