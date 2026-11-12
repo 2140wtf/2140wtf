@@ -1,4 +1,4 @@
-// Copyright © 2026 baocommunity - licenced under AGPL-3.0 (see LICENSE.txt).
+// Copyright © 2026 baocommunity — licenced under AGPL-3.0 (see LICENSE.txt).
 
 /**
  * Create+drive helpers for the three pure ceremony state machines.
@@ -7,13 +7,13 @@
  * `createCourtConfirmationMachine`) take a dozen fields; scenario steppers
  * ("drive to `fee_settlement` with a NO challenge", "close reveals with this
  * outcome split") are 15-40 lines each. Before this module, EVERY suite that
- * touched a machine hand-rolled its own factory + steppers - five copies of
- * "build a vote machine", six of "build a confirmation machine" - with
+ * touched a machine hand-rolled its own factory + steppers — five copies of
+ * "build a vote machine", six of "build a confirmation machine" — with
  * drifting deadlines and event-id conventions. These helpers are the single
  * set; the defaults follow the adversarialMachines convention.
  *
  * determinism: every helper is clock-literal (fixed `now` values, never
- * `Date.now()`) and key-free - see docs/TESTING_GUIDE.md ("Determinism
+ * `Date.now()`) and key-free — see docs/TESTING_GUIDE.md ("Determinism
  * rules").
  */
 import {

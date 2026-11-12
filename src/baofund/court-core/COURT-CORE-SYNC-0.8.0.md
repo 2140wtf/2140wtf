@@ -1479,3 +1479,104 @@ in mind; the failures listed are timeouts, not assertions.
   dep to **0.15.2** (lock: commit
   `a7973621c8437e9c940a7132cc020506ce3d72c9`) and `node_modules/@bao/court`
   reports `0.15.2`, so the pin is real rather than a hand-edited lockfile entry.
+
+---
+
+# court-core vendor sync - bao-court v0.15.3 (6128129)
+
+The second small round of the day: v0.15.3 closes the defect the v0.15.2 sync
+found. That release's r12-1 clause ("no `ladder` => `ladderRound` must be 0") was
+true of every state the machine produces and false of the shape a host persists,
+and upstream's `docs/LANE-PROJECTION.md` cites the measurement by PR number
+(bao.markets #2488: 42 of 185 host court tests red across 8 suites). v0.15.3
+replaced the SHAPE test with a PROVENANCE test.
+
+Dep bump: `@bao/court` `#v0.15.2` -> `#v0.15.3` (annotated tag resolving to
+commit `6128129074fc8958f5f0e6d9deaf86b39ed19d81`, package version `0.15.3`;
+`node_modules/@bao/court` reports 0.15.3).
+
+## What changed (6 engine files + 2 new test assets; no wire field, no signature)
+
+- `confirmationMachineTypes.ts` - **`projection?: 'lane'`** on
+  `CourtConfirmationMachineState` (type `CourtConfirmationStateProjection`).
+  ABSENT on every state the factory and the reducer produce - so "absent" means
+  FULL state, by construction - and `'lane'` on a host projection.
+- `confirmationMachineCore.ts` - `assertRoundCountersAgree(state, entry)` takes a
+  **required** reader: a declared lane at `ladderRound >= 1` with no `ladder` is
+  accepted by `escalate` (and the transport mapper) and REFUSED by
+  `open_ladder_round`, `resolve_round`, `flag_clawback` and `finalize`. The write
+  domain (non-negative safe integer) is unchanged on BOTH shapes, so r12-1's
+  exploits still fail; escalating does not launder the marker away.
+- `confirmationMachineHandlers.ts` / `courtConfirmationMachine.ts` - pass the
+  reader at each site; an unknown marker is a typed refusal at the front door.
+- `courtEscalationRequest.ts` - the mapper calls the barrier with `'transport'`
+  instead of re-deriving r9-4, and no longer demands a `ladder` record.
+- `bondVerification.ts` + `index.ts` - new `CourtBondRef` codec (`BOND_RAILS`,
+  `BOND_NETWORKS`, `UNBONDED`, `formatCourtBondRef`, `parseCourtBondRef`) and the
+  `CourtConfirmationStateProjection` type, root-exported.
+- New tests: `__tests__/overStrictness.test.ts` (25 cases - the 12-shapes x
+  11-readers matrix asserted both ways plus a sweep that fails if any exported
+  `assert(state)` re-stricts the lane without an allow-listed reason) and
+  `__tests__/helpers/watchdog.ts` (the load-normalised timeout helper the suite's
+  `wd` calls now import). `__tests__/helpers/budget.ts` is REMOVED upstream.
+
+**Not vendored (unchanged policy, plus one new exclusion):** `docs/*`,
+`scripts/*`, `proofs/`, `bench/`, `vitest.config.ts`, and - new this round - the
+test-harness pair `__tests__/helpers/determinism.setup.ts` +
+`__tests__/determinism.test.ts`: that test asserts the package's own
+`vitest.config.ts` installed the watchdog, and the client runs its suite under
+the app's vitest config, so vendoring it would add a red assertion about a config
+the client does not use. `helpers/watchdog.ts` IS vendored (the suite's `wd`
+helper imports it, and it degrades gracefully without the setup file).
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** on every copied file, with the established
+   per-file rules preserved (files that kept em dashes upstream -
+   `differentialParity.test.ts`, `modelCheckingCore.ts`, the model-check fixture -
+   still keep them; `reviewRound11.test.ts` still keeps its box rules). Proven,
+   not asserted: normalizing each file's v0.15.2 copy reproduces this tree's
+   previous bytes exactly for the 24 modified engine/test files.
+2. **The seven semantic adaptations are re-applied verbatim** (they are not
+   dash-related, so a re-copy drops them): the jsdom `dirname`+`join` shim in
+   `helpers/fixtures.ts` and `reviewRound7.test.ts`, `Uint8Array.from(...)` in
+   `helpers/keys.ts`, the `readonly unknown[]` dispatch in `helpers/machines.ts`,
+   the index-based `prependMember` in `scale/escalationTransportCorpus.ts`, and
+   the three `it.skip` doc pins / `HAS_HARNESS` guard in
+   `escalationRequestWire.test.ts` + `differentialWire.test.ts`.
+
+## Client call sites (verified by grep, not assumed)
+
+- `projection` is a protocol field on the vendored state only: no client file
+  constructs a `CourtConfirmationMachineState`, and the client's `@bao/court`
+  imports are types, event-kind constants and the selection/dispute builders.
+- `CourtBondRef` / `parseCourtBondRef` / `formatCourtBondRef` are new root
+  exports nothing imports yet (they are the bond-reference shape the host-side
+  court work will adopt; the client's bond handling is unchanged).
+- The barrier change is invisible here: the client never reduces a confirmation
+  machine (the host that does is bao.markets, wired in bao.markets#2488).
+
+## Verified
+
+Taken while ANOTHER session ran a 40-core burn on this box (load average ~62), so
+wall-clock budgets are the only thing that fails - no assertion in the suite
+regressed.
+
+- `npx vitest run src/baofund/court-core` (52 of 53 files; `modelChecking`'s
+  three exhaustive sweeps are > 30 min each under that load) -> **1,293 passed /
+  7 skipped (1,300)**, 52 files green. That includes the new
+  `overStrictness.test.ts` (25 cases) and the re-applied client adaptations
+  (the first run caught the one I had missed - `adversarialNostr.test.ts`'s
+  `Uint8Array.from(randomBytes(32))` - which is exactly what the adaptation
+  re-application is for; it is fixed and the file is 20/20).
+- `npx vitest run src/hooks src/components/bao-court` -> 49 files / 351 tests,
+  12 failed in 4 files, all wall-clock: `useCourtConfirmations.r36` times out on
+  a 2,000-event signing flood at its 20 s budget and passes 20/20 with
+  `--testTimeout=180000` (91 s); `useCashuWallet.test.tsx` (0 references to the
+  court engine, untouched by this sync) fails 5-7 of 62 in `waitFor` on wallet
+  construction, a count that changes run to run.
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0 (3m06s)
+- `npm install @bao/court@github:baocommunity/bao-court#v0.15.3` re-resolved the
+  dep to **0.15.3** (lock: commit `6128129...`), so the pin is real rather than a
+  hand-edited lockfile entry.
