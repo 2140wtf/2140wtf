@@ -1362,3 +1362,120 @@ change in this delta; the committed model-check fixture is untouched.
   `github:baocommunity/bao-court#v0.15.1` (lock: commit
   `e489fe594b59d41615f1700a01a99006d4740e73`), so the pin is real rather than
   a hand-edited lockfile entry.
+
+---
+
+# court-core vendor sync - bao-court v0.15.2 (a797362)
+
+Small round again: v0.15.1 landed hours earlier (#218), so this carries ONLY the
+v0.15.0 -> v0.15.2 delta, which is really the v0.15.1 -> v0.15.2 step (bao-court
+#127 mutation campaign 3, #131 review round 12, #132 release) plus the dep bump
+`@bao/court` `#v0.15.1` -> `#v0.15.2` (annotated tag resolving to commit
+`a7973621c8437e9c940a7132cc020506ce3d72c9`, package version `0.15.2`).
+
+## What changed (4 engine files + 1 NEW engine module + 2 new tests; no export,
+no wire field, no signature)
+
+- `courtEcho.ts` - **NEW (module-private).** The escape path is now ONE
+  implementation. On v0.15.1 a mechanical sweep found **66 raw interpolation
+  sites** across four files (`confirmationMachineHandlers.ts` 44,
+  `confirmationMachineCore.ts` 9 incl. `state.ladderRound`,
+  `courtConfirmationMachine.ts` 3 incl. the front-door `event.type`,
+  `courtEscalationRequest.ts` 10 that were literals by convention only).
+  Measured on v0.15.1: `Object.create(null)` as `event.type` threw a raw
+  `TypeError` **and ran caller code inside a refusal**, and a newline in an
+  outcome was echoed verbatim into the operator log. The module exports
+  `quoteWireValue` / `quoteWireUnknown` / `quoteCounter`, whose value return is
+  runtime-total (never `toString`, never throws).
+- `confirmationMachineCore.ts` - **r12-1: the counters barrier accepted
+  AGREEMENT as integrity.** Round 11 made the barrier's *message* total but left
+  the invariant `===`, so a restored snapshot with BOTH counters forged to the
+  same non-integer (`"3\nESCALATION ACCEPTED"`, `2.5`, `-1`) passed and
+  `flag_clawback` then persisted the forged round. `assertRoundCountersAgree`
+  now enforces the field's **write domain** (a non-negative safe integer) on
+  both counters and requires `ladderRound === 0` when no ladder is open.
+- `confirmationMachineHandlers.ts` / `courtConfirmationMachine.ts` /
+  `courtEscalationRequest.ts` - the raw sites in each go through the shared
+  module; no transition, state field or refusal CLASS changed.
+- The echo **clip** was documented as 64 characters and returned 65, and counted
+  UTF-16 units (40 astral characters measured 65; now 63). The budget is spent
+  on the escaped output and the walk is by code point, so a clip cannot split a
+  surrogate pair or half an escape.
+- `__tests__/reviewRound12.test.ts` (new, ~1.2k lines) - the round-12 attack,
+  including a **STATIC totality sweep** that discovers every file constructing
+  `CourtConfirmationTransitionError` and refuses any unquoted interpolation (with
+  a teeth test and a one-implementation assertion), plus a 20,000-shape fuzz of
+  the event validator, and `__tests__/mutationClosuresV014.test.ts` (new) - the
+  campaign-3 closures.
+
+**Not vendored (unchanged policy):** `CHANGELOG.md`, `docs/REVIEW_ROUND_12.md`,
+`docs/MUTATION_TESTING_V014.md`, `docs/CAMPAIGN_REPORT.md`, the release
+`package.json` and the `scripts/mutation/` campaign artefacts. No
+`__fixtures__` or `__tests__/reference` change in this delta, so the committed
+model-check fixture is untouched.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization** on all 7 copied files (em/en/non-breaking dash
+   and box-drawing section rules -> `-`), the standing rule. Proven, not
+   asserted: normalizing the **v0.15.1** copies of the 4 modified engine files
+   reproduces this tree's previous bytes exactly (checked byte-for-byte against
+   `HEAD:src/baofund/court-core/*.ts`), so the vendor delta is the only change in
+   them. (Note: `reviewRound11.test.ts`, added last round, kept its U+2500
+   section rules - a one-off deviation from the rule; it is left as-is here
+   since it is not in this delta.)
+2. **No new adaptations were needed.** `reviewRound12.test.ts` already uses
+   `dirname(fileURLToPath(import.meta.url))` + `join`, so the jsdom
+   relative-`file:` shim (adaptation 2) is not required, and it imports only
+   `vitest`, `node:fs`, `node:path`, `node:url`, `nostr-tools/pure` and relative
+   `../` engine paths - no `scripts/` harness case (no `HAS_HARNESS` guard), no
+   doc pin, no `tsx`. Its static sweep runs against this tree's own engine files
+   and passes unmodified.
+
+## Client call sites (verified by grep, not assumed)
+
+- `courtEcho.ts` and `quoteWireValue` / `quoteWireUnknown` / `quoteCounter` are
+  module-private and referenced nowhere outside `src/baofund/court-core`
+  (`grep` empty).
+- The client's 14 `@bao/court` imports are types plus event-kind constants and
+  the selection/dispute builders; none constructs the confirmation machine, an
+  escalation request or a `flag_clawback` event (`grep` for
+  `courtConfirmationMachine`, `confirmationMachine*`, `courtEscalationRequest`,
+  `flag_clawback` outside `src/baofund/court-core` is empty). The tightened
+  barrier therefore changes no client path; the engine is carried for parity and
+  for its suite.
+
+## Verified
+
+All numbers below were taken while ANOTHER session ran a 40-core burn on this
+box (`bao-court--test-r51-determinism/loaded-run.sh`, load average ~80), which
+made every wall-clock-budgeted property test 5-20x slower. Read them with that
+in mind; the failures listed are timeouts, not assertions.
+
+- `npx vitest run src/baofund/court-core` (50 of 52 files; `modelChecking`'s
+  three exhaustive sweeps are > 38 min each under that load) -> **1,258 passed
+  / 7 skipped / 2 failed (1,267)**. Both failures are `Error: Test timed out`
+  in the *properties* family (e.g. `propertiesValidator` PV1, 20 s budget,
+  73 s actual) - files that do not touch this delta - and
+  `propertiesBatch` PB1/PB4 times out IDENTICALLY at the pre-sync v0.15.1
+  baseline under the same load (measured, see the bao.markets PR), so the
+  failure is environmental, not a regression.
+- The two files this delta actually adds:
+  `npx vitest run src/baofund/court-core/__tests__/reviewRound12.test.ts
+  src/baofund/court-core/__tests__/mutationClosuresV014.test.ts` -> **2 files /
+  35 tests passed**. This includes round 12's STATIC totality sweep, which
+  discovers the four files constructing `CourtConfirmationTransitionError` in
+  THIS tree and asserts `courtEcho.ts` is the only definer of the escape
+  helpers - i.e. the client-local copies are swept, not upstream's.
+- `npx vitest run src/hooks src/components/bao-court` -> 42 files / 325 tests,
+  27 failed in 6 files, all under load. Sampled in isolation,
+  `useCourtConfirmations.r35.security.test.ts` -> **14/14 passed** (88 s), so
+  these are the same wall-clock/timeout class; no client call site imports the
+  changed engine.
+- `npx vitest run src/baofund/lib/codecSafety.test.ts` -> 9 passed
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0 (4m15s)
+- `npm install @bao/court@github:baocommunity/bao-court#v0.15.2` re-resolved the
+  dep to **0.15.2** (lock: commit
+  `a7973621c8437e9c940a7132cc020506ce3d72c9`) and `node_modules/@bao/court`
+  reports `0.15.2`, so the pin is real rather than a hand-edited lockfile entry.
