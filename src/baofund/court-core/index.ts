@@ -428,6 +428,30 @@ export {
   type VerifyBondOptions,
 } from './bondVerification';
 
+// --- Ceremony core: replay collapse + shared invariants ---------------------
+
+export {
+  collapseSignedRecords,
+  signedRecordIdentity,
+  type SignedRecordIdentity,
+  type CollapsedSignedRecords,
+} from './courtCeremonyCore';
+
+// --- Ceremony bond gate (pluggable, host-verified) ---------------------------
+
+export {
+  BOND_CHECK_ENV,
+  buildBondCheckArgs,
+  parseBondCheckOutput,
+  gateRosterOnBonds,
+  type BondCheckRequest,
+  type BondCheckVerdict,
+  type BondGateRefusal,
+  type JurorBondClaim,
+  type JurorBondVerdict,
+  type RosterBondGate,
+} from './bondCheckGate';
+
 export {
   ALPHA_INCOHERENT,
   ALPHA_NON_REVEAL,

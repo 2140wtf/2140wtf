@@ -1580,3 +1580,76 @@ regressed.
 - `npm install @bao/court@github:baocommunity/bao-court#v0.15.3` re-resolved the
   dep to **0.15.3** (lock: commit `6128129...`), so the pin is real rather than a
   hand-edited lockfile entry.
+
+---
+
+# court-core vendor sync - bao-court v0.16.2 (f0de7cd3)
+
+Dep bump: `@bao/court` `#v0.15.3` -> `#v0.16.2` (annotated tag resolving to
+commit `f0de7cd38ccdd129480a001d99ede76346eb3430`, package version `0.16.2`;
+`node_modules/@bao/court` reports 0.16.2).
+
+**This is NOT a docs-only round for this tree.** bao.markets was already at
+v0.16.0 when v0.16.2 landed, so its delta is docs-only (verified there:
+`git diff --name-only v0.16.0..v0.16.2 | grep -v '\.md$\|package.json'` is
+empty). The client skipped v0.16.0 entirely, so the same command over
+`v0.15.3..v0.16.2` yields a REAL engine delta - it is synced and tested here,
+not waved through:
+
+- `bondCheckGate.ts` - **NEW (334 lines).** The bond-check gate: the typed
+  verdict a host gets when it asks "may this bond fund this seat?" - rail and
+  network pins, `BOND_JUROR_MISMATCH` / `BOND_JUROR_UNBOUND` /
+  `BOND_PROOF_UNPARSEABLE` / `BOND_UNVERIFIABLE`, and the per-seat outpoint
+  shape the LJ-1 juror commitment produces.
+- `courtCeremonyCore.ts` (+143) - the ceremony core grows the bond-gated
+  ceremony the three-box runs use (seat provisioning, the
+  `ROSTER_BELOW_THRESHOLD` negative, the replay/equivocation wire).
+- `index.ts` (+24) - the new root exports for both.
+- New tests: `__tests__/bondCheckGate.test.ts` (305 lines) and
+  `__tests__/replayEquivocation.test.ts` (286 lines); new fixture
+  `__fixtures__/replay-wire-n3-k2.json` (a recorded n=3/k=2 replay wire).
+- Updated: `__tests__/attribution.test.ts`, `__tests__/differentialParity.test.ts`.
+
+The v0.16.1/v0.16.2 halves are documentation only (the LJ-1 closure in the
+paper, `DELIVERY.md`, `EVALUATION.md`, `CAMPAIGN_REPORT.md`, `REVIEWS_INDEX.md`),
+which this tree does not vendor - so nothing else moves here.
+
+## Client-local adaptations applied this sync
+
+1. **ASCII dash normalization**, with the established per-file rules (files that
+   kept em dashes upstream still keep them; `reviewRound11.test.ts` keeps its box
+   rules). The 4 new files get the standing rule (all four dash characters -> `-`).
+2. **The eight semantic adaptations re-applied verbatim** (a re-copy drops them):
+   the jsdom `dirname`+`join` shim in `helpers/fixtures.ts` and
+   `reviewRound7.test.ts`, `Uint8Array.from(...)` in `helpers/keys.ts` and
+   `adversarialNostr.test.ts`, the `readonly unknown[]` dispatch in
+   `helpers/machines.ts`, the index-based `prependMember` in
+   `scale/escalationTransportCorpus.ts`, and the three `it.skip` doc pins /
+   `HAS_HARNESS` guard in `escalationRequestWire.test.ts` +
+   `differentialWire.test.ts`. The sync script reports anchor misses instead of
+   silently skipping, and this round reported zero.
+
+## Client call sites (verified by grep, not assumed)
+
+`bondCheckGate.ts` is carried for parity: no client file imports it yet (the
+client's bond handling goes through its own `@bao/court` types and the
+selection/dispute builders). `courtCeremonyCore.ts`'s additions are exercised
+only by the vendored ceremony tests, which run here.
+
+## Verified
+
+- `npx vitest run src/baofund/court-core` -> **55 files passed, 1,333 passed /
+  7 skipped (1,340)**. This is the FIRST round in a while that could run the
+  whole suite including `modelChecking.test.ts` (its three exhaustive sweeps
+  need the box to themselves; this run had a load average of ~3 instead of the
+  ~60 of the previous rounds), so the gate is stronger than usual: the new
+  `bondCheckGate` / `replayEquivocation` suites and the model checker are both
+  green against the vendored v0.16.2 engine.
+- `npx vitest run src/hooks src/components/bao-court` -> **49 files / 351
+  passed**, no failures and no skips - i.e. the client surface is unchanged by
+  this sync (as expected: no client file imports `bondCheckGate`).
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
+- `npm install @bao/court@github:baocommunity/bao-court#v0.16.2` re-resolved the
+  dep to **0.16.2** (lock: commit `f0de7cd3...`), so the pin is real rather than
+  a hand-edited lockfile entry.
