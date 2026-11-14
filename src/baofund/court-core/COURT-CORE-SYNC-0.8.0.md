@@ -1653,3 +1653,54 @@ only by the vendored ceremony tests, which run here.
 - `npm install @bao/court@github:baocommunity/bao-court#v0.16.2` re-resolved the
   dep to **0.16.2** (lock: commit `f0de7cd3...`), so the pin is real rather than
   a hand-edited lockfile entry.
+
+---
+
+# court-core vendor sync - bao-court v0.17.0 (98910ee -> 128ca3fb)
+
+Dep bump: `@bao/court` `#v0.16.2` -> `#v0.17.0` (annotated tag `98910ee`
+resolving to commit `128ca3fb5cfe90f74d548090bd854c4ca2acdfa0`, package version
+`0.17.0`; `node_modules/@bao/court` reports 0.17.0).
+
+**No vendored file changed this round — proved, not assumed.** The round was
+announced as documentation-only and for the ENGINE that is true: `git diff
+--name-only v0.16.2..v0.17.0` filtered to `.ts`/`.mjs` yields only the ceremony
+soak harness (`scripts/court/soakBondAssertions.ts`, `scripts/court/distributed-ceremony*.mjs`, `bond-plan.json`, the soakctl script + systemd unit)
+and ONE new test, `__tests__/soakBondAssertions.test.ts`. No engine module
+(reducer, confirmation machine, crypto/escrow/rail, `index.ts`) moved. Checked
+file by file against `git archive 128ca3fb` under each file's own dash rule: the
+132 tracked engine/test/fixture files are already identical to v0.17.0, and the
+remaining 8 differ ONLY by their documented client adaptations (re-verified in
+place: `Uint8Array.from` in `helpers/keys.ts` + `adversarialNostr.test.ts`,
+`readonly unknown[]` in `helpers/machines.ts`, the jsdom `dirname`+`join` shim in
+`helpers/fixtures.ts` + `reviewRound7.test.ts`, `HAS_HARNESS` in
+`differentialWire.test.ts`, the `it.skip` doc pins in `escalationRequestWire` +
+`reviewRound7`, and the index-based `prependMember` in
+`scale/escalationTransportCorpus.ts`).
+
+**New exclusion (documented): `__tests__/soakBondAssertions.test.ts` is NOT
+vendored.** It imports `../scripts/court/soakBondAssertions`, and this tree
+vendors the engine + tests + fixtures only (no `scripts/`) — the same reason the
+differential harness cases are skipped. It tests the ceremony SOAK harness, not
+the engine, and the full suite runs it in bao-court and in bao.markets (where the
+harness IS vendored: 94 files / 2,027 passed there).
+
+The substance of the release is documentation (PO-15 moves to "prototype
+compiled and tested, not deployed": the CHECKSIGFROMSTACK premise was wrong,
+F-14 registered, `BaoCourtEscrow.simf` — which lives in bao.markets — closes the
+three real gaps with a 9/9 FROST matrix). None of that is engine code, so
+nothing here changes.
+
+## Verified (CI unavailable org-wide, so every gate was run locally)
+
+- `npx vitest run src/baofund/court-core` -> **55 files passed, 1,333 passed /
+  7 skipped (1,340)** - byte-for-byte the same counts as the v0.16.2 round
+  (1,333 / 7 / 1,340, modelChecking included), which is the proof that this
+  delta does not touch the engine.
+- `npx vitest run src/hooks src/components/bao-court` -> **49 files / 351
+  passed**, also identical to v0.16.2.
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
+- `npm install @bao/court@github:baocommunity/bao-court#v0.17.0` re-resolved the
+  dep to **0.17.0** (lock: commit `128ca3fb...`), so the pin is real rather than
+  a hand-edited lockfile entry.
