@@ -1704,3 +1704,66 @@ nothing here changes.
 - `npm install @bao/court@github:baocommunity/bao-court#v0.17.0` re-resolved the
   dep to **0.17.0** (lock: commit `128ca3fb...`), so the pin is real rather than
   a hand-edited lockfile entry.
+
+---
+
+# court-core vendor sync - bao-court v0.17.1 (bf46509 -> 760d66e8)
+
+Dep bump: `@bao/court` `#v0.17.0` -> `#v0.17.1` (annotated tag `bf46509`
+resolving to commit `760d66e8b1954da5f9d8621302b45dffaca098a4`, package version
+`0.17.1`; `node_modules/@bao/court` reports 0.17.1).
+
+**A REAL engine change this time** - three files, all in the vendored set:
+
+- `bondCheckGate.ts` (+205) - **ONE BOND, ONE SEAT.** `gateRosterOnBonds` keeps a
+  per-run identity ledger: a canonical `bondIdentity` (rail/network + a
+  case-folded, trimmed `proofRef`, via the new `normaliseBondProofRef`) admits AT
+  MOST ONE seat per run. A later claimant is refused with the new typed
+  `BOND_REUSED_ACROSS_SEATS` and `duplicateOf` = the seat that kept it; the FIRST
+  claimant in roster (box/seat) order keeps the seat, so the outcome is
+  deterministic and artifacts stay reproducible. The ledger is PER-CALL state
+  (never persisted, never module-global), because the soak re-uses the same
+  funded bonds every cycle, and an identity is consumed only by a PROVEN
+  admission (a refused check never reserves the bond for anyone).
+- `bondCheckGate.ts` - **hardened `parseBondCheckOutput`**: a
+  `BOND_CHECK_MAX_OUTPUT_BYTES` (8 MiB, mirroring the runner's spawn cap)
+  ceiling, exactly ONE JSON object, a printable-ASCII `proofRef` and non-empty
+  `sources` on an `ok:true` answer, and - when the caller passes the request it
+  made - `BOND_PROOF_MISMATCH` for a different `proofRef` and
+  `BOND_RAIL_MISMATCH` for a different `rail`/`network`. The roster decision
+  re-checks the identity itself, so the refusal never depends on a caller
+  remembering to compare.
+- `index.ts` (+4) - root-exports `BOND_CHECK_MAX_OUTPUT_BYTES`, `bondIdentity`,
+  `normaliseBondProofRef` and `type BondCheckExpectation`.
+- `__tests__/bondCheckGate.test.ts` (+310) - the suite grows to cover both.
+
+**Client impact: none reached.** No client file imports `bondCheckGate` (the gate
+is a ceremony-harness surface; bao.markets wires it in its vendored ceremony
+runner). Carried for parity, and its suite runs here: the gate file is 23/23 and
+the whole engine suite is green.
+
+## Client-local adaptations applied this sync
+
+The three re-copied files carry no adaptation of their own, but a bulk re-copy
+touches the eight files that do, so all eight were re-applied verbatim and the
+result verified by `git status`: only the three engine/test files differ from
+`HEAD`, i.e. the adaptation re-application is byte-exact (jsdom `dirname`+`join`
+in `helpers/fixtures.ts` + `reviewRound7.test.ts`, `Uint8Array.from` in
+`helpers/keys.ts` + `adversarialNostr.test.ts`, `readonly unknown[]` in
+`helpers/machines.ts`, the index-based `prependMember` in
+`scale/escalationTransportCorpus.ts`, and the three `it.skip` doc pins /
+`HAS_HARNESS` guard in `escalationRequestWire.test.ts` +
+`differentialWire.test.ts`).
+
+## Verified (CI unavailable org-wide - Actions budget - so local gates are the basis)
+
+- `npx vitest run src/baofund/court-core` -> **55 files passed, 1,342 passed /
+  7 skipped (1,349)** (was 1,333 / 7 / 1,340 at v0.17.0: +9 tests, all from the
+  grown `bondCheckGate` suite; `modelChecking` included).
+- `npx vitest run src/hooks src/components/bao-court` -> **49 files / 351
+  passed** (unchanged - no client file imports the gate).
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
+- `npm install @bao/court@github:baocommunity/bao-court#v0.17.1` re-resolved the
+  dep to **0.17.1** (lock: commit `760d66e8...`), so the pin is real rather than
+  a hand-edited lockfile entry.
