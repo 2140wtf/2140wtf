@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 
 import { decodeGeohashCenter } from '@/lib/geohash';
+import { getBasemapTiles } from '@/lib/mapTiles';
 import { formatCalendarEventWhen, type CalendarEvent } from '@/lib/nip29';
 
 interface EventsMapProps {
@@ -12,9 +13,6 @@ interface EventsMapProps {
   /** Map height class; defaults to a tall panel. */
   className?: string;
 }
-
-const OSM_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 /**
  * Leaflet map of NIP-52 events pinned with a `g` geohash tag (what plektos
@@ -38,9 +36,11 @@ export function EventsMap({ events, className }: EventsMapProps) {
       zoom: 2,
       attributionControl: true,
     });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: OSM_ATTRIBUTION,
+    const tiles = getBasemapTiles('light');
+    L.tileLayer(tiles.url, {
+      maxZoom: tiles.maxZoom,
+      className: tiles.className,
+      attribution: tiles.attribution,
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;

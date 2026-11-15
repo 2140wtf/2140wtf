@@ -1712,3 +1712,14 @@ video[data-no-native-poster]::-internal-media-controls-overlay-cast-button {
   appearance: none !important;
   opacity: 0 !important;
 }
+
+/* ── Leaflet basemap tiles (shared by BTC Map, Events, Roadstr) ──────────────
+   See src/lib/mapTiles.ts. The provider (Esri World_Street_Map) only ships a
+   light basemap, so dark mode is a filter on the tile layer's container rather
+   than a second provider: invert lightness, then rotate the hue back so water
+   and parks keep roughly their real colours instead of turning into
+   complements. It sits on the tile container only, never on the map element,
+   so markers, popups and controls are unaffected. */
+.basemap-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(1.08) saturate(0.75);
+}

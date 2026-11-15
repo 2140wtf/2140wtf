@@ -7,6 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { Globe } from 'lucide-react';
 
 import type { RoadstrConfirmation, RoadstrReport } from '@/lib/roadstr';
+import { getBasemapTiles } from '@/lib/mapTiles';
 import { ROADSTR_EVENT_TYPES, type MapStyle } from '@/components/roadstr/roadstrTypes';
 import { RoadstrPopupContent } from '@/components/roadstr/RoadstrPopupContent';
 
@@ -111,41 +112,21 @@ interface TileConfig {
 }
 
 function getTileConfig(style: EffectiveMapStyle): TileConfig {
-  const osmAttribution =
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-  const esriAttribution =
-    '&copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
-  switch (style) {
-    case 'dark':
-      // Esri World_Dark_Gray_Base is already dark and needs no key (CartoDB's
-      // free dark tiles now demand an API key and serve an error tile instead).
-      return {
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        className: 'roadstr-esri-dark',
-        fallbackUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        fallbackClassName: 'roadstr-osm-dark',
-        attribution: `&copy; <a href="https://www.esri.com/">Esri</a>, ${osmAttribution}`,
-      };
-    case 'satellite':
-      return {
-        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        className: 'roadstr-satellite',
-        fallbackUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        fallbackClassName: 'roadstr-osm-light',
-        attribution: esriAttribution,
-      };
-    case 'light':
-    default:
-      return {
-        url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        className: 'roadstr-osm-light',
-        // If OSM is down, Esri World_Street_Map is another no-key light basemap
-        // (the previous CartoDB fallback now requires an API key).
-        fallbackUrl: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-        fallbackClassName: 'roadstr-esri-light',
-        attribution: osmAttribution,
-      };
-  }
+  // Shared, no-key Esri basemaps (see src/lib/mapTiles.ts). Dark mode is the
+  // street basemap with a per-tile filter, so it keeps street detail at every
+  // zoom — Esri's dark canvas has no tiles above z16. OSM is not used at all:
+  // its volunteer servers block embedded apps with a 403 error tile that
+  // Leaflet renders silently.
+  const satellite = style === 'satellite';
+  const tiles = getBasemapTiles(style === 'dark' ? 'dark' : 'light', satellite ? 'satellite' : 'street');
+  const fallback = getBasemapTiles('light', 'street');
+  return {
+    url: tiles.url,
+    className: satellite ? 'roadstr-satellite' : tiles.className,
+    fallbackUrl: fallback.url,
+    fallbackClassName: fallback.className,
+    attribution: tiles.attribution,
+  };
 }
 
 function getClusterIcon(count: number, theme: 'dark' | 'light'): L.DivIcon {
@@ -517,20 +498,8 @@ export function RoadstrMap({
   return (
     <>
       <style>{`
-        /* OSM tiles are light, so a filter is needed in dark mode. We only use
-           OSM as a fallback in dark mode; the primary dark provider is Esri's
-           World_Dark_Gray_Base, which needs no filter and avoids tile-layer
-           flicker. */
-        .roadstr-osm-dark {
-          filter: brightness(0.7) contrast(1.1) saturate(0.75);
-        }
-        .roadstr-esri-dark {
-          /* Esri dark gray canvas is already dark; no filter keeps the tile layer
-             free of the compositing flicker caused by CSS filters. */
-        }
-        .roadstr-esri-light {
-          /* Esri World_Street_Map is a light basemap; no filter needed. */
-        }
+        /* Dark basemap treatment lives in index.css (.basemap-tiles-dark) on
+           the tile layer container, shared with the other Leaflet maps. */
         .roadstr-satellite img {
           /* Satellite imagery already has strong contrast; keep it unfiltered. */
         }
