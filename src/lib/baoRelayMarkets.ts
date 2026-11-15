@@ -158,10 +158,21 @@ export interface RelayMergedMarket extends BaoMarket {
 }
 
 /**
- * Merge API markets with relay-discovered markets for display. The API wins
- * on conflicts (it carries live odds/status); relay-only markets appear with
- * `viaRelay`/`oddsAvailable: false` so the UI can badge them and hide
- * misleading uniform placeholder probabilities.
+ * Merge API markets with relay-discovered markets for display.
+ *
+ * The API is authoritative whenever it answered: a market definition on the
+ * relay says nothing about whether the market is still tradable, because
+ * kind-38000 events carry no `status` and are never updated when a market is
+ * resolved or rejected. Verified live on the public testnet: relay-only rows
+ * that the page showed as open markets ("Vol —", "— trades", but still
+ * offering Buy buttons) were `status: "pending"` or `"resolved"` in the API,
+ * and the API's `status=active` list correctly omitted them. Re-adding them
+ * from the relay resurrected settled markets as tradable — and padded the
+ * grid with cards that have no odds, volume or trades.
+ *
+ * So relay-only markets are a FALLBACK, used only when the API returned
+ * nothing at all (outage). `viaRelay`/`oddsAvailable: false` still mark them
+ * so the UI can badge them and hide the placeholder probabilities.
  */
 export function mergeApiAndRelayMarkets(
   apiMarkets: BaoMarket[],
@@ -173,9 +184,13 @@ export function mergeApiAndRelayMarkets(
     byId.set(market.marketId, { ...market, viaRelay: false, oddsAvailable: true });
   }
 
+  // API answered: relay definitions cannot contradict it (see the note above).
+  if (apiMarkets.length > 0) {
+    return Array.from(byId.values()).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
   for (const market of relayMarkets) {
     const existing = byId.get(market.marketId);
-    if (existing && !existing.viaRelay) continue; // API wins on conflicts.
     if (existing && existing.createdAt >= market.createdAt) continue;
     byId.set(market.marketId, { ...market, viaRelay: true, oddsAvailable: false });
   }

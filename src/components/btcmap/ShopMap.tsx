@@ -2,6 +2,12 @@
  * Interactive map showing Bitcoin-accepting shops worldwide.
  * Uses Leaflet with Canvas renderer for high-performance rendering
  * of thousands of markers.
+ *
+ * Basemap tiles come from `@/lib/mapTiles`; the old inline URLs pointed light
+ * mode at OpenStreetMap's volunteer tile servers, which answer embedded apps
+ * with a 403 whose body is an "Access blocked" image — a body Leaflet renders
+ * happily and never reports through `tileerror`, so the fallback could not
+ * rescue it (and light mode's fallback was the same blocked URL anyway).
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -9,6 +15,7 @@ import L from 'leaflet';
 import { Globe } from 'lucide-react';
 
 import { getCountryBbox } from '@/lib/btcmap/btcmap';
+import { getBasemapTiles } from '@/lib/mapTiles';
 
 // Defensive patches for Leaflet rAF callbacks that can fire after the map
 // container is removed from the DOM during React tab switches.
@@ -128,23 +135,6 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#039;');
 }
 
-/**
- * No-key basemap tiles for /btcmap.
- *
- * CARTO's free `basemaps.cartocdn.com` tiles were retired (CARTO now serves an
- * "API key needed" error tile to unauthenticated clients, which Leaflet renders
- * because the response is still HTTP 200 — so the old tileerror fallback never
- * fired). We therefore use the same providers the rest of the app already uses,
- * both of which need no key and no configuration:
- *   - light: OpenStreetMap standard tiles (same URL as EventsMap)
- *   - dark : Esri World_Dark_Gray_Base canvas tiles (free Esri basemap)
- */
-function tileUrlFor(theme: 'dark' | 'light'): string {
-  return theme === 'light'
-    ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-    : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-}
-
 export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClick, userLocation, onBoundsChange, theme = 'dark', countryFilter = 'all' }: ShopMapProps): React.JSX.Element {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -154,18 +144,24 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
   const prevRadius = useRef<number | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const tileErrorHandlerRef = useRef<(() => void) | null>(null);
+  const themeRef = useRef(theme);
   const onSelectShopRef = useRef(onSelectShop);
   const onMapClickRef = useRef(onMapClick);
   const onBoundsChangeRef = useRef(onBoundsChange);
   const prevCountryFilter = useRef<string>(countryFilter);
 
+  useEffect(() => { themeRef.current = theme; }, [theme]);
   useEffect(() => { onSelectShopRef.current = onSelectShop; }, [onSelectShop]);
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onBoundsChangeRef.current = onBoundsChange; }, [onBoundsChange]);
 
+  // Create the map once. Theme changes must NOT rebuild it: that would throw
+  // away the user's pan/zoom (the tile layer is retargeted by the effect
+  // below), so the initial theme is read through a ref instead of a dep.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    const activeTheme = themeRef.current;
     const markers = markersRef.current;
     const map = L.map(containerRef.current, {
       center: [20, 0],
@@ -184,19 +180,21 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
       // the <style> block below).
     });
 
-    const tileUrl = tileUrlFor(theme);
-    const tileLayer = L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      subdomains: 'abc',
-      className: theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light',
+    const tiles = getBasemapTiles(activeTheme);
+    const tileLayer = L.tileLayer(tiles.url, {
+      maxZoom: tiles.maxZoom,
+      className: tiles.className,
+      attribution: tiles.attribution,
     }).addTo(map);
-    // Fallback tile layer if the primary provider fails (unreachable,
-    // 4xx/5xx tile errors) — OSM works for both themes.
+    // Fallback to a second no-key provider if the primary tiles error out.
+    // (OSM is deliberately not used: its volunteer servers block embedded
+    // apps, and the block arrives as a 403 whose body is an image, which never
+    // surfaces as `tileerror` — see src/lib/mapTiles.ts.)
     let fallbackTriggered = false;
     const tileErrorHandler = () => {
       if (!fallbackTriggered && tileLayerRef.current) {
         fallbackTriggered = true;
-        tileLayerRef.current.setUrl('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        tileLayerRef.current.setUrl(tiles.fallbackUrl);
       }
     };
     tileLayer.on('tileerror', tileErrorHandler);
@@ -204,6 +202,8 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
     tileLayerRef.current = tileLayer;
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Attribution is a licence condition for the basemap, not decoration.
+    L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
 
     // Force resize after the container is fully laid out — fixes blank map in
     // flex containers and late-layout cases (top-bar height, web fonts, slow
@@ -285,24 +285,29 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
         // ignore
       }
     };
-  }, [theme]);
+  }, []);
 
-  // Update tile layer when theme changes without rebuilding the whole map
+  // Retarget the existing tile layer when the theme changes. The map is not
+  // rebuilt, so pan/zoom and the loaded merchant data stay put.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !tileLayerRef.current) return;
+    const layer = tileLayerRef.current;
+    if (!map || !layer) return;
 
-    const tileUrl = tileUrlFor(theme);
+    const tiles = getBasemapTiles(theme);
+    layer.setUrl(tiles.url);
+    layer.options.className = tiles.className;
 
-    tileLayerRef.current.setUrl(tileUrl);
-    tileLayerRef.current.options.className = theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light';
+    // Leaflet applies `className` only while creating the tile container
+    // (`_initContainer`), so a later theme change has to swap the class by
+    // hand on `getContainer()` — setting the option alone does nothing here.
+    const container = layer.getContainer();
+    if (container) {
+      container.classList.remove('basemap-tiles', 'basemap-tiles-dark');
+      container.classList.add(...tiles.className.split(' ').filter(Boolean));
+    }
 
-    const container = map.getContainer();
-    container.classList.remove('leaflet-bright-dark', 'leaflet-light', 'leaflet-map-dark');
-    container.classList.add(theme === 'dark' ? 'leaflet-map-dark' : 'leaflet-light');
-
-    // Force tile refresh
-    tileLayerRef.current.redraw();
+    layer.redraw();
   }, [theme]);
 
   const handleReset = useCallback(() => {
@@ -479,9 +484,9 @@ export default function ShopMap({ shops, selectedShopId, onSelectShop, onMapClic
   return (
     <>
       <style>{`
-        .leaflet-map-dark {
-          filter: saturate(1.08) contrast(1.04);
-        }
+        /* Tile theme treatment lives in index.css (.basemap-tiles-dark) so all
+           Leaflet maps share it; nothing is filtered at the container level —
+           that would also invert markers and popups. */
         .shop-popup-dark .leaflet-popup-content-wrapper {
           background: #0f172a !important;
           border-radius: 10px !important;

@@ -238,13 +238,23 @@ describe('mergeApiAndRelayMarkets', () => {
     expect(merged[0].oddsAvailable).toBe(true);
   });
 
-  it('includes relay-only markets flagged as via relay with odds unavailable', () => {
+  it('keeps API rows and drops relay-only markets while the API answers', () => {
+    // The relay cannot carry market status, so a definition it holds may be a
+    // pending or already-resolved market the API correctly left out. Verified
+    // live: relay-only cards on /markets were `pending`/`resolved` in the API.
     const relay = fakeApiMarket({ marketId: 'relay-only' });
     const merged = mergeApiAndRelayMarkets([fakeApiMarket()], [relay]);
-    expect(merged).toHaveLength(2);
-    const relayOnly = merged.find((m) => m.marketId === 'relay-only');
-    expect(relayOnly?.viaRelay).toBe(true);
-    expect(relayOnly?.oddsAvailable).toBe(false);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].marketId).toBe('market-1');
+    expect(merged[0].viaRelay).toBe(false);
+  });
+
+  it('falls back to relay-only markets when the API returns nothing', () => {
+    const relay = fakeApiMarket({ marketId: 'relay-only' });
+    const merged = mergeApiAndRelayMarkets([], [relay]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].viaRelay).toBe(true);
+    expect(merged[0].oddsAvailable).toBe(false);
   });
 
   it('lets the API win on marketId conflicts', () => {
@@ -256,9 +266,9 @@ describe('mergeApiAndRelayMarkets', () => {
   });
 
   it('sorts merged markets newest-first', () => {
-    const api = fakeApiMarket({ marketId: 'api', createdAt: 1_700_000_000 });
-    const relay = fakeApiMarket({ marketId: 'relay', createdAt: 1_700_500_000 });
-    const merged = mergeApiAndRelayMarkets([api], [relay]);
-    expect(merged.map((m) => m.marketId)).toEqual(['relay', 'api']);
+    const older = fakeApiMarket({ marketId: 'older', createdAt: 1_700_000_000 });
+    const newer = fakeApiMarket({ marketId: 'newer', title: 'Newer market', createdAt: 1_700_500_000 });
+    const merged = mergeApiAndRelayMarkets([older, newer], []);
+    expect(merged.map((m) => m.marketId)).toEqual(['newer', 'older']);
   });
 });

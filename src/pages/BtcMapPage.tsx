@@ -17,7 +17,7 @@ import { BtcMapFilters, type BtcMapFiltersState } from '@/components/btcmap/BtcM
 import { useBtcShops, type ShopWithMeta } from '@/hooks/useBtcShops';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getBackgroundThemeMode } from '@/lib/colorUtils';
+import { useBasemapTheme } from '@/hooks/useBasemapTheme';
 import type { BBox, BtcShop } from '@/lib/btcmap/btcmap';
 import { fetchShopDetails, getCountryBbox } from '@/lib/btcmap/btcmap';
 import { openUrl } from '@/lib/downloadFile';
@@ -50,9 +50,7 @@ export function BtcMapPage(): React.JSX.Element {
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
 
-  const theme: 'dark' | 'light' = useMemo(() => {
-    return getBackgroundThemeMode();
-  }, []);
+  const theme = useBasemapTheme();
 
   const visibleShops = useMemo(
     () => getShops(filters.country, filters.type, filters.lightning, filters.onchain, filters.search, viewportBbox),

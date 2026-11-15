@@ -12,7 +12,7 @@ import { usePublishPreferences } from '@/hooks/usePublishPreferences';
 import { useToast } from '@/hooks/useToast';
 import { useLayoutOptions } from '@/contexts/LayoutContext';
 import { useAppContext } from '@/hooks/useAppContext';
-import { getBackgroundThemeMode } from '@/lib/colorUtils';
+import { useBasemapTheme } from '@/hooks/useBasemapTheme';
 import {
   encodeGeohash,
   geohashPrecisionForBounds,
@@ -39,7 +39,7 @@ export function RoadstrPage(): React.JSX.Element {
   });
   useLayoutOptions({ noMaxWidth: true, noOverscroll: true, rightSidebar: null });
 
-  const theme: 'dark' | 'light' = getBackgroundThemeMode();
+  const theme = useBasemapTheme();
 
   const [viewport, setViewport] = useState<BBox | undefined>();
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);

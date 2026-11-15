@@ -88,7 +88,14 @@ function PositionRow({ position, onOpen }: { position: BaoPosition; onOpen: () =
           {position.market_title ?? position.market_id}
         </p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          {isSmj && <span className="font-medium text-primary">SMJ pool · </span>}
+          {isSmj && (
+            <span
+              className="font-medium text-primary"
+              title="Everyone's bets go into one shared pot; winnings are split in proportion to each stake."
+            >
+              Pool bet ·{' '}
+            </span>
+          )}
           {position.outcome_id} · {formatSats(position.size)} sats @ {entryPct}
           {` → ${currentPct}`}
         </p>
