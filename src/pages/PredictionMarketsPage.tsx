@@ -230,10 +230,19 @@ const MarketCard = memo(function MarketCard({
           </span>
           <span className="tabular-nums">Ends {formatEndDate(market.endTime)}</span>
         </div>
-        <div className="flex flex-wrap gap-x-3 text-[11px] font-medium tabular-nums text-muted-foreground">
-          <span>Vol {market.totalVolumeSats === undefined ? '—' : `${formatCompactNumber(market.totalVolumeSats)} sats`}</span>
-          <span>{market.tradeCount === undefined ? '— trades' : `${formatCompactNumber(market.tradeCount)} trades`}</span>
-        </div>
+        {/* Stats. Relay-fallback markets (API outage) have no volume or trade
+            count at all — printing "Vol —  — trades" made every card look
+            broken, so the row is omitted when neither number is known. */}
+        {(market.totalVolumeSats !== undefined || market.tradeCount !== undefined) && (
+          <div className="flex flex-wrap gap-x-3 text-[11px] font-medium tabular-nums text-muted-foreground">
+            {market.totalVolumeSats !== undefined && (
+              <span>Vol {formatCompactNumber(market.totalVolumeSats)} sats</span>
+            )}
+            {market.tradeCount !== undefined && (
+              <span>{formatCompactNumber(market.tradeCount)} trades</span>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

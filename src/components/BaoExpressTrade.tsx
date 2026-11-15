@@ -80,7 +80,7 @@ export function BaoExpressTrade({ market, initialOutcomeLabel, onTraded }: BaoEx
     onSuccess: (result) => {
       toast({
         title: 'Trade placed',
-        description: `${formatSats(amountSats)} sats on ${outcome.label} (${result.via.toUpperCase()} pool).`,
+        description: `${formatSats(amountSats)} sats on ${outcome.label} (${result.via === 'smj' ? 'shared pool' : 'market maker'}).`,
       });
       onTraded?.();
     },
