@@ -1842,3 +1842,112 @@ the intended +50 / -2.
 - `npm install @bao/court@github:baocommunity/bao-court#v0.17.2` re-resolved the
   dep to **0.17.2** (lock: commit `32fb2ea1...`), so the pin is real rather than
   a hand-edited lockfile entry.
+
+---
+
+# Standing register - the eight client-local adaptations
+
+Written 2026-11-17, when an artifact sweep read a stale checkout (local HEAD
+`5a8e5aa89` = v0.15.0, eight commits behind `origin/main`) and reported this
+repo as still pinned to `v0.15.0`. `origin/main` was already at v0.17.2 (#222 /
+#223 / #225), so nothing was re-synced; this section records the independent
+verification and, more usefully for the next sync, the canonical list of
+adaptations a bulk re-copy silently destroys.
+
+The per-round entries above repeat this list inside prose; this is the register
+to check against. Every sync must re-apply all eight and prove the result
+(`git status` shows only files that genuinely moved upstream).
+
+1. `__tests__/helpers/fixtures.ts` - `dirname(fileURLToPath(import.meta.url))` +
+   `join(...)` instead of `new URL(rel, import.meta.url)`. Under the client's
+   jsdom vitest environment a relative href re-resolves against the document
+   URL and `fileURLToPath` throws `ERR_INVALID_URL_SCHEME`.
+2. `__tests__/reviewRound7.test.ts` - the same jsdom path shim (it reads
+   `ladderEconomics.ts` as text to pin a doc claim).
+3. `__tests__/helpers/keys.ts` - `Uint8Array.from(randomBytes(...))` around the
+   `node:crypto` result. The Buffer realm's `Uint8Array` fails the cross-realm
+   `instanceof` in `@noble/curves`' `abytes()`
+   ("secretKey expected Uint8Array of length 32, got type=object").
+4. `__tests__/adversarialNostr.test.ts` - the same `Uint8Array.from` wrap at its
+   `finalizeEvent(template, randomBytes(32))` call site.
+5. `__tests__/helpers/machines.ts` - `drive()` takes `readonly unknown[]` and
+   casts (`event as E`) at the reduce call. The client tsconfig typechecks
+   `__tests__` (upstream excludes them), where inline event literals widen
+   `type` to `string` and no longer assign to the closed event unions.
+6. `__tests__/scale/escalationTransportCorpus.ts` - index-based `prependMember`
+   instead of `text.replace('{', ...)` (CodeQL `js/incomplete-sanitization`;
+   behaviour identical for a JSON object text).
+7. `__tests__/escalationRequestWire.test.ts` - `it.skip` doc pins: prose
+   assertions against bao-court docs this tree does not vendor.
+8. `__tests__/differentialWire.test.ts` - `HAS_HARNESS` (`HAS_PYTHON` + runner +
+   reference file present) gates the differential-wire cases, so the
+   `scripts/`-dependent ones skip instead of failing.
+
+**Correction for the record.** The sweep described these as "8 `__tests__` files
+carrying `Uint8Array.from(randomBytes())`". It is **two** (entries 3 and 4);
+the other six are unrelated shims. A
+`Uint8Array.from\(.*randomBytes` grep over `src/baofund/court-core/` matches
+exactly `helpers/keys.ts` and `adversarialNostr.test.ts` (plus this document).
+
+## Pin + normaliser verification (independent re-run, 2026-11-17)
+
+- `package.json`: `"@bao/court": "github:baocommunity/bao-court#v0.17.2"`.
+  A from-scratch `npm ci` installed **0.17.2** and the lock entry resolved to
+  `git+ssh://git@github.com/baocommunity/bao-court.git#32fb2ea1c828507ade9af7229758fd6e18537f9c`
+  - bao-court tag `v0.17.2` is exactly `32fb2ea1c828507ade9af7229758fd6e18537f9c`,
+  so the pin names the release commit and the lock entry is a real resolution.
+- **Normaliser proof, both directions, byte-exact.** Applying the standing
+  transform (dash characters -> `-`; U+2500 runs -> `-` of the same width; a
+  single U+2500 kept only beside a tee/corner; `(c)`, `->`, `...`, `©`, `…`
+  preserved) to upstream `v0.17.1:bondCheckGate.ts` reproduces the vendored
+  v0.17.1 file **byte-for-byte** (21,872 bytes), and applying the same transform
+  to upstream `v0.17.2:bondCheckGate.ts` reproduces the current vendored file
+  **byte-for-byte** (24,050 bytes). The transform is therefore unchanged by this
+  release and the sync diff is only the intended engine change.
+- **File delta v0.17.1 -> v0.17.2, vendored scope: ONE changed file.**
+  `bondCheckGate.ts` +50 / -2 - `bondSats` on the expectation, `valueSats` on
+  the verdict (optional; `null` = "the command did not say"), the
+  non-negative-safe-integer guard (`BOND_CHECK_MALFORMED`), and the value floor
+  (`BOND_VALUE_BELOW_REQUIRED`, a decision, not a retryable failure) with
+  residual **R1** pinned (a checker that OMITS the value is admitted on its
+  word). Added: `__tests__/bondValueFloor.client.test.ts` (client-local, 5
+  tests - upstream covers the floor only in the excluded hostile suite).
+  Removed: none. Still excluded by standing policy: `__tests__/bondGateHostile.test.ts`,
+  `__tests__/siteLanding.test.ts`, `scripts/court/bondCheckRunner.mjs`,
+  `scripts/court/distributed-ceremony.mjs`, `site/`, `docs/*`.
+  The env allowlist, process-group kill and typed runner refusals live in
+  `bondCheckRunner.mjs` - host-harness code this repo does not vendor.
+
+## Client impact re-checked (grep, not assumed)
+
+- Nothing outside `src/baofund/court-core/` references `bondCheckGate`,
+  `gateRosterOnBonds`, `parseBondCheckOutput`, `bondIdentity`,
+  `BOND_VALUE_BELOW_REQUIRED`, `BOND_REUSED_ACROSS_SEATS` or
+  `BondCheckExpectation` - the gate is a ceremony-harness surface with no reader
+  in this app.
+- The `@bao/court` imports the app does use are `createBaoMempoolVerifier` /
+  `verifyBond` / `StakeCommitment` (`useBondEscrow`), selection builders and
+  parsers (`useBaoCourtSelection`, `useDemoCourtRoom`, `baoCourtSimulator`), and
+  the types/kind constants. The vendored-engine imports are
+  `courtVoteMachine` (`hashCourtVerdict`), `escrow` (`calculateBondAmount`),
+  `dispute`, `events`/`dkgMessages` parsers, `courtInbox`, `courtDkgMachine`,
+  `appealTiming` and `batchAttestation`. None is the gate, and the v0.17.2
+  additions are OPTIONAL fields on gate types, so no signature the app touches
+  changed.
+- The gate/identity changes are ceremony-side (seat provisioning, bond identity
+  ledger, verdict value floor). No client code constructs a ceremony or reduces
+  machine state; confirmation status is derived from observed relay events. The
+  hooks + bao-court suites are unchanged at 351 passed, which is the observable
+  form of that claim.
+
+## Verified (fresh `npm ci` from `origin/main`, load average ~17)
+
+- `npx vitest run src/baofund/court-core` -> **56 files passed, 1,347 passed /
+  7 skipped (1,354)**, `modelChecking` included (byte-identical counts to the
+  v0.17.2 round above).
+- `npx vitest run src/hooks src/components/bao-court` -> **49 files / 351
+  passed**.
+- `npx vitest run` (whole app, the CI `test` job's suite) -> **467 files passed
+  | 5 skipped (472); 5,629 passed | 14 skipped (5,643)**.
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build -l error` -> exit 0
