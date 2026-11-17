@@ -1767,3 +1767,78 @@ in `helpers/fixtures.ts` + `reviewRound7.test.ts`, `Uint8Array.from` in
 - `npm install @bao/court@github:baocommunity/bao-court#v0.17.1` re-resolved the
   dep to **0.17.1** (lock: commit `760d66e8...`), so the pin is real rather than
   a hand-edited lockfile entry.
+
+# court-core vendor sync - bao-court v0.17.2 (v0.17.2 -> 32fb2ea1)
+
+Dep bump: `@bao/court` `#v0.17.1` -> `#v0.17.2` (annotated tag `v0.17.2`
+resolving to commit `32fb2ea1c828507ade9af7229758fd6e18537f9c`, package version
+`0.17.2`; `node_modules/@bao/court` reports 0.17.2).
+
+**A real engine change, ONE file, and it is in the vendored set:**
+`bondCheckGate.ts` (+50 / -2) - the **value floor**.
+
+The threat this round is a compromised or lying CHECKER, so `--bond-sats` is no
+longer trusted to the command:
+
+- a verdict may now carry `valueSats` (optional, so no existing caller changes
+  shape; `null` means "the command did not say" and is recorded, never assumed);
+- when the caller names `bondSats`, a STATED value below it is the gate's own
+  DECISION - `BOND_VALUE_BELOW_REQUIRED` - never a transient failure to retry;
+- a negative or non-integer `valueSats` is `BOND_CHECK_MALFORMED`, never a pass;
+- residual **R1** (upstream, pinned here rather than hidden): a checker that
+  OMITS the value is admitted on its word - the gate cannot see a chain.
+
+## Not vendored this round (policy + one new reason)
+
+- `scripts/court/bondCheckRunner.mjs` (NEW upstream, 403 lines): the spawn /
+  quoting / timeout / process-group kill / output cap / **environment scrub** /
+  retry runner. `scripts/` is excluded by this repo's standing policy - and it
+  imports `node:child_process`, so it must never be reachable from the client
+  bundle. THE ENV ALLOWLIST IS THE HEADLINE OF v0.17.2 AND IT LIVES THERE, i.e.
+  the hardening that matters most upstream is host-harness code, not engine code,
+  and `bao.markets` carries it in its own vendored copy (bao.markets #3009).
+- `__tests__/bondGateHostile.test.ts` (NEW upstream, 43 tests): it imports the
+  runner above, so it cannot run in this subset.
+- `scripts/court/distributed-ceremony.mjs` (now imports the runner),
+  `scripts/check-live-site.mjs`, `site/`, `__tests__/siteLanding.test.ts` and
+  `docs/*` (incl. the new `BOND_GATE_THREAT_MODEL.md`) - all excluded by policy.
+- `index.ts` is UNCHANGED upstream this round, so the root export surface is
+  identical; `__tests__/bondCheckGate.test.ts` is also unchanged upstream (the
+  floor is covered only by the hostile suite), see below.
+
+## Client-local additions (the one non-upstream file)
+
+- `__tests__/bondValueFloor.client.test.ts` (NEW, client-local, 5 tests): the
+  floor would otherwise arrive here with ZERO coverage, because upstream tests
+  it only in the excluded hostile suite. A later sync could then drop it
+  silently. The header says plainly that it is client-local, not upstream.
+
+## Client impact: none reached
+
+No client file imports `bondCheckGate` (the gate is a ceremony-harness surface;
+`bao.markets` wires it in its vendored ceremony runner and the host bond CLI).
+`grep` outside `src/baofund/court-core` returns nothing. Carried for parity, and
+its suite runs here.
+
+## Adaptations
+
+The re-copied `bondCheckGate.ts` carries the standing ASCII dash normalisation
+(em/en dashes -> `-`; `(c)`, `->` and `...` preserved as-is). The transform was
+re-applied and verified: applying it to upstream `v0.17.1:bondCheckGate.ts`
+reproduces the previous vendored file BYTE-EXACTLY, so this sync's diff is only
+the intended +50 / -2.
+
+## Verified (CI unavailable org-wide - Actions budget - so local gates are the basis)
+
+- `npx vitest run src/baofund/court-core` -> **56 files passed, 1,347 passed /
+  7 skipped (1,354)** (was 55 / 1,342 / 1,349 at v0.17.1: +1 file / +5 tests, the
+  client-local floor suite; the vendored gate suite is unchanged and green).
+- `npx vitest run src/hooks src/components/bao-court` -> **49 files / 351
+  passed** (unchanged - no client file imports the gate). A FIRST run flaked
+  5 tests across 3 files under host load; the immediate re-run was 49/351 green,
+  the same load-flake class recorded at v0.15.0/v0.17.1.
+- `npx tsc --noEmit --incremental false` -> exit 0
+- `npx vite build` -> exit 0
+- `npm install @bao/court@github:baocommunity/bao-court#v0.17.2` re-resolved the
+  dep to **0.17.2** (lock: commit `32fb2ea1...`), so the pin is real rather than
+  a hand-edited lockfile entry.
