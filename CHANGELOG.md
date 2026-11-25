@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- ₿AO Markets follow the live catalogue per deployment: Public Testnet's 86 active markets (42 mining/hashrate, plus AMM, DLC, and bilateral) keep their `pool_model` instead of being sent to `/smj/:id`, `parimutuel` maps to SMJ, and the category picker uses the network's `GET /v1/categories` (mining first on testnet) rather than four demo slugs.
 - Room invite links open the room they name instead of asking for a paste: `/chat/join#<fragment>` and `/fal-live/join#<fragment>` now have shells and routes, the chat panel adopts the fragment on mount, and the link is rebuilt in its one canonical `/chat/join` form so a room never ends up with two credential sets; `/chat` is a real alias of the community chat surface rather than a 200 shell that renders 404, and an invite suppresses the default-room landing, so the invited room - not Troll₿ox - is the one that opens.
 - Direct links to `/bao/markets` answer 200 instead of the GitHub Pages 404 fallback: the build copies the SPA shell into `dist/bao/markets/`, and the deploy asserts every shareable surface got its shell, so crawlers, link unfurlers and agents no longer read a rendering page as missing.
 - ₿AO purge can no longer hang on "Purging…" without acknowledgment: a fast signer pre-flight plus deadlines on the kind-13303 read, each caller-signed NIP-09 batch, and the whole purge (120s cap) turn a non-responsive browser-extension or NIP-46 signer into a clear error with recovery instructions instead of an infinite spinner and zero kind-5s on any relay.

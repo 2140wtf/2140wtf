@@ -28,8 +28,8 @@ vi.mock('@/hooks/useBaoPredictionMarkets', () => ({
 
 describe('CreateBaoMarketDialog categories', () => {
   beforeEach(() => {
-    // Exactly what GET /v1/categories serves today: `fundraiser` is the query
-    // alias for the angor/fund silo and `bao-fund` has no picker chip at all.
+    // Demo catalogue shape: `fundraiser` is the query alias for the
+    // angor/fund silo and `bao-fund` has no picker chip at all.
     mocks.categories = [
       { slug: 'fundraiser', label: 'fundraiser', count: 10, active_count: 10 },
       { slug: 'bao-fund', label: 'bao-fund', count: 110, active_count: 110 },
@@ -55,8 +55,20 @@ describe('CreateBaoMarketDialog categories', () => {
     mocks.categories = [];
     render(<CreateBaoMarketDialog open onOpenChange={vi.fn()} />);
 
-    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('crypto');
-    expect(FALLBACK_MARKET_CATEGORIES.map((c) => c.value)).toEqual(['crypto', 'btc-price', 'politics-us']);
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('mining');
+    expect(FALLBACK_MARKET_CATEGORIES.map((c) => c.value)).toEqual(['mining', 'crypto', 'btc-price', 'politics-us']);
+  });
+
+  it('offers mining when the live Public Testnet catalogue answers', () => {
+    mocks.categories = [
+      { slug: 'mining', label: 'mining', count: 42, active_count: 42 },
+      { slug: 'zap2win', label: 'zap2win', count: 14, active_count: 14 },
+      { slug: 'bao-fund', label: 'bao-fund', count: 5, active_count: 5 },
+    ];
+    render(<CreateBaoMarketDialog open onOpenChange={vi.fn()} />);
+    expect(screen.getByRole('combobox', { name: 'Category' })).toHaveTextContent('mining');
+    expect(isSelectableMarketCategory('mining')).toBe(true);
+    expect(isSelectableMarketCategory('zap2win')).toBe(true);
   });
 
   it('never treats the fundraiser alias or the fund silo as a creation choice', () => {

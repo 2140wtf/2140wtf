@@ -35,16 +35,15 @@ interface CreateBaoMarketDialogProps {
 }
 
 /**
- * Fallback only: these are the slugs `GET /v1/categories` currently serves, so
- * a market created from this list is always reachable through the markets
- * picker. The live catalogue wins whenever it answers.
+ * Fallback only: used when `GET /v1/categories` is unreachable. The live
+ * catalogue wins whenever it answers (demo and Public Testnet serve different
+ * slugs — testnet's largest is `mining`).
  *
- * The old hardcoded twelve (`bitcoin`, `politics`, `sports`, `angor-markets`,
- * `climate-energy`, `tech-science`, ...) had no counterpart in the API
- * vocabulary, so a market tagged with one of them could never be selected back
- * — three of those slugs do not even exist in bao.markets' canonical taxonomy.
+ * Keep this list inside bao.markets' canonical taxonomy so a market created
+ * offline is still reachable through "All categories".
  */
 export const FALLBACK_MARKET_CATEGORIES = [
+  { value: 'mining', label: 'mining' },
   { value: 'crypto', label: 'crypto' },
   { value: 'btc-price', label: 'btc-price' },
   { value: 'politics-us', label: 'politics-us' },
