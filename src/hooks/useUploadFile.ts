@@ -107,8 +107,9 @@ export function useUploadFile() {
               { type: 'image/jpeg' },
             );
             const posterTags = await uploader.upload(posterFile);
-            const posterUrl = posterTags[0]?.[1];
+            let posterUrl = posterTags[0]?.[1];
             if (posterUrl) {
+              posterUrl = appendExtensionIfMissing(posterUrl, '.jpg');
               tags.push(['image', posterUrl]);
               if (!tags.some(([name]) => name === 'dim')) {
                 tags.push(['dim', `${poster.width}x${poster.height}`]);

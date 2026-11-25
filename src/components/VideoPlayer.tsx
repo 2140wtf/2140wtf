@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 
-import { Play, Pause, Volume1, Volume2, VolumeX, Expand, PictureInPicture2 } from 'lucide-react';
+import { Play, Pause, Volume1, Volume2, VolumeX, Expand, PictureInPicture2, Loader2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { Blurhash } from 'react-blurhash';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,8 @@ function parseDim(dim: string | undefined): { width: number; height: number } | 
 export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash, title, artist, autoPlay, startTime, trackId, event }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const startTimeApplied = useRef(false);
+  const frameNudged = useRef(false);
+  const autoplayAttempted = useRef(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const safeOriginalSrc = sanitizeUrl(originalSrc) ?? '';
@@ -66,6 +68,11 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
 
   const generatedPoster = useVideoThumbnail(src, safePoster);
 
+  useEffect(() => {
+    setPosterFailed(false);
+    setPosterLoaded(false);
+  }, [generatedPoster]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -77,6 +84,9 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
   // Android WebView paints a big stretched gray play-circle placeholder while a
   // poster-bearing <video> loads, and that shows through behind our controls.
   const [posterLoaded, setPosterLoaded] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
+  // True when every Blossom candidate (and the original URL) has error'd.
+  const [loadFailed, setLoadFailed] = useState(false);
   // Aspect ratio discovered at runtime when the note has no NIP-94 `dim` tag —
   // from the thumbnail image's natural size, or failing that the video's own
   // metadata once it loads. Until something real is known we default to 16:9
@@ -89,6 +99,18 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     : (discoveredAspect ?? '16 / 9');
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // New source (including a Blossom fallback hop): forget the previous
+  // element's ready/error/nudge state so a 404'd first URL cannot poison the retry.
+  useEffect(() => {
+    setLoadFailed(false);
+    setVideoReady(false);
+    setHasStarted(false);
+    setIsPlaying(false);
+    frameNudged.current = false;
+    autoplayAttempted.current = false;
+    startTimeApplied.current = false;
+  }, [src]);
 
   // `loadeddata` can fire before React attaches its listener (cached videos,
   // fast local blobs, remounts), which left the element permanently
@@ -111,13 +133,11 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     };
   }, [src]);
 
-  // Paint a first frame even with no thumbnail. A paused <video> preloading
-  // only metadata may never decode a frame at t=0, so the box stays black; a
-  // tiny seek forces the browser to decode and paint one. Skipped when a poster
-  // is on its way or playback has already started.
-  const frameNudged = useRef(false);
+  // A remote poster URL that 404s used to skip this nudge forever (we treated
+  // "poster prop is set" as "poster is on screen"), which left a black box
+  // with no play button. Only skip once a poster has actually painted.
   useEffect(() => {
-    if (generatedPoster || hasStarted || startTime) return;
+    if (posterLoaded || hasStarted || startTime) return;
     const video = videoRef.current;
     if (!video || frameNudged.current) return;
     const nudge = () => {
@@ -134,7 +154,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
     nudge();
     video.addEventListener('loadedmetadata', nudge, { once: true });
     return () => video.removeEventListener('loadedmetadata', nudge);
-  }, [generatedPoster, hasStarted, startTime, src]);
+  }, [posterLoaded, hasStarted, startTime, src]);
 
   const { showControls, revealControls, scheduleHide, isMuted, volume, toggleMute, handleVolumeChange } = usePlayerControls({
     mediaRef: videoRef,
@@ -144,7 +164,6 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
 
   // Autoplay: start muted when enabled via prop or global setting.
   // Uses onLoadedData to ensure the element is ready before calling play().
-  const autoplayAttempted = useRef(false);
   useEffect(() => {
     if (!shouldAutoPlay) return;
     autoplayAttempted.current = false;
@@ -168,7 +187,7 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
       video.addEventListener('loadeddata', attemptPlay, { once: true });
       return () => video.removeEventListener('loadeddata', attemptPlay);
     }
-  }, [shouldAutoPlay]);
+  }, [shouldAutoPlay, src]);
 
   // Apply optional start time once the video is ready.
   useEffect(() => {
@@ -373,14 +392,16 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
         }}
         onDurationChange={() => setDuration(videoRef.current?.duration ?? 0)}
         onLoadedData={() => setVideoReady(true)}
-        onError={onBlossomError}
+        onError={() => {
+          if (!onBlossomError()) setLoadFailed(true);
+        }}
       />
 
       {/* Poster/thumbnail overlay — rendered as a plain <img> so it never
           triggers WebView's native video placeholder. Stays visible until the
           user actually starts playback (the <video> shows a transparent poster
           until then, so we can't rely on it painting a frame on its own). */}
-      {generatedPoster && !hasStarted && (
+      {generatedPoster && !posterFailed && !hasStarted && (
         <img
           src={generatedPoster}
           alt=""
@@ -396,20 +417,49 @@ export function VideoPlayer({ src: originalSrc, poster, className, dim, blurhash
               setDiscoveredAspect((prev) => prev ?? `${img.naturalWidth} / ${img.naturalHeight}`);
             }
           }}
+          onError={() => {
+            setPosterFailed(true);
+            setPosterLoaded(false);
+          }}
         />
       )}
 
-      {/* Big centered play button before first play. Held back until there is
-          something real to sit on top of (a loaded poster or a decoded video
-          frame) so we never flash the button over WebView's gray placeholder. */}
-      {!hasStarted && (videoReady || posterLoaded) && (
-        <div
+      {/* Always offer a play control before first play. Gating this on a decoded
+          frame or loaded poster left an unexplained black box whenever the
+          remote blob was slow, missing Range support, or 404'd — including in
+          the compose Preview tab, where the user cannot play the video they
+          just uploaded. */}
+      {!hasStarted && !loadFailed && (
+        <button
+          type="button"
+          aria-label="Play"
           className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer"
           onClick={handleVideoClick}
         >
           <div className="size-16 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
-            <Play className="size-8 text-white ml-1" fill="white" />
+            {videoReady || posterLoaded ? (
+              <Play className="size-8 text-white ml-1" fill="white" />
+            ) : (
+              <Loader2 className="size-8 animate-spin text-white/80" />
+            )}
           </div>
+        </button>
+      )}
+
+      {loadFailed && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center bg-black/70">
+          <p className="text-sm text-white/90">Video could not be loaded</p>
+          {safeOriginalSrc && (
+            <a
+              href={safeOriginalSrc}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Open in new tab
+            </a>
+          )}
         </div>
       )}
 
