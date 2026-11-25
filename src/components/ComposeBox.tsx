@@ -50,6 +50,7 @@ import { formatTime } from '@/lib/formatTime';
 import { APP_SEARCH_RELAY } from '@/lib/appRelays';
 import { rebroadcastEvent } from '@/lib/rebroadcastEvent';
 import { resizeImage } from '@/lib/resizeImage';
+import { isVideoFile } from '@/lib/videoPoster';
 import { extractHashtags } from '@/lib/hashtag';
 import { parseAddr } from '@/lib/parseAddr';
 import { describeError } from '@/lib/errorCodes';
@@ -181,6 +182,86 @@ function CharRing({ count, max }: { count: number; max: number }) {
   );
 }
 
+type ComposerAttachmentKind = 'image' | 'video' | 'audio' | 'file';
+
+interface ComposerAttachment {
+  id: string;
+  objectUrl: string;
+  mime: string;
+  kind: ComposerAttachmentKind;
+  remoteUrl?: string;
+  status: 'uploading' | 'ready' | 'error';
+}
+
+function composerAttachmentKind(file: File): ComposerAttachmentKind {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/') || isVideoFile(file)) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+/** Local, playable preview of a file the user attached. Uses a blob URL so the
+ *  video is visible and can be played before (and while) the Blossom upload
+ *  finishes — the compose Preview tab's remote player cannot do that. */
+function ComposerAttachmentPreview({
+  attachment,
+  onRemove,
+}: {
+  attachment: ComposerAttachment;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="relative mt-3">
+      {attachment.kind === 'video' && (
+        <video
+          src={attachment.objectUrl}
+          controls
+          playsInline
+          preload="metadata"
+          className="w-full max-h-[360px] rounded-2xl border border-border bg-black"
+        />
+      )}
+      {attachment.kind === 'image' && (
+        <img
+          src={attachment.objectUrl}
+          alt=""
+          className="w-full max-h-[360px] object-contain rounded-2xl border border-border bg-secondary/30"
+        />
+      )}
+      {attachment.kind === 'audio' && (
+        <div className="rounded-2xl border border-border bg-secondary/30 p-3">
+          <audio src={attachment.objectUrl} controls className="w-full" />
+        </div>
+      )}
+      {attachment.kind === 'file' && (
+        <div className="flex items-center gap-2 rounded-2xl border border-border bg-secondary/30 p-3 text-sm text-muted-foreground">
+          <Paperclip className="size-4 shrink-0" />
+          <span className="truncate">{attachment.mime || 'file'}</span>
+        </div>
+      )}
+      {attachment.status === 'uploading' && (
+        <span className="absolute top-2 left-2 inline-flex items-center gap-1 text-[11px] font-medium bg-black/70 text-white px-2 py-0.5 rounded-full pointer-events-none">
+          <Loader2 className="size-3 animate-spin" />
+          Uploading
+        </span>
+      )}
+      {attachment.status === 'error' && (
+        <span className="absolute top-2 left-2 text-[11px] font-medium bg-destructive text-destructive-foreground px-2 py-0.5 rounded-full pointer-events-none">
+          Upload failed
+        </span>
+      )}
+      <button
+        type="button"
+        aria-label="Remove attachment"
+        onClick={onRemove}
+        className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
 
 export function ComposeBox({ 
   onSuccess, 
@@ -254,6 +335,9 @@ export function ComposeBox({
   const [removedEmbeds, setRemovedEmbeds] = useState<Set<string>>(new Set());
   /** Maps uploaded file URLs to their NIP-94 tags (grouped per upload). */
   const [uploadedFileGroups, setUploadedFileGroups] = useState<Map<string, string[][]>>(new Map());
+  const [composerAttachments, setComposerAttachments] = useState<ComposerAttachment[]>([]);
+  const composerAttachmentsRef = useRef<ComposerAttachment[]>([]);
+  composerAttachmentsRef.current = composerAttachments;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { insertAtCursor, insertEmoji: insertEmojiAtCursor } = useInsertText(textareaRef, content, setContent);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -279,6 +363,10 @@ export function ComposeBox({
     setZapMax('');
     setRemovedEmbeds(new Set());
     setUploadedFileGroups(new Map());
+    for (const att of composerAttachmentsRef.current) {
+      URL.revokeObjectURL(att.objectUrl);
+    }
+    setComposerAttachments([]);
     // Clear the auto-saved draft
     try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
   }, [initialMode, draftKey]);
@@ -321,6 +409,15 @@ export function ComposeBox({
     }, 300);
     return () => clearTimeout(timer);
   }, [content, draftKey, initialContent]);
+
+  // Revoke blob URLs if the composer unmounts with attachments still in memory.
+  useEffect(() => {
+    return () => {
+      for (const att of composerAttachmentsRef.current) {
+        URL.revokeObjectURL(att.objectUrl);
+      }
+    };
+  }, []);
 
   // On mobile, blur the textarea when the picker opens to dismiss the keyboard.
   const pickerWasOpen = useRef(false);
@@ -566,6 +663,14 @@ export function ComposeBox({
   const handleInsertShortcodeEmoji = insertAtCursor;
 
   const handleFileUpload = useCallback(async (file: File) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const objectUrl = URL.createObjectURL(file);
+    setComposerAttachments((prev) => [
+      ...prev,
+      { id, objectUrl, mime: file.type, kind: composerAttachmentKind(file), status: 'uploading' },
+    ]);
+    expand();
+
     try {
       const isImage = file.type.startsWith('image/');
 
@@ -606,10 +711,14 @@ export function ComposeBox({
       // Store the full NIP-94 tags for later use in imeta
       setUploadedFileGroups((prev) => new Map(prev).set(url, tags));
       setContent((prev) => (prev ? prev + '\n' + url : url));
-
-      expand();
+      setComposerAttachments((prev) =>
+        prev.map((att) => (att.id === id ? { ...att, remoteUrl: url, status: 'ready' } : att)),
+      );
     } catch (error) {
       console.error('Upload failed:', error);
+      setComposerAttachments((prev) =>
+        prev.map((att) => (att.id === id ? { ...att, status: 'error' } : att)),
+      );
       const { message, code } = describeError(error);
       toast({
         title: 'Upload failed',
@@ -618,6 +727,28 @@ export function ComposeBox({
       });
     }
   }, [uploadFile, expand, toast, imageQuality]);
+
+  const removeComposerAttachment = useCallback((id: string) => {
+    const target = composerAttachmentsRef.current.find((att) => att.id === id);
+    if (target) {
+      URL.revokeObjectURL(target.objectUrl);
+      if (target.remoteUrl) {
+        const remoteUrl = target.remoteUrl;
+        setUploadedFileGroups((groups) => {
+          const next = new Map(groups);
+          next.delete(remoteUrl);
+          return next;
+        });
+        setContent((content) =>
+          content
+            .split('\n')
+            .filter((line) => line.trim() !== remoteUrl)
+            .join('\n'),
+        );
+      }
+    }
+    setComposerAttachments((prev) => prev.filter((att) => att.id !== id));
+  }, []);
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
@@ -1253,12 +1384,31 @@ export function ComposeBox({
         ) : (
           /* Preview mode - Show how post will look */
           mockEvent && (
-            <div className="pt-2.5 pb-2 min-h-[100px] overflow-hidden">
-              <div className="text-lg opacity-85 [&_img]:max-w-full [&_img]:h-auto">
-                <NoteContent event={mockEvent} className="text-foreground" />
+            <div className="pt-2.5 pb-2 min-h-[100px]">
+              <div className="text-lg opacity-85">
+                <NoteContent
+                  event={mockEvent}
+                  className="text-foreground"
+                  disableMediaEmbeds={composerAttachments.some((a) => a.kind === 'video' || a.kind === 'audio')}
+                />
               </div>
             </div>
           )
+        )}
+
+        {composerAttachments.length > 0 && (
+          <div>
+            {(previewMode
+              ? composerAttachments.filter((a) => a.kind === 'video' || a.kind === 'audio')
+              : composerAttachments
+            ).map((att) => (
+              <ComposerAttachmentPreview
+                key={att.id}
+                attachment={att}
+                onRemove={() => removeComposerAttachment(att.id)}
+              />
+            ))}
+          </div>
         )}
 
         {/* Poll options + settings — shown below the normal textarea/preview */}
