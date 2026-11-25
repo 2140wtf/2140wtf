@@ -7,8 +7,9 @@ import {
   marketRowCategory,
 } from './marketCategories';
 
-/** The four slugs GET /v1/categories serves today (plus the silo forms). */
-const LIVE_CATALOGUE = ['fundraiser', 'crypto', 'btc-price', 'politics-us'];
+/** Slugs GET /v1/categories actually serves: demo (fundraiser/crypto/…) and
+ *  Public Testnet (mining is the largest, live 2026-11-24). */
+const LIVE_CATALOGUE = ['fundraiser', 'crypto', 'btc-price', 'politics-us', 'mining', 'zap2win', 'bitcoin'];
 
 describe('marketRowCategory', () => {
   it('translates the fundraiser union alias to the angor rows it returns', () => {
@@ -18,7 +19,7 @@ describe('marketRowCategory', () => {
   });
 
   it('leaves real row categories untouched', () => {
-    for (const slug of ['angor', 'crypto', 'btc-price', 'politics-us', 'bao-fund']) {
+    for (const slug of ['angor', 'crypto', 'btc-price', 'politics-us', 'bao-fund', 'mining']) {
       expect(marketRowCategory(slug)).toBe(slug);
     }
   });

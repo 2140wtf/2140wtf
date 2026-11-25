@@ -250,8 +250,9 @@ const MarketCard = memo(function MarketCard({
 
 export function PredictionMarketsPage(): React.JSX.Element {
   const { config } = useAppContext();
-  // "all" — the catalogue no longer carries a `mining` category, and a default
-  // that is absent from the live category list filters every market out.
+  // Default "all": demo's catalogue is a handful of slugs, Public Testnet's
+  // is mining-heavy (42 hashrate markets live 2026-11-24). Pinning a slug
+  // that the current network does not serve filters the grid to empty.
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");

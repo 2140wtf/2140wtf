@@ -11,7 +11,7 @@
 
 import type { NostrEvent } from '@nostrify/nostrify';
 
-import { type BaoMarket, BAO_MARKET_KIND } from '@/lib/baoMarketParser';
+import { type BaoMarket, BAO_MARKET_KIND, parseBaoPoolModel } from '@/lib/baoMarketParser';
 import { baoNetworkEndpoints, getBaoNetwork } from '@/lib/baoNetwork';
 
 export const BAO_PUBLIC_API_BASE = 'https://relay.bao.network/bao-api/v1';
@@ -101,12 +101,13 @@ export function apiMarketToBaoMarket(api: ApiMarket): BaoMarket {
     // the API's `smj` flag must not route them into parimutuel-odds lookups.
     // Verified live: 18/18 `bao-fund` markets 404 the SMJ endpoint while
     // every other SMJ-flagged market returns 200.
+    //
+    // Prefer the explicit `pool_model` (testnet ships smj/amm/dlc/bilateral)
+    // over the boolean `smj` flag so a DLC row is not mis-routed to /smj/:id.
     poolModel:
-      api.category.toLowerCase() !== 'bao-fund' && (api.smj || api.pool_model === 'smj')
-        ? 'smj'
-        : api.pool_model === 'amm'
-          ? 'amm'
-          : undefined,
+      api.category.toLowerCase() === 'bao-fund'
+        ? undefined
+        : (parseBaoPoolModel(api.pool_model) ?? (api.smj ? 'smj' : undefined)),
     paymentRails: Array.isArray(api.payment_rails) ? api.payment_rails : undefined,
     totalVolumeSats: finiteNonNegative(api.total_volume),
     tradeCount: finiteNonNegative(api.trade_count),

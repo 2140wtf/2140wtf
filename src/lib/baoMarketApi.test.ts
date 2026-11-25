@@ -7,6 +7,7 @@ import {
   resetBaoApiCircuit,
   type ApiMarket,
 } from './baoMarketApi';
+import { parseBaoPoolModel } from './baoMarketParser';
 
 const baseApiMarket: ApiMarket = {
   id: 'baofund-fr_abc-0',
@@ -26,6 +27,18 @@ const baseApiMarket: ApiMarket = {
   trade_count: 3,
   creator_pubkey: 'd'.repeat(64),
 };
+
+describe('parseBaoPoolModel', () => {
+  it('maps Public Testnet pool_model strings, including SMJ aliases', () => {
+    expect(parseBaoPoolModel('smj')).toBe('smj');
+    expect(parseBaoPoolModel('parimutuel')).toBe('smj');
+    expect(parseBaoPoolModel('AMM')).toBe('amm');
+    expect(parseBaoPoolModel('dlc')).toBe('dlc');
+    expect(parseBaoPoolModel('bilateral')).toBe('bilateral');
+    expect(parseBaoPoolModel('unknown')).toBeUndefined();
+    expect(parseBaoPoolModel('')).toBeUndefined();
+  });
+});
 
 describe('apiMarketToBaoMarket', () => {
   it('maps API fields to BaoMarket (parity with the old inline mapper)', () => {
@@ -107,6 +120,32 @@ describe('apiMarketToBaoMarket', () => {
       pool_model: 'smj',
     });
     expect(m.poolModel).toBe('smj');
+  });
+
+  it('maps Public Testnet pool models the boolean smj flag used to drop', () => {
+    // Live 2026-11-24: 86 active testnet markets include amm, dlc, and smj.
+    // A DLC row with a leftover smj flag must stay dlc so we do not hit /smj/:id.
+    expect(apiMarketToBaoMarket({
+      ...baseApiMarket,
+      category: 'mining',
+      smj: true,
+      pool_model: 'dlc',
+    }).poolModel).toBe('dlc');
+    expect(apiMarketToBaoMarket({
+      ...baseApiMarket,
+      category: 'mining',
+      pool_model: 'amm',
+    }).poolModel).toBe('amm');
+    expect(apiMarketToBaoMarket({
+      ...baseApiMarket,
+      category: 'bitcoin',
+      pool_model: 'bilateral',
+    }).poolModel).toBe('bilateral');
+    expect(apiMarketToBaoMarket({
+      ...baseApiMarket,
+      category: 'sports',
+      pool_model: 'parimutuel',
+    }).poolModel).toBe('smj');
   });
 });
 

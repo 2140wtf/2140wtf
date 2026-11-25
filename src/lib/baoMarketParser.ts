@@ -2,6 +2,20 @@ import type { NostrEvent } from "@nostrify/nostrify";
 import { verifyEvent } from "nostr-tools";
 
 export const BAO_MARKET_KIND = 38000;
+
+/** Settlement / matching model reported by bao.markets. */
+export type BaoPoolModel = 'smj' | 'amm' | 'dlc' | 'bilateral';
+
+/**
+ * Map a raw `pool_model` string (API field or kind-38000 tag) onto the models
+ * this client understands. `parimutuel` is SMJ under another name.
+ */
+export function parseBaoPoolModel(raw: string | undefined | null): BaoPoolModel | undefined {
+  const v = (raw ?? '').trim().toLowerCase();
+  if (v === 'smj' || v === 'parimutuel') return 'smj';
+  if (v === 'amm' || v === 'dlc' || v === 'bilateral') return v;
+  return undefined;
+}
 export const BAO_MARKETS_TRADE_KIND = 38001;
 export const BAO_MARKETS_DELEGATED_ORDER_KIND = 38005;
 
@@ -22,8 +36,12 @@ export interface BaoMarket {
   type: "binary" | "categorical" | "scalar";
   endTime: number;
   createdAt: number;
-  /** Pool model when the API reports it ('smj' parimutuel / 'amm'); drives live-odds fetching. */
-  poolModel?: 'smj' | 'amm';
+  /**
+   * Pool model from the API / kind-38000 `pool_model` tag.
+   * Public Testnet (live 2026-11-24): smj, amm, dlc, plus bilateral on the
+   * full list. `parimutuel` is an SMJ alias. Drives live-odds fetching.
+   */
+  poolModel?: BaoPoolModel;
   /** Payment rails the market accepts (API-sourced; htclc/spark/liquid/cashu/l1/ecash). */
   paymentRails?: string[];
   /** All-time market volume reported by the API. Undefined for relay-only definitions. */
@@ -176,11 +194,9 @@ export function parseBaoMarket(event: NostrEvent): BaoMarket | null {
     type = "categorical";
   }
 
-  const rawPoolModel = String(
-    getTag('pool_model') || content.poolModel || '',
-  ).toLowerCase();
-  const poolModel: BaoMarket['poolModel'] =
-    rawPoolModel === 'smj' || rawPoolModel === 'amm' ? rawPoolModel : undefined;
+  const poolModel = parseBaoPoolModel(
+    String(getTag('pool_model') || content.poolModel || ''),
+  );
 
   let endTime = 0;
   const rawEnd = getTag("end") || content.endTime;
